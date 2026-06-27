@@ -966,15 +966,9 @@ export default function POS() {
                 <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Subtotal</span><span className="num-display">{fmtIDR(subtotal)}</span></div>
                 {discount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Diskon</span><span className="num-display">-{fmtIDR(discount)}</span></div>}
                 
-                {/* F&B Tax calculation display */}
-                {isDineIn ? (
-                  <>
-                    <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Service Charge (5%)</span><span className="num-display">{fmtIDR(serviceCharge)}</span></div>
-                    <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Pajak PB1 (10%)</span><span className="num-display">{fmtIDR(taxAmount)}</span></div>
-                  </>
-                ) : (
-                  taxAmount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">PPN</span><span className="num-display">{fmtIDR(taxAmount)}</span></div>
-                )}
+                {/* Cart summary breakdown with explicit Service Charge row */}
+                <div className="flex justify-between" data-testid="cart-service-charge-line"><span className="text-[hsl(var(--muted))]">Biaya Layanan / Service Charge (5%)</span><span className="num-display" data-testid="cart-service-charge">{fmtIDR(serviceCharge)}</span></div>
+                {taxAmount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Pajak (PB1 / PPN)</span><span className="num-display">{fmtIDR(taxAmount)}</span></div>}
                 
                 <div className="flex justify-between font-display text-xl font-extrabold text-[hsl(var(--primary))] pt-1">
                   <span>TOTAL</span><span className="num-display" data-testid="cart-total">{fmtIDR(total)}</span>

@@ -1082,6 +1082,13 @@ export default function DapurOS() {
               {activeTab === "inventory" && (
                 <div className="grid lg:grid-cols-12 gap-8 animate-fadein text-left">
                   <div className="lg:col-span-7 space-y-4">
+                    {ingredients.some(ing => ing.stock <= ing.safety * 2) && (
+                      <div className="p-3 bg-amber-950/60 border border-amber-800 text-amber-300 text-xs rounded-xl flex items-center gap-2 font-bold animate-pulse" data-testid="low-stock-alert-banner">
+                        <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+                        <span>Peringatan Stok Rendah: {ingredients.filter(ing => ing.stock <= ing.safety * 2).map(ing => ing.name).join(", ")} membutuhkan restock!</span>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                       <span className="text-xs font-black text-slate-300 tracking-wider uppercase flex items-center gap-1.5">
                         <Package size={14} className="text-amber-500" /> Stok Bahan Baku (Real-time)
@@ -1101,16 +1108,19 @@ export default function DapurOS() {
                         </thead>
                         <tbody className="divide-y divide-slate-800">
                           {ingredients.map(ing => {
-                            const isLow = ing.stock <= ing.safety;
+                            const isCritical = ing.stock <= ing.safety;
+                            const isWarning = ing.stock <= ing.safety * 2;
                             return (
                               <tr key={ing.id} className="hover:bg-slate-850/40">
                                 <td className="p-3 font-semibold text-slate-200">{ing.name}</td>
                                 <td className="p-3 text-right font-mono font-bold">{ing.stock.toLocaleString()}{ing.unit}</td>
-                                <td className="p-3 text-center">
-                                  {isLow ? (
-                                    <span className="inline-block px-2 py-0.5 text-[9px] bg-red-950/60 border border-red-800 text-red-400 font-black rounded-full">Low Stock</span>
+                                <td className="p-3 text-center" data-testid={`stock-status-${ing.id}`}>
+                                  {isCritical ? (
+                                    <span className="inline-block px-2 py-0.5 text-[9px] bg-red-950/60 border border-red-800 text-red-400 font-black rounded-full animate-pulse" data-testid="badge-low-stock">Low Stock Alert</span>
+                                  ) : isWarning ? (
+                                    <span className="inline-block px-2 py-0.5 text-[9px] bg-amber-950/60 border border-amber-800 text-amber-400 font-black rounded-full" data-testid="badge-warning">Menipis</span>
                                   ) : (
-                                    <span className="inline-block px-2 py-0.5 text-[9px] bg-emerald-950/60 border border-emerald-800 text-emerald-400 font-black rounded-full">Aman</span>
+                                    <span className="inline-block px-2 py-0.5 text-[9px] bg-emerald-950/60 border border-emerald-800 text-emerald-400 font-black rounded-full" data-testid="badge-safe">Aman</span>
                                   )}
                                 </td>
                                 <td className="p-3 text-center">
