@@ -5,17 +5,17 @@ import {
   LayoutDashboard, ShoppingCart, Package, Warehouse, ClipboardList,
   Truck, Users, Landmark, CreditCard, BarChart3, UserCheck,
   GitBranch, Cpu, Settings, Info, ChevronDown, ChevronRight,
-  LogOut, Sparkles, Crown, Shield, Leaf, Utensils
+  LogOut, Sparkles, Crown, Shield, Leaf, Utensils, ChefHat
 } from "lucide-react";
 
 const ROLE_PERMISSIONS = {
   Owner: ["*"],
   Manager: [
-    "dashboard", "pos", "products", "inventory", "purchase",
+    "dashboard", "pos", "kds", "products", "inventory", "purchase",
     "suppliers", "customers", "debt", "payments", "reports", "staff", "settings", "about"
   ],
   Cashier: [
-    "dashboard", "pos", "products", "customers", "about"
+    "dashboard", "pos", "kds", "products", "customers", "about"
   ],
   Warehouse: [
     "products", "inventory", "purchase", "suppliers", "about"
@@ -51,6 +51,7 @@ export default function AppLayout() {
   const dynamicMenu = [
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
     { to: `${prefix}/pos`, icon: ShoppingCart, label: "POS Kasir", key: "pos" },
+    { to: `${prefix}/kds`, icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
     {
       label: "Produk",
       icon: Package,

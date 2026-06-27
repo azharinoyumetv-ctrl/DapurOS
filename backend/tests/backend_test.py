@@ -355,3 +355,210 @@ class TestPDF:
             assert r.status_code == 200
             assert r.headers.get("content-type", "").startswith("application/pdf")
             assert r.content[:4] == b"%PDF"
+
+
+# ----- Floors, Tables, KDS & Split Billing (DapurOS F&B) -----
+class TestFloorsAndTables:
+    def test_floors_list_and_create(self, authed):
+        # 1. List floors (triggers auto-seed of Lantai 1, 2, Rooftop)
+        r = authed.get(f"{API}/floors")
+        assert r.status_code == 200
+        floors = r.json()
+        assert len(floors) >= 3
+        
+        # 2. Create custom floor
+        r = authed.post(f"{API}/floors", json={"name": "Terrace VIP", "level": 4})
+        assert r.status_code == 200
+        floor_id = r.json()["id"]
+        
+        # 3. Update floor
+        r = authed.put(f"{API}/floors/{floor_id}", json={"name": "Terrace Super VIP"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "Terrace Super VIP"
+
+    def test_tables_crud_and_seeding(self, authed):
+        # 1. List tables (triggers auto-seed of default tables)
+        r = authed.get(f"{API}/tables")
+        assert r.status_code == 200
+        tables = r.json()
+        assert len(tables) >= 5
+        
+        # Find first floor
+        rf = authed.get(f"{API}/floors")
+        floor_id = rf.json()[0]["id"]
+        
+        # 2. Create table
+        r = authed.post(f"{API}/tables", json={
+            "floor_id": floor_id, "label": "Meja VIP 99", "capacity": 10,
+            "x_coordinate": 25, "y_coordinate": 25, "width": 30, "height": 30
+        })
+        assert r.status_code == 200
+        table_id = r.json()["id"]
+        
+        # 3. Update coordinates
+        r = authed.put(f"{API}/tables/{table_id}", json={"x_coordinate": 40.0, "y_coordinate": 40.0})
+        assert r.status_code == 200
+        assert r.json()["x_coordinate"] == 40.0
+
+    def test_dining_sessions_and_checkout(self, authed):
+        # Get a table
+        r = authed.get(f"{API}/tables")
+        table = next(t for t in r.json() if t["status"] == "Vacant")
+        table_id = table["id"]
+        
+        # 1. Open session
+        r = authed.post(f"{API}/tables/{table_id}/session")
+        assert r.status_code == 200
+        session_id = r.json()["id"]
+        
+        # Check table status is Seated
+        rt = authed.get(f"{API}/tables")
+        table_updated = next(t for t in rt.json() if t["id"] == table_id)
+        assert table_updated["status"] == "Seated"
+        
+        # 2. Place an order on this session
+        rp = authed.get(f"{API}/products")
+        p = rp.json()[0]
+        item = {"product_id": p["id"], "name": p["name"], "price": p["price"], "quantity": 2, "subtotal": p["price"] * 2}
+        
+        r = authed.post(f"{API}/orders", json={
+            "items": [item],
+            "payment_method": "cash",
+            "session_id": session_id,
+            "dining_option": "Dine-In"
+        })
+        assert r.status_code == 200
+        
+        # Check table status updated to Dining
+        rt = authed.get(f"{API}/tables")
+        table_updated2 = next(t for t in rt.json() if t["id"] == table_id)
+        assert table_updated2["status"] == "Dining"
+        
+        # 3. Get running active session bill
+        r = authed.get(f"{API}/tables/{table_id}/session")
+        assert r.status_code == 200
+        bill = r.json()
+        assert bill["subtotal"] == p["price"] * 2
+        # verify service charge (5%) and tax (10% on subtotal+service)
+        base = p["price"] * 2
+        expected_service = round(base * 0.05, 2)
+        expected_tax = round((base + expected_service) * 0.10, 2)
+        assert bill["service_charge"] == expected_service
+        assert bill["tax_pb1"] == expected_tax
+        assert bill["grand_total"] == base + expected_service + expected_tax
+        
+        # 4. Settle / checkout session
+        r = authed.post(f"{API}/tables/{table_id}/checkout", json={
+            "payment_method": "cash",
+            "cash_received": bill["grand_total"] + 1000
+        })
+        assert r.status_code == 200
+        
+        # Verify table vacant again
+        rt = authed.get(f"{API}/tables")
+        table_vacant = next(t for t in rt.json() if t["id"] == table_id)
+        assert table_vacant["status"] == "Vacant"
+
+    def test_split_bill_equal_and_item(self, authed):
+        r = authed.get(f"{API}/tables")
+        table = next(t for t in r.json() if t["status"] == "Vacant")
+        table_id = table["id"]
+        
+        # Open session
+        r = authed.post(f"{API}/tables/{table_id}/session")
+        session_id = r.json()["id"]
+        
+        # Add 2 items
+        rp = authed.get(f"{API}/products")
+        p1 = rp.json()[0]
+        p2 = rp.json()[1]
+        
+        item1 = {"product_id": p1["id"], "name": p1["name"], "price": p1["price"], "quantity": 1, "subtotal": p1["price"]}
+        item2 = {"product_id": p2["id"], "name": p2["name"], "price": p2["price"], "quantity": 2, "subtotal": p2["price"] * 2}
+        
+        r = authed.post(f"{API}/orders", json={
+            "items": [item1, item2],
+            "payment_method": "cash",
+            "session_id": session_id
+        })
+        assert r.status_code == 200
+        
+        # 1. Test split equal
+        r = authed.post(f"{API}/tables/{table_id}/split-bill", json={
+            "type": "equal", "ways": 3
+        })
+        assert r.status_code == 200
+        assert r.json()["ways"] == 3
+        assert r.json()["amount_per_person"] > 0
+        
+        # 2. Test split by item
+        r = authed.post(f"{API}/tables/{table_id}/split-bill", json={
+            "type": "item",
+            "items": [{"product_id": p2["id"], "quantity": 1}]
+        })
+        assert r.status_code == 200
+        split_order = r.json()["split_order"]
+        assert len(split_order["items"]) == 1
+        assert split_order["items"][0]["product_id"] == p2["id"]
+        assert split_order["items"][0]["quantity"] == 1
+        
+        # Settle split order
+        r = authed.post(f"{API}/orders/{split_order['id']}/mark-paid")
+        assert r.status_code == 200
+        
+        # Settle remainder of session
+        bill = authed.get(f"{API}/tables/{table_id}/session").json()
+        r = authed.post(f"{API}/tables/{table_id}/checkout", json={"payment_method": "cash"})
+        assert r.status_code == 200
+
+    def test_kds_routing_and_status(self, authed):
+        # Place F&B order with both foods and drinks (seeded products categories)
+        rp = authed.get(f"{API}/products")
+        products = rp.json()
+        
+        # Try to find a drink/minuman, else use first item
+        drink = next((p for p in products if p.get("category") == "Minuman"), products[0])
+        food = next((p for p in products if p.get("category") != "Minuman"), products[1])
+        
+        item1 = {"product_id": drink["id"], "name": drink["name"], "price": drink["price"], "quantity": 1, "subtotal": drink["price"]}
+        item2 = {"product_id": food["id"], "name": food["name"], "price": food["price"], "quantity": 1, "subtotal": food["price"]}
+        
+        # Open session for a table
+        table = next(t for t in authed.get(f"{API}/tables").json() if t["status"] == "Vacant")
+        rs = authed.post(f"{API}/tables/{table['id']}/session")
+        session_id = rs.json()["id"]
+        
+        r = authed.post(f"{API}/orders", json={
+            "items": [item1, item2],
+            "payment_method": "cash",
+            "session_id": session_id
+        })
+        assert r.status_code == 200
+        order_id = r.json()["id"]
+        
+        # Verify KDS tickets created
+        r = authed.get(f"{API}/kds")
+        assert r.status_code == 200
+        tickets = [t for t in r.json() if t["order_id"] == order_id]
+        assert len(tickets) > 0
+        
+        # Cycle a KDS ticket status
+        ticket = tickets[0]
+        r = authed.put(f"{API}/kds/{ticket['id']}/status", json={"status": "Cooking"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "Cooking"
+        
+        # Cycle to Ready
+        r = authed.put(f"{API}/kds/{ticket['id']}/status", json={"status": "Ready"})
+        assert r.status_code == 200
+        
+        # Cycle to Served (removes ticket)
+        r = authed.put(f"{API}/kds/{ticket['id']}/status", json={"status": "Served"})
+        assert r.status_code == 200
+        
+        # Verify ticket deleted
+        r = authed.get(f"{API}/kds")
+        assert not any(t["id"] == ticket["id"] for t in r.json())
+        
+        # Cleanup table checkout
+        authed.post(f"{API}/tables/{table['id']}/checkout", json={"payment_method": "cash"})

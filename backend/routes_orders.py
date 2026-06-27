@@ -16,9 +16,31 @@ def _calc(order: OrderCreate) -> dict:
     subtotal = sum(i.subtotal for i in order.items)
     discount = order.discount or 0
     base = max(0, subtotal - discount)
+    
+    # F&B Billing
+    if order.session_id:
+        service_charge = round(base * 0.05, 2)
+        tax_pb1 = round((base + service_charge) * 0.10, 2)
+        total = base + service_charge + tax_pb1
+        return {
+            "subtotal": subtotal,
+            "discount": discount,
+            "service_charge": service_charge,
+            "tax_pb1": tax_pb1,
+            "tax_amount": tax_pb1, # Compatibility
+            "total": total
+        }
+        
     tax = base * (order.tax_percent or 0) / 100
     total = base + tax
-    return {"subtotal": subtotal, "discount": discount, "tax_amount": tax, "total": total}
+    return {
+        "subtotal": subtotal,
+        "discount": discount,
+        "service_charge": 0.0,
+        "tax_pb1": 0.0,
+        "tax_amount": tax,
+        "total": total
+    }
 
 
 @router.post("")
@@ -49,6 +71,10 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
         "tax_percent": payload.tax_percent or 0,
         "tax_amount": calc["tax_amount"],
         "total": calc["total"],
+        "service_charge": calc.get("service_charge", 0.0),
+        "tax_pb1": calc.get("tax_pb1", 0.0),
+        "session_id": payload.session_id,
+        "dining_option": payload.dining_option or "Dine-In",
         "payment_method": payload.payment_method,
         "payment_status": "paid" if payload.payment_method == "cash" else "pending",
         "ewallet_channel": payload.ewallet_channel,
@@ -79,6 +105,61 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
                 {"id": it.product_id, "store_id": user["store_id"]},
                 {"$inc": {"stock": -it.quantity}},
             )
+
+    # Route items to Kds Tickets (F&B)
+    bar_items = []
+    kitchen_items = []
+    
+    for it in payload.items:
+        prod = await db.products.find_one({"id": it.product_id, "store_id": user["store_id"]})
+        category = prod.get("category", "Makanan") if prod else "Makanan"
+        station = "Bar" if str(category).lower() in ("minuman", "beverage", "drink", "drinks", "bar") else "Kitchen"
+        
+        kds_item = {
+            "name": it.name,
+            "qty": it.quantity,
+            "notes": it.note,
+            "status": "Pending"
+        }
+        if station == "Bar":
+            bar_items.append(kds_item)
+        else:
+            kitchen_items.append(kds_item)
+            
+    table_label = "Takeaway"
+    if payload.session_id:
+        session = await db.order_sessions.find_one({"id": payload.session_id, "store_id": user["store_id"]})
+        if session:
+            # Mark table status as Dining
+            await db.tables.update_one(
+                {"id": session["table_id"], "store_id": user["store_id"]},
+                {"$set": {"status": "Dining", "updated_at": utcnow().isoformat()}}
+            )
+            table = await db.tables.find_one({"id": session["table_id"], "store_id": user["store_id"]})
+            if table:
+                table_label = table["label"]
+                
+    for station, items in [("Bar", bar_items), ("Kitchen", kitchen_items)]:
+        if items:
+            kds_doc = {
+                "id": str(uuid.uuid4()),
+                "order_id": order_id,
+                "table_label": table_label,
+                "station": station,
+                "time_elapsed": "Baru saja",
+                "items": items,
+                "store_id": user["store_id"],
+                "created_at": utcnow().isoformat(),
+                "updated_at": utcnow().isoformat()
+            }
+            await db.kds_tickets.insert_one(kds_doc)
+
+    # Trigger WebSocket broadcast update
+    try:
+        from server import ws_manager
+        await ws_manager.broadcast(user["store_id"], {"type": "ORDER_CREATE"})
+    except Exception:
+        pass
 
     # Xendit integrations
     if payload.payment_method == "qris":

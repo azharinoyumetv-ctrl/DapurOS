@@ -102,6 +102,8 @@ class OrderLineItem(BaseModel):
     price: float
     quantity: int = Field(ge=1)
     subtotal: float
+    note: Optional[str] = None
+    modifiers: Optional[dict] = None
 
 
 class OrderCreate(BaseModel):
@@ -115,6 +117,8 @@ class OrderCreate(BaseModel):
     tax_percent: float = 0
     cash_received: Optional[float] = None
     note: Optional[str] = None
+    session_id: Optional[str] = None
+    dining_option: Optional[str] = "Dine-In"
 
 
 class Order(BaseModel):
@@ -144,6 +148,10 @@ class Order(BaseModel):
     xendit_checkout_url: Optional[str] = None
     xendit_reference_id: Optional[str] = None
     xendit_raw: Optional[dict] = None
+    session_id: Optional[str] = None
+    dining_option: Optional[str] = "Dine-In"
+    service_charge: float = 0.0
+    tax_pb1: float = 0.0
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)
 
@@ -367,6 +375,91 @@ class IngredientUpdate(BaseModel):
 class Ingredient(IngredientBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    store_id: str
+    created_at: str = Field(default_factory=utcnow_iso)
+    updated_at: str = Field(default_factory=utcnow_iso)
+
+
+# ---------- Floors & Tables (DapurOS F&B) ----------
+class FloorBase(BaseModel):
+    name: str
+    level: int = 1
+
+class FloorCreate(FloorBase):
+    pass
+
+class FloorUpdate(BaseModel):
+    name: Optional[str] = None
+    level: Optional[int] = None
+
+class Floor(FloorBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    store_id: str
+    created_at: str = Field(default_factory=utcnow_iso)
+    updated_at: str = Field(default_factory=utcnow_iso)
+
+
+class TableBase(BaseModel):
+    floor_id: str
+    label: str
+    capacity: int = 4
+    status: str = "Vacant" # Vacant | Seated | Dining | Billing
+    x_coordinate: float = 0.0
+    y_coordinate: float = 0.0
+    width: float = 24.0
+    height: float = 20.0
+    shape: str = "rectangle" # circle | rectangle
+
+class TableCreate(TableBase):
+    pass
+
+class TableUpdate(BaseModel):
+    floor_id: Optional[str] = None
+    label: Optional[str] = None
+    capacity: Optional[int] = None
+    status: Optional[str] = None
+    x_coordinate: Optional[float] = None
+    y_coordinate: Optional[float] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+    shape: Optional[str] = None
+
+class Table(TableBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    store_id: str
+    created_at: str = Field(default_factory=utcnow_iso)
+    updated_at: str = Field(default_factory=utcnow_iso)
+
+
+class OrderSessionCreate(BaseModel):
+    table_id: str
+
+class OrderSession(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    table_id: str
+    store_id: str
+    opened_at: str = Field(default_factory=utcnow_iso)
+    closed_at: Optional[str] = None
+    status: str = "Active" # Active | Paid
+
+
+class KdsItem(BaseModel):
+    name: str
+    qty: int
+    notes: Optional[str] = None
+    status: str = "Pending" # Pending | Cooking | Ready | Served
+
+class KdsTicket(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    order_id: str
+    table_label: str
+    station: str # Kitchen | Bar
+    time_elapsed: str = "0 mnt lalu"
+    items: List[KdsItem]
     store_id: str
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)

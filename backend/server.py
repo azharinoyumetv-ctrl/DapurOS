@@ -25,11 +25,61 @@ from routes_customers import router as customers_router
 from routes_staff import router as staff_router
 from routes_settings import router as settings_router
 from routes_ingredients import router as ingredients_router
+from routes_floors import router as floors_router
+from routes_tables import router as tables_router
+from routes_kds import router as kds_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("geraina")
 
 app = FastAPI(title="DapurOS by DagangOS")
+
+
+# ---------- WebSockets Connection Manager ----------
+from fastapi import WebSocket, WebSocketDisconnect
+from typing import Dict, List
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, store_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if store_id not in self.active_connections:
+            self.active_connections[store_id] = []
+        self.active_connections[store_id].append(websocket)
+
+    def disconnect(self, store_id: str, websocket: WebSocket):
+        if store_id in self.active_connections:
+            try:
+                self.active_connections[store_id].remove(websocket)
+            except ValueError:
+                pass
+            if not self.active_connections[store_id]:
+                del self.active_connections[store_id]
+
+    async def broadcast(self, store_id: str, message: dict):
+        if store_id in self.active_connections:
+            for connection in self.active_connections[store_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    pass
+
+ws_manager = ConnectionManager()
+
+
+@app.websocket("/api/ws/{store_id}")
+async def websocket_endpoint(websocket: WebSocket, store_id: str):
+    await ws_manager.connect(store_id, websocket)
+    try:
+        while True:
+            # Keep connection alive
+            await websocket.receive_text()
+            await websocket.send_json({"type": "PONG"})
+    except WebSocketDisconnect:
+        ws_manager.disconnect(store_id, websocket)
+
 
 # Health check (mounted at /api by frontend, but also at root for k8s)
 api_router = APIRouter(prefix="/api")
@@ -67,6 +117,9 @@ app.include_router(customers_router)
 app.include_router(staff_router)
 app.include_router(settings_router)
 app.include_router(ingredients_router)
+app.include_router(floors_router)
+app.include_router(tables_router)
+app.include_router(kds_router)
 
 cors_origins = os.environ.get("CORS_ORIGINS", "").split(",")
 cors_origins = [o.strip() for o in cors_origins if o.strip()]

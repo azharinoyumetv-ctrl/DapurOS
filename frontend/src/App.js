@@ -56,6 +56,7 @@ import Integrations from "@/pages/integrations/Integrations";
 import Settings from "@/pages/settings/Settings";
 
 import RoleGuard from "@/components/RoleGuard";
+import KdsScreen from "@/pages/KdsScreen";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -71,6 +72,7 @@ const sharedAppRoutes = (
     {/* General Routes */}
     <Route path="dashboard" element={<RoleGuard><Dashboard /></RoleGuard>} />
     <Route path="pos" element={<RoleGuard><POS /></RoleGuard>} />
+    <Route path="kds" element={<RoleGuard><KdsScreen /></RoleGuard>} />
     <Route path="sales" element={<RoleGuard><Sales /></RoleGuard>} />
     <Route path="license" element={<RoleGuard><LicenseDevices /></RoleGuard>} />
     <Route path="about" element={<RoleGuard><About /></RoleGuard>} />
@@ -134,7 +136,7 @@ const sharedAppRoutes = (
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/dapuros">
         <Routes>
           {/* DapurOS F&B Standalone Routes */}
           <Route path="/" element={<DapurOS />} />
