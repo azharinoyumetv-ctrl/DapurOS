@@ -134,9 +134,13 @@ const sharedAppRoutes = (
 );
 
 function App() {
+  const getBasename = () => {
+    return window.location.pathname.startsWith("/dapuros") ? "/dapuros" : "";
+  };
+
   return (
     <AuthProvider>
-      <BrowserRouter basename="/dapuros">
+      <BrowserRouter basename={getBasename()}>
         <Routes>
           {/* DapurOS F&B Standalone Routes */}
           <Route path="/" element={<DapurOS />} />
