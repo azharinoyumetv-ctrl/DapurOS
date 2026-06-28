@@ -81,10 +81,10 @@ async def register(payload: UserRegister):
 
     # Seed Categories
     cats = [
-        {"id": "cat-1", "name": "Makanan", "description": "Menu makanan utama"},
-        {"id": "cat-2", "name": "Minuman", "description": "Kopi, teh, jus, dan soft drink"},
-        {"id": "cat-3", "name": "Cemilan", "description": "Snack dan dessert"},
-        {"id": "cat-4", "name": "Bumbu & Bahan", "description": "Bahan mentah dapur"},
+        {"id": f"cat-{uuid.uuid4().hex[:8]}", "name": "Makanan", "description": "Menu makanan utama"},
+        {"id": f"cat-{uuid.uuid4().hex[:8]}", "name": "Minuman", "description": "Kopi, teh, jus, dan soft drink"},
+        {"id": f"cat-{uuid.uuid4().hex[:8]}", "name": "Cemilan", "description": "Snack dan dessert"},
+        {"id": f"cat-{uuid.uuid4().hex[:8]}", "name": "Bumbu & Bahan", "description": "Bahan mentah dapur"},
     ]
     for c in cats:
         c["store_id"] = store_id
@@ -94,9 +94,9 @@ async def register(payload: UserRegister):
 
     # Seed Brands
     brands = [
-        {"id": "br-1", "name": "Kopi Gayo", "description": "Biji kopi aceh"},
-        {"id": "br-2", "name": "Sariwangi", "description": "Teh celup lokal"},
-        {"id": "br-3", "name": "Indofood", "description": "Bahan makanan pokok"},
+        {"id": f"br-{uuid.uuid4().hex[:8]}", "name": "Kopi Gayo", "description": "Biji kopi aceh"},
+        {"id": f"br-{uuid.uuid4().hex[:8]}", "name": "Sariwangi", "description": "Teh celup lokal"},
+        {"id": f"br-{uuid.uuid4().hex[:8]}", "name": "Indofood", "description": "Bahan makanan pokok"},
     ]
     for b in brands:
         b["store_id"] = store_id
@@ -106,11 +106,11 @@ async def register(payload: UserRegister):
 
     # Seed Units
     units = [
-        {"id": "un-1", "name": "Pcs", "short_name": "pcs"},
-        {"id": "un-2", "name": "Box", "short_name": "box"},
-        {"id": "un-3", "name": "Botol", "short_name": "btl"},
-        {"id": "un-4", "name": "Kilogram", "short_name": "kg"},
-        {"id": "un-5", "name": "Gram", "short_name": "g"},
+        {"id": f"un-{uuid.uuid4().hex[:8]}", "name": "Pcs", "short_name": "pcs"},
+        {"id": f"un-{uuid.uuid4().hex[:8]}", "name": "Box", "short_name": "box"},
+        {"id": f"un-{uuid.uuid4().hex[:8]}", "name": "Botol", "short_name": "btl"},
+        {"id": f"un-{uuid.uuid4().hex[:8]}", "name": "Kilogram", "short_name": "kg"},
+        {"id": f"un-{uuid.uuid4().hex[:8]}", "name": "Gram", "short_name": "g"},
     ]
     for u in units:
         u["store_id"] = store_id
@@ -120,10 +120,10 @@ async def register(payload: UserRegister):
 
     # Seed Memberships
     mems = [
-        {"id": "mem-1", "name": "Bronze", "min_points": 0, "discount_percent": 0.0, "description": "Level dasar pendaftaran"},
-        {"id": "mem-2", "name": "Silver", "min_points": 100, "discount_percent": 5.0, "description": "Diskon 5% untuk semua item"},
-        {"id": "mem-3", "name": "Gold", "min_points": 300, "discount_percent": 10.0, "description": "Diskon 10% + free coffee di hari ultah"},
-        {"id": "mem-4", "name": "Platinum", "min_points": 800, "discount_percent": 15.0, "description": "Diskon 15% + prioritas reservasi"},
+        {"id": f"mem-{uuid.uuid4().hex[:8]}", "name": "Bronze", "min_points": 0, "discount_percent": 0.0, "description": "Level dasar pendaftaran"},
+        {"id": f"mem-{uuid.uuid4().hex[:8]}", "name": "Silver", "min_points": 100, "discount_percent": 5.0, "description": "Diskon 5% untuk semua item"},
+        {"id": f"mem-{uuid.uuid4().hex[:8]}", "name": "Gold", "min_points": 300, "discount_percent": 10.0, "description": "Diskon 10% + free coffee di hari ultah"},
+        {"id": f"mem-{uuid.uuid4().hex[:8]}", "name": "Platinum", "min_points": 800, "discount_percent": 15.0, "description": "Diskon 15% + prioritas reservasi"},
     ]
     for m in mems:
         m["store_id"] = store_id
@@ -183,7 +183,7 @@ async def register(payload: UserRegister):
 
     # Seed Branch
     await db.branches.insert_one({
-        "id": "brch-1",
+        "id": f"brch-{uuid.uuid4().hex[:8]}",
         "store_id": store_id,
         "name": "Outlet Utama (Jakarta)",
         "address": "Jl. Sudirman No. 12, Jakarta Selatan",
@@ -194,13 +194,13 @@ async def register(payload: UserRegister):
     # Seed Suppliers
     supplier_docs = [
         {
-            "id": "sup-1", "store_id": store_id,
+            "id": f"sup-{uuid.uuid4().hex[:8]}", "store_id": store_id,
             "name": "PT. Harapan Makmur", "phone": "021-7788001",
             "email": "order@harapanmakmur.co.id", "address": "Jl. Industri Raya No. 8, Tangerang",
             "created_at": utcnow().isoformat(), "updated_at": utcnow().isoformat()
         },
         {
-            "id": "sup-2", "store_id": store_id,
+            "id": f"sup-{uuid.uuid4().hex[:8]}", "store_id": store_id,
             "name": "CV. Sinar Distribusi", "phone": "021-5566002",
             "email": "sales@sinardistribusi.com", "address": "Jl. Pasar Baru No. 22, Jakarta Pusat",
             "created_at": utcnow().isoformat(), "updated_at": utcnow().isoformat()
