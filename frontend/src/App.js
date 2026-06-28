@@ -136,6 +136,8 @@ const sharedAppRoutes = (
     <Route path="integrations" element={<RoleGuard><Integrations /></RoleGuard>} />
 
     {/* Settings */}
+    <Route path="settings/billing" element={<RoleGuard><Settings /></RoleGuard>} />
+    <Route path="billing" element={<RoleGuard><Settings /></RoleGuard>} />
     <Route path="settings/:type" element={<RoleGuard><Settings /></RoleGuard>} />
     <Route path="settings" element={<RoleGuard><Settings /></RoleGuard>} />
   </>
@@ -154,6 +156,13 @@ function App() {
           <Route path="/app/*" element={<Protected><AppLayout /></Protected>}>
             {sharedAppRoutes}
           </Route>
+
+          {/* Direct un-prefixed management redirects */}
+          <Route path="/inventory/*" element={<Navigate to="/app/inventory" replace />} />
+          <Route path="/billing/*" element={<Navigate to="/app/settings/billing" replace />} />
+          <Route path="/settings/*" element={<Navigate to="/app/settings/general" replace />} />
+          <Route path="/pos/*" element={<Navigate to="/app/pos" replace />} />
+          <Route path="/dashboard/*" element={<Navigate to="/app/dashboard" replace />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

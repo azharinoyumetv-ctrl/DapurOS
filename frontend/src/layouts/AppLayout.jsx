@@ -12,7 +12,7 @@ const ROLE_PERMISSIONS = {
   Owner: ["*"],
   Manager: [
     "dashboard", "pos", "kds", "products", "inventory", "purchase",
-    "suppliers", "customers", "debt", "payments", "reports", "staff", "settings", "about"
+    "suppliers", "customers", "debt", "payments", "reports", "staff", "settings", "billing", "about"
   ],
   Cashier: [
     "dashboard", "pos", "kds", "products", "customers", "about"
@@ -167,12 +167,14 @@ export default function AppLayout() {
       sub: [
         { to: `${prefix}/settings/general`, label: "Umum" },
         { to: `${prefix}/settings/store`, label: "Toko" },
+        { to: `${prefix}/settings/billing`, label: "Langganan & Billing (Subscription)" },
         { to: `${prefix}/settings/receipt`, label: "Struk" },
         { to: `${prefix}/settings/printer`, label: "Printer" },
         { to: `${prefix}/settings/users`, label: "Pengguna" },
         { to: `${prefix}/settings/license`, label: "Lisensi" }
       ]
     },
+    { to: `${prefix}/settings/billing`, icon: CreditCard, label: "Subscription & Billing", key: "billing" },
     { to: `${prefix}/about`, icon: Info, label: "Tentang", key: "about" }
   ];
 
