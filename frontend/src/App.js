@@ -112,9 +112,11 @@ const sharedAppRoutes = (
 
     {/* Payments */}
     <Route path="payments/:type" element={<RoleGuard><PaymentConfig /></RoleGuard>} />
+    <Route path="payments" element={<RoleGuard><PaymentConfig /></RoleGuard>} />
 
     {/* Reports */}
     <Route path="reports/:type" element={<RoleGuard><Reports /></RoleGuard>} />
+    <Route path="reports" element={<RoleGuard><Reports /></RoleGuard>} />
 
     {/* Staff */}
     <Route path="staff/management" element={<RoleGuard><StaffManagement /></RoleGuard>} />
@@ -127,9 +129,11 @@ const sharedAppRoutes = (
 
     {/* Integrations */}
     <Route path="integrations/:type" element={<RoleGuard><Integrations /></RoleGuard>} />
+    <Route path="integrations" element={<RoleGuard><Integrations /></RoleGuard>} />
 
     {/* Settings */}
     <Route path="settings/:type" element={<RoleGuard><Settings /></RoleGuard>} />
+    <Route path="settings" element={<RoleGuard><Settings /></RoleGuard>} />
   </>
 );
 
@@ -143,7 +147,7 @@ function App() {
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/app" element={<Protected><AppLayout /></Protected>}>
+          <Route path="/app/*" element={<Protected><AppLayout /></Protected>}>
             {sharedAppRoutes}
           </Route>
 

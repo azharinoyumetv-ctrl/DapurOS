@@ -109,7 +109,7 @@ export default function Dashboard() {
           <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-3 py-1 rounded border border-emerald-100 flex items-center gap-1">
             <ShieldCheck size={14} /> Peran: {user?.role || "Owner"}
           </span>
-          <Link to="/geraina/app/pos" className="btn-primary flex items-center gap-1 text-xs py-2 px-4">
+          <Link to="/app/pos" className="btn-primary flex items-center gap-1 text-xs py-2 px-4" data-testid="dashboard-buka-kasir-btn">
             Buka Kasir <ArrowRight size={14} />
           </Link>
         </div>
