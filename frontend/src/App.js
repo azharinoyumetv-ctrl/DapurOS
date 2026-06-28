@@ -163,7 +163,7 @@ function RootComponent() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename="/dapuros">
+      <BrowserRouter>
         <Routes>
           {/* DapurOS Standalone Unprefixed Routes */}
           <Route path="/" element={<RootComponent />} />

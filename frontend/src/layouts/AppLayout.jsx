@@ -200,7 +200,7 @@ export default function AppLayout() {
               data-testid="odoo-ecosystem-switcher-btn"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px]">Aplikasi</span>
+              <span className="text-[10px]">Suite</span>
               <ChevronDown size={12} />
             </button>
           </div>
