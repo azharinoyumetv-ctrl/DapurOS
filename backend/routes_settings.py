@@ -114,6 +114,38 @@ async def save_integrations(payload: Dict[str, Any], user: dict = Depends(get_cu
     )
     return res
 
+# ---------- Tenant Billing & Subscription ----------
+@router.get("/api/billing")
+@router.get("/api/subscription")
+async def get_subscription(user: dict = Depends(get_current_user)):
+    db = get_db()
+    res = await db.subscription.find_one({"store_id": user["store_id"]}, {"_id": 0})
+    if not res:
+        return {
+            "plan": "Enterprise Multi-Outlet SaaS Plan",
+            "tier": "enterprise",
+            "status": "ACTIVE ENTERPRISE TIER",
+            "outlets_count": 3,
+            "next_renewal": "2026-07-28T00:00:00Z",
+            "monthly_rate": "Rp 299.000 / bln",
+            "auto_debit": True
+        }
+    return res
+
+@router.post("/api/billing")
+@router.post("/api/subscription")
+async def save_subscription(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
+    db = get_db()
+    update_data = {k: v for k, v in payload.items() if k not in ("_id", "store_id")}
+    res = await db.subscription.find_one_and_update(
+        {"store_id": user["store_id"]},
+        {"$set": update_data},
+        upsert=True,
+        return_document=True,
+        projection={"_id": 0}
+    )
+    return res
+
 # ---------- Branches ----------
 @router.get("/api/branches", response_model=List[Branch])
 async def list_branches(user: dict = Depends(get_current_user)):
