@@ -146,6 +146,89 @@ export default function DapurOS() {
   const [isSplitBillOpen, setIsSplitBillOpen] = useState(false);
   const [splitItems, setSplitItems] = useState([]);
 
+  // --- INGREDIENT & BOM MANAGEMENT STATE ---
+  const [showAddIngForm, setShowAddIngForm] = useState(false);
+  const [ingForm, setIngForm] = useState({ name: "", stock: "", unit: "g", safety: "" });
+  const [showAddMenuForm, setShowAddMenuForm] = useState(false);
+  const [menuForm, setMenuForm] = useState({ name: "", category: "Makanan", price: "", image: "" });
+  const [editingBomMenuId, setEditingBomMenuId] = useState(null);
+  const [selectedBomIngId, setSelectedBomIngId] = useState("");
+  const [bomIngQty, setBomIngQty] = useState("");
+
+  const handleAddIngredientSubmit = (e) => {
+    e.preventDefault();
+    if (!ingForm.name || !ingForm.stock) return;
+    const newIng = {
+      id: "i_" + Date.now(),
+      name: ingForm.name,
+      stock: parseFloat(ingForm.stock) || 0,
+      unit: ingForm.unit || "g",
+      safety: parseFloat(ingForm.safety) || 100
+    };
+    setIngredients(prev => [...prev, newIng]);
+    setIngForm({ name: "", stock: "", unit: "g", safety: "" });
+    setShowAddIngForm(false);
+  };
+
+  const handleDeleteIngredient = (id) => {
+    setIngredients(prev => prev.filter(i => i.id !== id));
+    setMenuItems(prev => prev.map(m => ({
+      ...m,
+      recipe: m.recipe.filter(r => r.ingredientId !== id)
+    })));
+  };
+
+  const handleAddMenuSubmit = (e) => {
+    e.preventDefault();
+    if (!menuForm.name || !menuForm.price) return;
+    const newM = {
+      id: "m_" + Date.now(),
+      name: menuForm.name,
+      category: menuForm.category,
+      price: parseFloat(menuForm.price) || 0,
+      image: menuForm.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60",
+      recipe: []
+    };
+    setMenuItems(prev => [...prev, newM]);
+    setMenuForm({ name: "", category: "Makanan", price: "", image: "" });
+    setShowAddMenuForm(false);
+  };
+
+  const handleDeleteMenuItem = (id) => {
+    setMenuItems(prev => prev.filter(m => m.id !== id));
+  };
+
+  const handleAddBomItem = (menuId) => {
+    if (!selectedBomIngId || !bomIngQty) return;
+    setMenuItems(prev => prev.map(m => {
+      if (m.id === menuId) {
+        const exist = m.recipe.find(r => r.ingredientId === selectedBomIngId);
+        if (exist) {
+          return {
+            ...m,
+            recipe: m.recipe.map(r => r.ingredientId === selectedBomIngId ? { ...r, qty: parseFloat(bomIngQty) || 0 } : r)
+          };
+        } else {
+          return {
+            ...m,
+            recipe: [...m.recipe, { ingredientId: selectedBomIngId, qty: parseFloat(bomIngQty) || 0 }]
+          };
+        }
+      }
+      return m;
+    }));
+    setBomIngQty("");
+  };
+
+  const handleRemoveBomItem = (menuId, ingId) => {
+    setMenuItems(prev => prev.map(m => {
+      if (m.id === menuId) {
+        return { ...m, recipe: m.recipe.filter(r => r.ingredientId !== ingId) };
+      }
+      return m;
+    }));
+  };
+
   // --- CALCULATE SUMMARY ---
   const getTableSession = (tableId) => activeSessions.find(s => s.tableId === tableId);
 
@@ -347,6 +430,13 @@ export default function DapurOS() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <Link
+              to="/login"
+              className="px-4 py-2 rounded-lg text-slate-700 hover:text-amber-700 hover:bg-amber-100/50 font-bold text-xs transition-all duration-300 border border-amber-200/60"
+              data-testid="nav-login-btn"
+            >
+              Masuk / Login
+            </Link>
             <a
               href="https://wa.me/628999155182?text=Halo%20DagangOS%2C%20saya%20ingin%20mencoba%20DapurOS%20untuk%20restoran%20saya."
               target="_blank"
@@ -383,8 +473,11 @@ export default function DapurOS() {
             </p>
 
             <div className="flex flex-wrap gap-4 pt-2">
-              <a href="#demo" className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold px-6 py-3.5 rounded-xl text-sm transition-all duration-300 shadow-lg shadow-amber-600/30 flex items-center gap-2 group">
-                Mulai Simulator Live <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              <Link to="/login" className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold px-6 py-3.5 rounded-xl text-sm transition-all duration-300 shadow-lg shadow-amber-600/30 flex items-center gap-2 group" data-testid="dapuros-hero-login">
+                Masuk / Login Akun <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <a href="#demo" className="bg-white hover:bg-slate-50 border border-slate-200 font-extrabold px-6 py-3.5 rounded-xl text-sm transition-all duration-300">
+                Mulai Simulator Live
               </a>
               <a href="#pricing" className="bg-white hover:bg-slate-50 border border-slate-200 font-extrabold px-6 py-3.5 rounded-xl text-sm transition-all duration-300">
                 Lihat Paket Harga
@@ -998,8 +1091,72 @@ export default function DapurOS() {
                         <p className="text-[10px] text-amber-100 font-semibold">Self-Ordering QR Menu</p>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto bg-slate-950 px-3 py-3 space-y-4">
-                        <div className="flex gap-1.5 overflow-x-auto pb-1.5 border-b border-slate-900">
+                      <div className="flex-1 overflow-y-auto bg-slate-950 px-3 py-3 space-y-3">
+                        {/* Customization & Adjustments Selector */}
+                        <div className="bg-slate-900 border border-slate-800 p-2 rounded-xl text-left space-y-2">
+                          <span className="text-[10px] font-black text-amber-400 tracking-wider uppercase block">
+                            ⚙ Opsi Penyesuaian (Adjustments)
+                          </span>
+                          
+                          <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                            <div>
+                              <span className="text-slate-400 font-bold block mb-0.5">Gula:</span>
+                              <div className="flex gap-1">
+                                {["Normal", "Less", "No"].map(s => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setQrModifiers(prev => ({ ...prev, sugar: s === "Normal" ? "Normal" : s + " Sugar" }))}
+                                    className={`px-1.5 py-0.5 rounded font-bold transition-all ${qrModifiers.sugar.includes(s) ? "bg-amber-600 text-white" : "bg-slate-950 text-slate-400 hover:text-slate-200"}`}
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <span className="text-slate-400 font-bold block mb-0.5">Es:</span>
+                              <div className="flex gap-1">
+                                {["Normal", "Less", "No"].map(i => (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => setQrModifiers(prev => ({ ...prev, ice: i === "Normal" ? "Normal" : i + " Ice" }))}
+                                    className={`px-1.5 py-0.5 rounded font-bold transition-all ${qrModifiers.ice.includes(i) ? "bg-amber-600 text-white" : "bg-slate-950 text-slate-400 hover:text-slate-200"}`}
+                                  >
+                                    {i}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-slate-400 font-bold block mb-0.5 text-[9px]">Catatan / Request Khusus:</span>
+                            <div className="flex gap-1 mb-1 flex-wrap">
+                              {["Tanpa Bawang", "Extra Keju", "Pedas"].map(chip => (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => setQrModifiers(prev => ({ ...prev, notes: prev.notes ? prev.notes + ", " + chip : chip }))}
+                                  className="px-1.5 py-0.5 bg-slate-950 text-slate-300 text-[8px] font-semibold rounded hover:bg-slate-800"
+                                >
+                                  + {chip}
+                                </button>
+                              ))}
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="cth: less sugar, no onion..."
+                              value={qrModifiers.notes}
+                              onChange={(e) => setQrModifiers(prev => ({ ...prev, notes: e.target.value }))}
+                              className="w-full bg-slate-950 border border-slate-800 text-[10px] text-slate-200 px-2 py-1 rounded focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-slate-900">
                           {["Semua", "Makanan", "Minuman"].map(cat => (
                             <button
                               key={cat}
@@ -1019,10 +1176,10 @@ export default function DapurOS() {
 
                         <div className="space-y-2">
                           {filteredMenuItems.map(menu => (
-                            <div key={menu.id} className="bg-slate-900 border border-slate-850 p-2 rounded-xl flex gap-3 items-center justify-between">
-                              <img src={menu.image} alt={menu.name} className="w-14 h-14 object-cover rounded-lg" />
-                              <div className="flex-1 space-y-0.5 text-left">
-                                <h4 className="text-[11px] font-black text-slate-100 leading-tight">{menu.name}</h4>
+                            <div key={menu.id} className="bg-slate-900 border border-slate-850 p-2 rounded-xl flex gap-2 items-center justify-between">
+                              <img src={menu.image} alt={menu.name} className="w-12 h-12 object-cover rounded-lg shrink-0" />
+                              <div className="flex-1 space-y-0.5 text-left min-w-0">
+                                <h4 className="text-[11px] font-black text-slate-100 leading-tight truncate">{menu.name}</h4>
                                 <p className="text-[10px] text-slate-500 font-bold">Rp {menu.price.toLocaleString()}</p>
                               </div>
                               <button
@@ -1034,7 +1191,7 @@ export default function DapurOS() {
                                     setQrCart(prev => [...prev, { menuItem: menu, qty: 1, mods: { ...qrModifiers } }]);
                                   }
                                 }}
-                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold p-1 px-2 rounded-md text-[10px] transition-colors"
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold p-1.5 px-2.5 rounded-md text-[10px] transition-colors shrink-0"
                               >
                                 + Tambah
                               </button>
@@ -1046,21 +1203,27 @@ export default function DapurOS() {
                       <div className="bg-slate-900 border-t border-slate-800 p-3 space-y-2 z-20">
                         {qrCart.length > 0 ? (
                           <div className="space-y-2">
-                            <div className="max-h-[80px] overflow-y-auto space-y-1 text-left">
-                              {qrCart.map((c, i) => (
-                                <div key={i} className="flex justify-between items-center text-[10px] text-slate-300">
-                                  <span className="font-bold">{c.qty}x {c.menuItem.name}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span>Rp {(c.menuItem.price * c.qty).toLocaleString()}</span>
-                                    <button
-                                      onClick={() => setQrCart(prev => prev.filter(item => item.menuItem.id !== c.menuItem.id))}
-                                      className="text-red-500 hover:text-red-400"
-                                    >
-                                      ✕
-                                    </button>
+                            <div className="max-h-[90px] overflow-y-auto space-y-1 text-left">
+                              {qrCart.map((c, i) => {
+                                const modDesc = `${c.mods.sugar !== "Normal" ? c.mods.sugar + ", " : ""}${c.mods.ice !== "Normal" ? c.mods.ice + ", " : ""}${c.mods.notes}`.trim().replace(/,$/, "");
+                                return (
+                                  <div key={i} className="flex justify-between items-start text-[10px] text-slate-300 border-b border-slate-850/60 pb-1">
+                                    <div>
+                                      <span className="font-bold">{c.qty}x {c.menuItem.name}</span>
+                                      {modDesc && <p className="text-[8px] text-amber-400 font-medium">({modDesc})</p>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span>Rp {(c.menuItem.price * c.qty).toLocaleString()}</span>
+                                      <button
+                                        onClick={() => setQrCart(prev => prev.filter(item => item.menuItem.id !== c.menuItem.id))}
+                                        className="text-red-500 hover:text-red-400 font-bold"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                             <button
                               onClick={handleQrSubmit}
@@ -1093,8 +1256,56 @@ export default function DapurOS() {
                       <span className="text-xs font-black text-slate-300 tracking-wider uppercase flex items-center gap-1.5">
                         <Package size={14} className="text-amber-500" /> Stok Bahan Baku (Real-time)
                       </span>
-                      <span className="text-[10px] text-slate-500 font-bold">Dideplesi otomatis oleh penjualan</span>
+                      <button
+                        onClick={() => setShowAddIngForm(!showAddIngForm)}
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1 rounded text-xs flex items-center gap-1 transition-colors"
+                        data-testid="add-ingredient-btn"
+                      >
+                        <Plus size={12} /> Tambah Bahan Baku
+                      </button>
                     </div>
+
+                    {showAddIngForm && (
+                      <form onSubmit={handleAddIngredientSubmit} className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2 text-xs">
+                        <p className="font-bold text-slate-200">Tambah Bahan Baku Baru</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            placeholder="Nama Bahan (cth: Gula Aren)"
+                            value={ingForm.name}
+                            onChange={(e) => setIngForm(p => ({ ...p, name: e.target.value }))}
+                            className="bg-slate-950 border border-slate-800 p-2 rounded text-slate-200 focus:outline-none focus:border-amber-500"
+                            required
+                          />
+                          <input
+                            type="number"
+                            placeholder="Stok Awal"
+                            value={ingForm.stock}
+                            onChange={(e) => setIngForm(p => ({ ...p, stock: e.target.value }))}
+                            className="bg-slate-950 border border-slate-800 p-2 rounded text-slate-200 focus:outline-none focus:border-amber-500"
+                            required
+                          />
+                          <input
+                            type="text"
+                            placeholder="Satuan (g, ml, pcs)"
+                            value={ingForm.unit}
+                            onChange={(e) => setIngForm(p => ({ ...p, unit: e.target.value }))}
+                            className="bg-slate-950 border border-slate-800 p-2 rounded text-slate-200 focus:outline-none focus:border-amber-500"
+                          />
+                          <input
+                            type="number"
+                            placeholder="Batas Minimum (Safety)"
+                            value={ingForm.safety}
+                            onChange={(e) => setIngForm(p => ({ ...p, safety: e.target.value }))}
+                            className="bg-slate-950 border border-slate-800 p-2 rounded text-slate-200 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button type="button" onClick={() => setShowAddIngForm(false)} className="px-3 py-1 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 font-semibold">Batal</button>
+                          <button type="submit" className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 font-bold">Simpan Bahan</button>
+                        </div>
+                      </form>
+                    )}
 
                     <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                       <table className="w-full text-left text-xs text-slate-300">
@@ -1123,12 +1334,19 @@ export default function DapurOS() {
                                     <span className="inline-block px-2 py-0.5 text-[9px] bg-emerald-950/60 border border-emerald-800 text-emerald-400 font-black rounded-full" data-testid="badge-safe">Aman</span>
                                   )}
                                 </td>
-                                <td className="p-3 text-center">
+                                <td className="p-3 text-center flex justify-center gap-1.5">
                                   <button
                                     onClick={() => handleLogWaste(ing.id, ing.id === "i6" ? 1 : 100, "Spilled / Rusak")}
                                     className="bg-slate-800 hover:bg-red-950 hover:text-red-400 font-bold py-1 px-2 rounded text-[10px] transition-colors"
                                   >
                                     Log Spoilage
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteIngredient(ing.id)}
+                                    className="bg-red-950/80 hover:bg-red-900 text-red-300 font-bold py-1 px-1.5 rounded text-[10px] transition-colors"
+                                    title="Hapus Bahan"
+                                  >
+                                    <Trash2 size={12} />
                                   </button>
                                 </td>
                               </tr>
@@ -1141,29 +1359,139 @@ export default function DapurOS() {
 
                   <div className="lg:col-span-5 space-y-6">
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-                      <span className="text-xs font-black tracking-wider uppercase text-slate-200 flex items-center gap-1.5">
-                        <Database size={14} className="text-amber-500" /> Resep / Bill of Materials (BOM)
-                      </span>
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span className="text-xs font-black tracking-wider uppercase text-slate-200 flex items-center gap-1.5">
+                          <Database size={14} className="text-amber-500" /> Resep / Bill of Materials (BOM)
+                        </span>
+                        <button
+                          onClick={() => setShowAddMenuForm(!showAddMenuForm)}
+                          className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-1 rounded text-[10px] flex items-center gap-1 transition-colors"
+                          data-testid="add-menu-btn"
+                        >
+                          <Plus size={12} /> Menu Baru
+                        </button>
+                      </div>
+
+                      {showAddMenuForm && (
+                        <form onSubmit={handleAddMenuSubmit} className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2 text-xs">
+                          <p className="font-bold text-slate-200 text-[11px]">Tambah Menu Baru</p>
+                          <input
+                            type="text"
+                            placeholder="Nama Menu"
+                            value={menuForm.name}
+                            onChange={(e) => setMenuForm(p => ({ ...p, name: e.target.value }))}
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded text-slate-200"
+                            required
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              value={menuForm.category}
+                              onChange={(e) => setMenuForm(p => ({ ...p, category: e.target.value }))}
+                              className="bg-slate-900 border border-slate-800 p-1.5 rounded text-slate-200"
+                            >
+                              <option value="Makanan">Makanan</option>
+                              <option value="Minuman">Minuman</option>
+                            </select>
+                            <input
+                              type="number"
+                              placeholder="Harga (Rp)"
+                              value={menuForm.price}
+                              onChange={(e) => setMenuForm(p => ({ ...p, price: e.target.value }))}
+                              className="bg-slate-900 border border-slate-800 p-1.5 rounded text-slate-200"
+                              required
+                            />
+                          </div>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button type="button" onClick={() => setShowAddMenuForm(false)} className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px]">Batal</button>
+                            <button type="submit" className="px-2 py-0.5 bg-amber-600 text-white rounded text-[10px] font-bold">Simpan</button>
+                          </div>
+                        </form>
+                      )}
                       
-                      <div className="space-y-2 text-xs">
+                      <div className="space-y-2.5 text-xs max-h-[350px] overflow-y-auto pr-1">
                         {menuItems.map(menu => (
-                          <div key={menu.id} className="p-2.5 bg-slate-950 rounded-lg border border-slate-850 space-y-1.5">
+                          <div key={menu.id} className="p-2.5 bg-slate-950 rounded-lg border border-slate-850 space-y-2">
                             <div className="flex justify-between items-center text-slate-100 font-bold border-b border-slate-900 pb-1">
-                              <span>{menu.name}</span>
-                              <span className="text-[10px] text-slate-500">{menu.category}</span>
+                              <div>
+                                <span className="text-[11px] block leading-tight">{menu.name}</span>
+                                <span className="text-[9px] text-slate-500 font-normal">Rp {menu.price.toLocaleString()} • {menu.category}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => setEditingBomMenuId(editingBomMenuId === menu.id ? null : menu.id)}
+                                  className={`px-2 py-0.5 rounded text-[9px] font-bold transition-colors ${editingBomMenuId === menu.id ? "bg-amber-600 text-white" : "bg-slate-900 text-amber-400 border border-amber-800/60 hover:bg-amber-950"}`}
+                                  data-testid={`edit-bom-btn-${menu.id}`}
+                                >
+                                  {editingBomMenuId === menu.id ? "Tutup Editor" : "Edit BOM"}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMenuItem(menu.id)}
+                                  className="text-red-400 hover:text-red-300 p-1"
+                                  title="Hapus Menu"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
                             </div>
-                            <div className="text-[10px] text-slate-400 space-y-0.5">
-                              {menu.recipe.map((rec, i) => {
-                                const ingName = ingredients.find(ing => ing.id === rec.ingredientId)?.name || "";
-                                const ingUnit = ingredients.find(ing => ing.id === rec.ingredientId)?.unit || "";
-                                return (
-                                  <div key={i} className="flex justify-between">
-                                    <span>• {ingName}</span>
-                                    <span>{rec.qty}{ingUnit}</span>
-                                  </div>
-                                );
-                              })}
+
+                            <div className="text-[10px] text-slate-400 space-y-1">
+                              {menu.recipe.length > 0 ? (
+                                menu.recipe.map((rec, i) => {
+                                  const ing = ingredients.find(ing => ing.id === rec.ingredientId);
+                                  return (
+                                    <div key={i} className="flex justify-between items-center bg-slate-900/60 px-2 py-0.5 rounded">
+                                      <span>• {ing ? ing.name : "Bahan Terhapus"}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-bold text-amber-300">{rec.qty}{ing ? ing.unit : ""}</span>
+                                        {editingBomMenuId === menu.id && (
+                                          <button
+                                            onClick={() => handleRemoveBomItem(menu.id, rec.ingredientId)}
+                                            className="text-red-400 hover:text-red-300 font-bold"
+                                            title="Hapus Komponen Bahan"
+                                          >
+                                            ✕
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <p className="text-[9px] text-slate-600 italic">Belum ada resep bahan baku</p>
+                              )}
                             </div>
+
+                            {/* BOM Editor Panel for Menu Item */}
+                            {editingBomMenuId === menu.id && (
+                              <div className="p-2 bg-slate-900/90 border border-amber-900/40 rounded space-y-1.5 mt-2">
+                                <span className="text-[9px] font-bold text-amber-400 block">+ Tambah Komponen Bahan Ke Resep</span>
+                                <div className="grid grid-cols-12 gap-1.5">
+                                  <select
+                                    value={selectedBomIngId}
+                                    onChange={(e) => setSelectedBomIngId(e.target.value)}
+                                    className="col-span-6 bg-slate-950 border border-slate-800 text-[10px] text-slate-200 p-1 rounded"
+                                  >
+                                    <option value="">-- Pilih Bahan --</option>
+                                    {ingredients.map(i => (
+                                      <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    type="number"
+                                    placeholder="Qty"
+                                    value={bomIngQty}
+                                    onChange={(e) => setBomIngQty(e.target.value)}
+                                    className="col-span-3 bg-slate-950 border border-slate-800 text-[10px] text-slate-200 p-1 rounded"
+                                  />
+                                  <button
+                                    onClick={() => handleAddBomItem(menu.id)}
+                                    className="col-span-3 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold rounded p-1"
+                                  >
+                                    + Tambah
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

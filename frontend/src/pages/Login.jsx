@@ -4,8 +4,8 @@ import { useAuth } from "@/auth/AuthContext";
 import { Leaf, ArrowRight, Utensils } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("admin@dagangos.com");
+  const [password, setPassword] = useState("dagangos123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
@@ -20,6 +20,21 @@ export default function Login() {
   const desc = isDapurOS
     ? "Kelola pesanan meja, menu digital self-order, status memasak KDS, dan resep bahan baku dalam satu sistem."
     : "Kelola penjualan, stok, supplier, dan laporan toko dari satu aplikasi.";
+
+  const handleMasterDemo = async () => {
+    setEmail("admin@dagangos.com");
+    setPassword("dagangos123");
+    setError("");
+    setLoading(true);
+    try {
+      await login("admin@dagangos.com", "dagangos123");
+      nav("/app/dashboard");
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Gagal masuk master demo");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -60,6 +75,22 @@ export default function Login() {
               <span className="font-display text-xl font-bold">{brandName}</span>
             </div>
             <p className="text-sm text-[hsl(var(--muted))]">{tagline}</p>
+          </div>
+
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1 text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-amber-600">🔑 Master Test Account:</span>
+              <button
+                type="button"
+                onClick={handleMasterDemo}
+                className="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded font-bold hover:bg-amber-700"
+                data-testid="master-demo-login-btn"
+              >
+                1-Click Login
+              </button>
+            </div>
+            <p className="text-[11px] font-mono text-slate-700">Email: <b>admin@dagangos.com</b></p>
+            <p className="text-[11px] font-mono text-slate-700">Pass: <b>dagangos123</b></p>
           </div>
 
           <div className="space-y-4">
