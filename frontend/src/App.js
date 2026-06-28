@@ -159,9 +159,19 @@ function App() {
             {sharedAppRoutes}
           </Route>
 
-          {/* Direct un-prefixed management redirects */}
-          <Route path="/settings/payments/*" element={<Navigate to="/app/settings/payments" replace />} />
-          <Route path="/payments/*" element={<Navigate to="/app/payments" replace />} />
+          {/* Direct un-prefixed management routes & deep links */}
+          <Route path="/settings/payments/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="/settings/payments" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="/payments/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="/payments" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
           <Route path="/inventory/*" element={<Navigate to="/app/inventory" replace />} />
           <Route path="/billing/*" element={<Navigate to="/app/settings/billing" replace />} />
           <Route path="/settings/*" element={<Navigate to="/app/settings/general" replace />} />
