@@ -66,7 +66,7 @@ export default function KdsScreen() {
       if (envUrl && envUrl !== "undefined" && envUrl !== "") {
         backendHost = envUrl.replace(/https?:\/\//, "");
       } else if (!window.location.origin.includes("localhost")) {
-        backendHost = "dapur-os.vercel.app";
+        backendHost = window.location.host || "dagangos.com";
       }
 
       const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
