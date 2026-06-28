@@ -165,20 +165,23 @@ export default function KdsScreen() {
             <button
               onClick={() => setStation("all")}
               className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${station === "all" ? "bg-[hsl(var(--primary))] text-white" : "text-[hsl(var(--muted))]"}`}
+              data-testid="station-filter-all"
             >
               Semua Stasiun
             </button>
             <button
               onClick={() => setStation("Kitchen")}
               className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${station === "Kitchen" ? "bg-[hsl(var(--primary))] text-white" : "text-[hsl(var(--muted))]"}`}
+              data-testid="station-filter-kitchen"
             >
-              Dapur (Food)
+              Dapur (Makanan)
             </button>
             <button
               onClick={() => setStation("Bar")}
               className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${station === "Bar" ? "bg-[hsl(var(--primary))] text-white" : "text-[hsl(var(--muted))]"}`}
+              data-testid="station-filter-bar"
             >
-              Bar (Drinks)
+              Bar (Minuman)
             </button>
           </div>
         </div>
@@ -190,7 +193,13 @@ export default function KdsScreen() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {tickets.map((t) => {
+          {tickets
+            .filter((t) => {
+              if (station === "all") return true;
+              const ticketStation = t.station || (t.items && t.items[0]?.station) || "Kitchen";
+              return String(ticketStation).toLowerCase().includes(String(station).toLowerCase());
+            })
+            .map((t) => {
             const ticketStatus = t.items[0]?.status || "Pending";
             const isWarning = isSlaWarning(t.created_at) && ticketStatus !== "Ready";
             
