@@ -87,6 +87,7 @@ const sharedAppRoutes = (
     <Route path="products/ingredients" element={<RoleGuard><Ingredients /></RoleGuard>} />
 
     {/* Inventory */}
+    <Route path="inventory" element={<RoleGuard><StockOverview /></RoleGuard>} />
     <Route path="inventory/overview" element={<RoleGuard><StockOverview /></RoleGuard>} />
     <Route path="inventory/movement" element={<RoleGuard><StockMovement /></RoleGuard>} />
     <Route path="inventory/valuation" element={<RoleGuard><InventoryValuation /></RoleGuard>} />
@@ -94,6 +95,7 @@ const sharedAppRoutes = (
     <Route path="inventory/dead-stock" element={<RoleGuard><DeadStock /></RoleGuard>} />
 
     {/* Purchase */}
+    <Route path="purchase" element={<RoleGuard><PurchaseOrder /></RoleGuard>} />
     <Route path="purchase/orders" element={<RoleGuard><PurchaseOrder /></RoleGuard>} />
     <Route path="purchase/receiving" element={<RoleGuard><GoodsReceiving /></RoleGuard>} />
     <Route path="purchase/invoices" element={<RoleGuard><SupplierInvoice /></RoleGuard>} />
@@ -107,6 +109,7 @@ const sharedAppRoutes = (
     <Route path="customers/loyalty" element={<RoleGuard><LoyaltyPoints /></RoleGuard>} />
 
     {/* Hutang Piutang */}
+    <Route path="debt" element={<RoleGuard><AccountsReceivable /></RoleGuard>} />
     <Route path="debt/receivable" element={<RoleGuard><AccountsReceivable /></RoleGuard>} />
     <Route path="debt/payable" element={<RoleGuard><AccountsPayable /></RoleGuard>} />
 
@@ -119,6 +122,7 @@ const sharedAppRoutes = (
     <Route path="reports" element={<RoleGuard><Reports /></RoleGuard>} />
 
     {/* Staff */}
+    <Route path="staff" element={<RoleGuard><StaffManagement /></RoleGuard>} />
     <Route path="staff/management" element={<RoleGuard><StaffManagement /></RoleGuard>} />
     <Route path="staff/roles" element={<RoleGuard><Roles /></RoleGuard>} />
     <Route path="staff/permissions" element={<RoleGuard><Permissions /></RoleGuard>} />
