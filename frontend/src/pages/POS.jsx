@@ -389,8 +389,8 @@ export default function POS() {
   const checkout = async () => {
     if (cart.length === 0) return;
     
-    // Simulate local EDC terminal payload push
-    if (paymentMethod === "edc") {
+    // Simulate local EDC terminal payload push for card and EDC transactions
+    if (paymentMethod === "edc" || paymentMethod === "debit" || paymentMethod === "credit") {
       setEdcSimulating(true);
       setEdcTimer(3);
       return;
@@ -977,7 +977,7 @@ export default function POS() {
 
               <div className="text-left">
                 <label className="label-tiny mb-2 block">Metode Pembayaran</label>
-                <div className="grid grid-cols-4 gap-1">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
                   <button onClick={() => setPaymentMethod("cash")}
                           className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "cash" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
                           data-testid="pm-cash"><Banknote size={12} className="mx-auto mb-1" />Tunai</button>
@@ -987,9 +987,15 @@ export default function POS() {
                   <button onClick={() => setPaymentMethod("ewallet")}
                           className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "ewallet" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
                           data-testid="pm-ewallet"><Smartphone size={12} className="mx-auto mb-1" />E-Wallet</button>
+                  <button onClick={() => setPaymentMethod("debit")}
+                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "debit" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
+                          data-testid="pm-debit"><CreditCard size={12} className="mx-auto mb-1" />Kartu Debit</button>
+                  <button onClick={() => setPaymentMethod("credit")}
+                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "credit" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
+                          data-testid="pm-credit"><CreditCard size={12} className="mx-auto mb-1 text-amber-500" />Kartu Kredit</button>
                   <button onClick={() => setPaymentMethod("edc")}
                           className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "edc" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-edc"><CreditCard size={12} className="mx-auto mb-1" />EDC</button>
+                          data-testid="pm-edc"><CreditCard size={12} className="mx-auto mb-1" />EDC EDC</button>
                 </div>
               </div>
 

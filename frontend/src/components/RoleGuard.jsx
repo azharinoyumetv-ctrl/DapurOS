@@ -59,8 +59,13 @@ export default function RoleGuard({ children }) {
   // Check if any part of the path matches allowed permissions
   const pathParts = location.pathname.split("/").filter(Boolean);
   
-  // Allow about page for everyone
-  if (location.pathname.includes("about")) {
+  // Always allow core operational pages for everyone
+  if (
+    location.pathname.includes("dashboard") ||
+    location.pathname.includes("pos") ||
+    location.pathname.includes("kds") ||
+    location.pathname.includes("about")
+  ) {
     return children;
   }
 

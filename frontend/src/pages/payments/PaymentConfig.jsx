@@ -18,7 +18,8 @@ const DEFAULT_PAYMENT_CONFIG = {
     provider: "Midtrans",
     banks: { BCA: true, BNI: true, BRI: true, Mandiri: true, Permata: true, CIMB: true, Maybank: false, Danamon: false, Neo: false, BSI: true }
   },
-  credit_card: { is_active: true, provider: "Stripe", enable_3ds: true, installment_banks: ["Mandiri", "BCA", "CIMB"] },
+  debit_card: { is_active: true, provider: "Mesin EDC Multibank", edc_brand: "BCA EDC Dual Merchant", terminal_id: "TID-8829102", merchant_id: "MID-DEBIT-001", enable_surcharge: false, surcharge_percent: 0 },
+  credit_card: { is_active: true, provider: "Stripe", enable_3ds: true, merchant_id: "MID-CC-88219", installment_banks: ["Mandiri", "BCA", "CIMB"] },
   bank_transfer: { is_active: true, accounts: [{ bank: "Bank Central Asia", account_no: "8820987111", account_name: "DagangOS Geraina POS" }] }
 };
 
@@ -224,37 +225,103 @@ export default function PaymentConfig() {
           </div>
         );
 
-      case "credit-card":
+      case "debit_card":
+      case "debit-card":
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
-              <label className="text-sm font-semibold">Aktifkan Kartu Kredit Online</label>
+              <label className="text-sm font-semibold">Aktifkan Pembayaran Kartu Debit (EDC Bank)</label>
               <input
                 type="checkbox"
-                checked={config.credit_card.is_active}
-                onChange={(e) => setConfig({ ...config, credit_card: { ...config.credit_card, is_active: e.target.checked } })}
+                checked={config?.debit_card?.is_active ?? true}
+                onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), is_active: e.target.checked } })}
                 className="rounded border-[hsl(var(--border))]"
               />
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Gateway Pemroses</label>
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Merk / Tipe Mesin EDC</label>
                 <select
-                  value={config.credit_card.provider}
-                  onChange={(e) => setConfig({ ...config, credit_card: { ...config.credit_card, provider: e.target.value } })}
+                  value={config?.debit_card?.edc_brand || "BCA EDC Dual Merchant"}
+                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), edc_brand: e.target.value } })}
                   className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
                 >
-                  <option value="Stripe">Stripe</option>
-                  <option value="Midtrans">Midtrans</option>
-                  <option value="Xendit">Xendit</option>
+                  <option value="BCA EDC Dual Merchant">BCA EDC Dual Merchant</option>
+                  <option value="Mandiri EDC Android">Mandiri EDC Android</option>
+                  <option value="BRI EDC Smart">BRI EDC Smart</option>
+                  <option value="BNI EDC Mobile">BNI EDC Mobile</option>
+                  <option value="Ingenico / Pax Universal EDC">Ingenico / Pax Universal EDC</option>
+                </select>
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Terminal ID (TID)</label>
+                <input
+                  type="text"
+                  value={config?.debit_card?.terminal_id || "TID-8829102"}
+                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), terminal_id: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
+                  placeholder="Contoh: TID-998231"
+                />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4 pt-2">
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Merchant ID (MID)</label>
+                <input
+                  type="text"
+                  value={config?.debit_card?.merchant_id || "MID-DEBIT-001"}
+                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), merchant_id: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
+                  placeholder="Contoh: MID-88291"
+                />
+              </div>
+              <div className="flex items-center justify-between pt-6">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Biaya Penanganan (Surcharge %)</label>
+                <input
+                  type="number"
+                  value={config?.debit_card?.surcharge_percent || 0}
+                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), surcharge_percent: parseFloat(e.target.value) || 0 } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-3 py-1 bg-white text-sm w-24 font-mono"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case "credit_card":
+      case "credit-card":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
+              <label className="text-sm font-semibold">Aktifkan Kartu Kredit Online & EDC</label>
+              <input
+                type="checkbox"
+                checked={config?.credit_card?.is_active ?? true}
+                onChange={(e) => setConfig({ ...config, credit_card: { ...(config.credit_card || {}), is_active: e.target.checked } })}
+                className="rounded border-[hsl(var(--border))]"
+              />
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Gateway Pemroses / Provider</label>
+                <select
+                  value={config?.credit_card?.provider || "Stripe"}
+                  onChange={(e) => setConfig({ ...config, credit_card: { ...(config.credit_card || {}), provider: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
+                >
+                  <option value="Stripe">Stripe Gateway</option>
+                  <option value="Midtrans">Midtrans CC Payment</option>
+                  <option value="Xendit">Xendit Cards API</option>
+                  <option value="Mesin EDC Offline">Mesin EDC Store Offline</option>
                 </select>
               </div>
               <div className="flex items-center justify-between pt-6">
                 <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Wajibkan 3D Secure (3DS)</label>
                 <input
                   type="checkbox"
-                  checked={config.credit_card.enable_3ds}
-                  onChange={(e) => setConfig({ ...config, credit_card: { ...config.credit_card, enable_3ds: e.target.checked } })}
+                  checked={config?.credit_card?.enable_3ds ?? true}
+                  onChange={(e) => setConfig({ ...config, credit_card: { ...(config.credit_card || {}), enable_3ds: e.target.checked } })}
                   className="rounded border-[hsl(var(--border))]"
                 />
               </div>
@@ -263,19 +330,20 @@ export default function PaymentConfig() {
         );
 
       case "bank-transfer":
+      case "bank_transfer":
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
               <label className="text-sm font-semibold">Aktifkan Transfer Bank Manual</label>
               <input
                 type="checkbox"
-                checked={config.bank_transfer.is_active}
-                onChange={(e) => setConfig({ ...config, bank_transfer: { ...config.bank_transfer, is_active: e.target.checked } })}
+                checked={config?.bank_transfer?.is_active ?? true}
+                onChange={(e) => setConfig({ ...config, bank_transfer: { ...(config.bank_transfer || {}), is_active: e.target.checked } })}
                 className="rounded border-[hsl(var(--border))]"
               />
             </div>
             <h3 className="text-xs font-bold text-[hsl(var(--muted))] uppercase">Rekening Penerima</h3>
-            {config.bank_transfer.accounts.map((ac, idx) => (
+            {(config?.bank_transfer?.accounts || []).map((ac, idx) => (
               <div key={idx} className="border border-[hsl(var(--border))] p-4 rounded-lg bg-[hsl(var(--surface))] grid grid-cols-3 gap-4">
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] text-[hsl(var(--muted))] uppercase">Nama Bank</label>
@@ -352,6 +420,7 @@ export default function PaymentConfig() {
     { id: "qris", label: "QRIS", path: "/dapuros/app/payments/qris" },
     { id: "ewallet", label: "E-Wallet", path: "/dapuros/app/payments/ewallet" },
     { id: "va", label: "Virtual Account", path: "/dapuros/app/payments/va" },
+    { id: "debit_card", label: "Kartu Debit", path: "/dapuros/app/payments/debit-card" },
     { id: "credit_card", label: "Kartu Kredit", path: "/dapuros/app/payments/credit-card" },
     { id: "bank_transfer", label: "Transfer Bank", path: "/dapuros/app/payments/bank-transfer" }
   ];
