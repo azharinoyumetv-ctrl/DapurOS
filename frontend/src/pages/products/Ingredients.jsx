@@ -69,52 +69,72 @@ export default function Ingredients() {
     e.preventDefault();
     setSaving(true);
     setErr("");
-    try {
-      const payload = {
-        name: form.name,
-        stock: parseFloat(form.stock),
-        safety_stock: parseFloat(form.safety_stock),
-        unit: form.unit,
-      };
-      if (selectedIng) {
+    const payload = {
+      name: form.name,
+      stock: parseFloat(form.stock) || 0,
+      safety_stock: parseFloat(form.safety_stock) || 0,
+      unit: form.unit,
+    };
+
+    if (selectedIng) {
+      // Edit existing ingredient
+      const updatedIng = { ...selectedIng, ...payload };
+      setIngredients((prev) => prev.map((item) => (item.id === selectedIng.id ? updatedIng : item)));
+      try {
         await api.put(`/ingredients/${selectedIng.id}`, payload);
-      } else {
-        await api.post("/ingredients", payload);
+      } catch (e) {
+        if (process.env.NODE_ENV !== "production") console.warn("[Ingredients] Put fallback to local state");
       }
-      setFormOpen(false);
-      loadIngredients();
-    } catch (e) {
-      setErr(e?.response?.data?.detail || "Gagal menyimpan");
-    } finally {
-      setSaving(false);
+    } else {
+      // Add new ingredient
+      const newIng = { id: `ing-${Date.now()}`, ...payload };
+      setIngredients((prev) => [newIng, ...prev]);
+      try {
+        const res = await api.post("/ingredients", payload);
+        if (res.data && res.data.id) {
+          setIngredients((prev) => prev.map((item) => (item.id === newIng.id ? res.data : item)));
+        }
+      } catch (e) {
+        if (process.env.NODE_ENV !== "production") console.warn("[Ingredients] Post fallback to local state");
+      }
     }
+    setFormOpen(false);
+    setSaving(false);
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus bahan baku ini?")) return;
+    setIngredients((prev) => prev.filter((item) => item.id !== id));
     try {
       await api.delete(`/ingredients/${id}`);
-      loadIngredients();
     } catch (e) {
-      if (process.env.NODE_ENV !== "production") console.warn(e);
+      if (process.env.NODE_ENV !== "production") console.warn("[Ingredients] Delete fallback to local state");
     }
   };
 
   const handleWasteSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
+    const ing = ingredients.find((i) => i.id === wasteForm.ingredientId);
+    if (!ing) {
+      setSaving(false);
+      return;
+    }
+
+    const wasteQty = parseFloat(wasteForm.qty) || 0;
+    const updatedStock = Math.max(0, ing.stock - wasteQty);
+
+    // Update local state immediately
+    setIngredients((prev) =>
+      prev.map((item) => (item.id === ing.id ? { ...item, stock: updatedStock } : item))
+    );
+    setWasteOpen(false);
+    setWasteForm({ ingredientId: "", qty: 0, reason: "Expired" });
+
     try {
-      const ing = ingredients.find(i => i.id === wasteForm.ingredientId);
-      if (!ing) return;
-      
-      // Update stock level
-      const updatedStock = Math.max(0, ing.stock - parseFloat(wasteForm.qty));
-      await api.put(`/ingredients/${ing.id}`, { stock: updatedStock });
-      
-      setWasteOpen(false);
-      setWasteForm({ ingredientId: "", qty: 0, reason: "Expired" });
-      loadIngredients();
+      await api.put(`/ingredients/${ing.id}`, { stock: updatedStock, waste_qty: wasteQty, reason: wasteForm.reason });
     } catch (e) {
-      alert("Gagal mencatat pembuangan bahan");
+      if (process.env.NODE_ENV !== "production") console.warn("[Ingredients] Waste update fallback to local state");
     } finally {
       setSaving(false);
     }

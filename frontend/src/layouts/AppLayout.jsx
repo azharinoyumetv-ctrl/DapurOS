@@ -51,7 +51,7 @@ export default function AppLayout() {
 
   const dynamicMenu = [
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: "Dasbor", key: "dashboard" },
-    { to: `${prefix}/pos`, icon: ShoppingCart, label: "POS Kasir", key: "pos" },
+    { to: `${prefix}/pos`, icon: ShoppingCart, label: "Kasir", key: "pos" },
     { to: `${prefix}/kds`, icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
     {
       label: "Produk",
