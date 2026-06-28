@@ -23,12 +23,12 @@ export default function Reports() {
   }, [type]);
 
   const subtabs = [
-    { id: "sales", label: "Penjualan", path: "/app/reports/sales" },
-    { id: "product", label: "Produk", path: "/app/reports/product" },
-    { id: "inventory", label: "Stok / Inventaris", path: "/app/reports/inventory" },
-    { id: "profit", label: "Laba Rugi", path: "/app/reports/profit" },
-    { id: "cashflow", label: "Arus Kas", path: "/app/reports/cashflow" },
-    { id: "tax", label: "Pajak", path: "/app/reports/tax" }
+    { id: "sales", label: "Penjualan", path: "/dapuros/app/reports/sales" },
+    { id: "product", label: "Produk", path: "/dapuros/app/reports/product" },
+    { id: "inventory", label: "Stok / Inventaris", path: "/dapuros/app/reports/inventory" },
+    { id: "profit", label: "Laba Rugi", path: "/dapuros/app/reports/profit" },
+    { id: "cashflow", label: "Arus Kas", path: "/dapuros/app/reports/cashflow" },
+    { id: "tax", label: "Pajak", path: "/dapuros/app/reports/tax" }
   ];
 
   const renderReport = () => {

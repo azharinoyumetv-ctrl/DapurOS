@@ -348,12 +348,12 @@ export default function PaymentConfig() {
   };
 
   const subtabs = [
-    { id: "cash", label: "Tunai", path: "/app/payments/cash" },
-    { id: "qris", label: "QRIS", path: "/app/payments/qris" },
-    { id: "ewallet", label: "E-Wallet", path: "/app/payments/ewallet" },
-    { id: "va", label: "Virtual Account", path: "/app/payments/va" },
-    { id: "credit_card", label: "Kartu Kredit", path: "/app/payments/credit-card" },
-    { id: "bank_transfer", label: "Transfer Bank", path: "/app/payments/bank-transfer" }
+    { id: "cash", label: "Tunai", path: "/dapuros/app/payments/cash" },
+    { id: "qris", label: "QRIS", path: "/dapuros/app/payments/qris" },
+    { id: "ewallet", label: "E-Wallet", path: "/dapuros/app/payments/ewallet" },
+    { id: "va", label: "Virtual Account", path: "/dapuros/app/payments/va" },
+    { id: "credit_card", label: "Kartu Kredit", path: "/dapuros/app/payments/credit-card" },
+    { id: "bank_transfer", label: "Transfer Bank", path: "/dapuros/app/payments/bank-transfer" }
   ];
 
   return (

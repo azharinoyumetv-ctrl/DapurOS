@@ -286,13 +286,13 @@ export default function Settings() {
   };
 
   const subtabs = [
-    { id: "general", label: "Umum", path: "/app/settings/general" },
-    { id: "store", label: "Toko", path: "/app/settings/store" },
-    { id: "billing", label: "Langganan & Tagihan", path: "/app/settings/billing" },
-    { id: "receipt", label: "Struk", path: "/app/settings/receipt" },
-    { id: "printer", label: "Printer", path: "/app/settings/printer" },
-    { id: "users", label: "Pengguna", path: "/app/settings/users" },
-    { id: "license", label: "Lisensi", path: "/app/settings/license" }
+    { id: "general", label: "Umum", path: "/dapuros/app/settings/general" },
+    { id: "store", label: "Toko", path: "/dapuros/app/settings/store" },
+    { id: "billing", label: "Langganan & Tagihan", path: "/dapuros/app/settings/billing" },
+    { id: "receipt", label: "Struk", path: "/dapuros/app/settings/receipt" },
+    { id: "printer", label: "Printer", path: "/dapuros/app/settings/printer" },
+    { id: "users", label: "Pengguna", path: "/dapuros/app/settings/users" },
+    { id: "license", label: "Lisensi", path: "/dapuros/app/settings/license" }
   ];
 
   return (

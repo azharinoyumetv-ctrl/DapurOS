@@ -336,13 +336,13 @@ export default function Integrations() {
   };
 
   const subtabs = [
-    { id: "xendit", label: "Xendit", path: "/app/integrations/xendit" },
-    { id: "midtrans", label: "Midtrans", path: "/app/integrations/midtrans" },
-    { id: "stripe", label: "Stripe", path: "/app/integrations/stripe" },
-    { id: "qris", label: "QRIS", path: "/app/integrations/qris" },
-    { id: "whatsapp", label: "WhatsApp", path: "/app/integrations/whatsapp" },
-    { id: "telegram", label: "Telegram", path: "/app/integrations/telegram" },
-    { id: "email", label: "Email SMTP", path: "/app/integrations/email" }
+    { id: "xendit", label: "Xendit", path: "/dapuros/app/integrations/xendit" },
+    { id: "midtrans", label: "Midtrans", path: "/dapuros/app/integrations/midtrans" },
+    { id: "stripe", label: "Stripe", path: "/dapuros/app/integrations/stripe" },
+    { id: "qris", label: "QRIS", path: "/dapuros/app/integrations/qris" },
+    { id: "whatsapp", label: "WhatsApp", path: "/dapuros/app/integrations/whatsapp" },
+    { id: "telegram", label: "Telegram", path: "/dapuros/app/integrations/telegram" },
+    { id: "email", label: "Email SMTP", path: "/dapuros/app/integrations/email" }
   ];
 
   return (

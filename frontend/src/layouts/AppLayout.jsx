@@ -45,7 +45,7 @@ export default function AppLayout() {
   };
 
   const isDapurOS = true;
-  const prefix = "/app";
+  const prefix = "/dapuros/app";
   const BrandIcon = Utensils;
   const brandName = "DapurOS";
 
