@@ -26,7 +26,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register(email, password, storeName);
-      nav("/app/dashboard");
+      nav("/dapuros/app/dashboard");
     } catch (err) {
       setError(err?.response?.data?.detail || "Gagal mendaftar");
     } finally {

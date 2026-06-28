@@ -179,6 +179,7 @@ export default function AppLayout() {
   ];
 
   const filteredMenu = dynamicMenu.filter((item) => {
+    if (item.key === "dashboard" || item.key === "pos" || item.key === "kds") return true;
     if (permissions.includes("*")) return true;
     return permissions.includes(item.key);
   });

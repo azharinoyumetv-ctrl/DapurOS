@@ -12,7 +12,7 @@ export default function Login() {
   const { user, login } = useAuth();
 
   if (user) {
-    return <Navigate to="/app/dashboard" replace />;
+    return <Navigate to="/dapuros/app/dashboard" replace />;
   }
 
   const isDapurOS = true;
@@ -32,7 +32,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login("admin@dagangos.com", "dagangos123");
-      nav("/app/dashboard");
+      nav("/dapuros/app/dashboard");
     } catch (err) {
       setError(err?.response?.data?.detail || "Gagal masuk master demo");
     } finally {
@@ -46,7 +46,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      nav("/app/dashboard");
+      nav("/dapuros/app/dashboard");
     } catch (err) {
       setError(err?.response?.data?.detail || "Gagal masuk");
     } finally {

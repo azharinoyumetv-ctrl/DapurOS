@@ -441,7 +441,7 @@ export default function DapurOS() {
           <div className="flex items-center gap-3">
             {user ? (
               <Link
-                to="/app/dashboard"
+                to="/dapuros/app/dashboard"
                 className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition-all duration-300"
                 data-testid="nav-dashboard-btn"
               >
