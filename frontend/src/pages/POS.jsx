@@ -139,6 +139,14 @@ function ReceiptDialog({ order, onClose }) {
   );
 }
 
+const DEFAULT_PRODUCTS = [
+  { id: "prod-1", name: "Kopi Susu Gula Aren", price: 22000, category: "Minuman", stock: 50, recipe: [{ ingredient: "Biji Kopi", qty: 15 }] },
+  { id: "prod-2", name: "Nasi Goreng Spesial Dapur", price: 35000, category: "Makanan Utama", stock: 40, recipe: [{ ingredient: "Beras", qty: 150 }] },
+  { id: "prod-3", name: "Pizza Mozzarella 8 Inci", price: 48000, category: "Makanan Utama", stock: 25, recipe: [{ ingredient: "Keju Mozzarella", qty: 100 }] },
+  { id: "prod-4", name: "Iced Milk Tea Boba", price: 25000, category: "Minuman", stock: 60, recipe: [{ ingredient: "Fresh Milk UHT", qty: 200 }] },
+  { id: "prod-5", name: "Chicken Steak Crispy", price: 42000, category: "Makanan Utama", stock: 30, recipe: [{ ingredient: "Daging Ayam", qty: 1 }] },
+];
+
 const DEFAULT_FLOORS = [
   { id: "fl-main", name: "Lantai 1 (Utama)", level: 1 },
   { id: "fl-vip", name: "Lantai 2 (VIP Sofa)", level: 2 },
@@ -174,7 +182,7 @@ export default function POS() {
   const [websocketConnected, setWebsocketConnected] = useState(false);
   
   // Catalog & Cart state
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [q, setQ] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [cart, setCart] = useState([]);
@@ -185,7 +193,7 @@ export default function POS() {
   const [discount, setDiscount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState(null);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState(["Makanan Utama", "Minuman", "Cemilan", "Dessert"]);
   const [activeCat, setActiveCat] = useState("all");
   const [scannedProduct, setScannedProduct] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -238,17 +246,29 @@ export default function POS() {
   const loadActiveTableSession = async (tableId) => {
     try {
       const res = await api.get(`/tables/${tableId}/session`);
-      setActiveSession(res.data);
+      if (res.data && Array.isArray(res.data.items)) {
+        setActiveSession(res.data);
+      } else if (res.data && res.data.session && Array.isArray(res.data.items)) {
+        setActiveSession(res.data);
+      } else {
+        setActiveSession({ id: `sess-${tableId}`, table_id: tableId, items: [], subtotal: 0, service_charge: 0, tax_pb1: 0, grand_total: 0 });
+      }
     } catch (e) {
-      setActiveSession(null);
+      setActiveSession({ id: `sess-${tableId}`, table_id: tableId, items: [], subtotal: 0, service_charge: 0, tax_pb1: 0, grand_total: 0 });
     }
   };
 
   const initData = async () => {
     await loadFloors();
     await loadTables();
-    api.get("/products").then((r) => setProducts(r.data)).catch(() => {});
-    api.get("/products/categories").then((r) => setCategories(r.data)).catch(() => {});
+    api.get("/products").then((r) => {
+      if (r.data && Array.isArray(r.data) && r.data.length > 0) setProducts(r.data);
+      else setProducts(DEFAULT_PRODUCTS);
+    }).catch(() => setProducts(DEFAULT_PRODUCTS));
+    api.get("/products/categories").then((r) => {
+      if (r.data && Array.isArray(r.data) && r.data.length > 0) setCategories(r.data);
+      else setCategories(["Makanan Utama", "Minuman", "Cemilan", "Dessert"]);
+    }).catch(() => setCategories(["Makanan Utama", "Minuman", "Cemilan", "Dessert"]));
     api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {});
   };
 
@@ -709,7 +729,7 @@ export default function POS() {
 
                   <div className="space-y-4">
                     <span className="text-[10px] uppercase font-bold text-[hsl(var(--muted))] tracking-wider">Daftar Tagihan Sesi:</span>
-                    {activeSession && activeSession.items.length > 0 ? (
+                    {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 ? (
                       <div className="divide-y divide-[hsl(var(--border))] max-h-[220px] overflow-y-auto pr-1">
                         {activeSession.items.map((it, idx) => (
                           <div key={idx} className="py-2.5 flex justify-between items-start text-xs">
@@ -717,7 +737,7 @@ export default function POS() {
                               <p className="font-bold text-[hsl(var(--foreground))]">{it.qty}x {it.name}</p>
                               {it.notes && <p className="text-[10px] text-amber-600 italic">"{it.notes}"</p>}
                             </div>
-                            <span className="font-mono font-bold text-slate-800">{fmtIDR(it.price * it.qty)}</span>
+                            <span className="font-mono font-bold text-slate-800">{fmtIDR((it.price || 0) * (it.qty || 1))}</span>
                           </div>
                         ))}
                       </div>
@@ -732,14 +752,14 @@ export default function POS() {
                 </div>
 
                 <div className="space-y-4 border-t border-[hsl(var(--border))] pt-4">
-                  {activeSession && activeSession.items.length > 0 && (
+                  {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 && (
                     <div className="space-y-1.5 text-xs text-[hsl(var(--muted))]">
-                      <div className="flex justify-between"><span>Subtotal</span><span className="num-display font-bold">{fmtIDR(activeSession.subtotal)}</span></div>
-                      <div className="flex justify-between"><span>Service Charge (5%)</span><span className="num-display font-bold">{fmtIDR(activeSession.service_charge)}</span></div>
-                      <div className="flex justify-between"><span>Restoran Tax PB1 (10%)</span><span className="num-display font-bold">{fmtIDR(activeSession.tax_pb1)}</span></div>
+                      <div className="flex justify-between"><span>Subtotal</span><span className="num-display font-bold">{fmtIDR(activeSession.subtotal || 0)}</span></div>
+                      <div className="flex justify-between"><span>Service Charge (5%)</span><span className="num-display font-bold">{fmtIDR(activeSession.service_charge || 0)}</span></div>
+                      <div className="flex justify-between"><span>Restoran Tax PB1 (10%)</span><span className="num-display font-bold">{fmtIDR(activeSession.tax_pb1 || 0)}</span></div>
                       <div className="flex justify-between text-sm text-[hsl(var(--foreground))] font-black border-t border-[hsl(var(--border))]/50 pt-2 mt-1">
                         <span>Total Tagihan</span>
-                        <span className="text-[hsl(var(--primary))] num-display">{fmtIDR(activeSession.grand_total)}</span>
+                        <span className="text-[hsl(var(--primary))] num-display">{fmtIDR(activeSession.grand_total || 0)}</span>
                       </div>
                     </div>
                   )}
@@ -765,17 +785,17 @@ export default function POS() {
                           Ambil Pesanan
                         </button>
                         
-                        {activeSession && activeSession.items.length > 0 ? (
+                        {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 ? (
                           <button
                             onClick={() => {
                               // Settle checkout flow
                               // Map active session items to cart format
-                              const mapped = activeSession.items.map(it => ({
+                              const mapped = (activeSession.items || []).map(it => ({
                                 product_id: it.product_id || it.menu_item_id,
                                 name: it.name,
                                 price: it.price,
                                 quantity: it.qty,
-                                subtotal: it.price * it.qty,
+                                subtotal: (it.price || 0) * (it.qty || 1),
                                 note: it.notes
                               }));
                               setCart(mapped);
@@ -799,13 +819,13 @@ export default function POS() {
                           </button>
                         )}
                         
-                        {activeSession && activeSession.items.length > 0 && (
+                        {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 && (
                           <button
                             onClick={() => {
                               setSplitWays(2);
                               setSplitEqualResult(null);
                               setSplitQuantities(
-                                activeSession.items.reduce((acc, it) => {
+                                (activeSession.items || []).reduce((acc, it) => {
                                   acc[it.product_id] = 0;
                                   return acc;
                                 }, {})
