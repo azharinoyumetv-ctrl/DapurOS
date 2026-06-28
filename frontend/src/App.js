@@ -58,6 +58,7 @@ import Settings from "@/pages/settings/Settings";
 import RoleGuard from "@/components/RoleGuard";
 import KdsScreen from "@/pages/KdsScreen";
 import QrMenu from "@/pages/products/QrMenu";
+import EdcSimulator from "@/pages/payments/EdcSimulator";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -85,6 +86,10 @@ function getAppSubRoutes() {
       <Route path="pos" element={<RoleGuard><POS /></RoleGuard>} />
       <Route path="kds" element={<RoleGuard><KdsScreen /></RoleGuard>} />
       <Route path="qr-menu" element={<RoleGuard><QrMenu /></RoleGuard>} />
+      <Route path="edc-simulator" element={<RoleGuard><EdcSimulator /></RoleGuard>} />
+      <Route path="edc" element={<RoleGuard><EdcSimulator /></RoleGuard>} />
+      <Route path="payments/edc-simulator" element={<RoleGuard><EdcSimulator /></RoleGuard>} />
+      <Route path="payments/edc" element={<RoleGuard><EdcSimulator /></RoleGuard>} />
       <Route path="sales" element={<RoleGuard><Sales /></RoleGuard>} />
       <Route path="license" element={<RoleGuard><LicenseDevices /></RoleGuard>} />
       <Route path="about" element={<RoleGuard><About /></RoleGuard>} />
@@ -200,6 +205,8 @@ export default function App() {
             <Route path="pos/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="kds/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="qr-menu/*" element={<AppLayout />}>{appRoutes}</Route>
+            <Route path="edc-simulator/*" element={<AppLayout />}>{appRoutes}</Route>
+            <Route path="edc/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="products/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="inventory/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="purchase/*" element={<AppLayout />}>{appRoutes}</Route>

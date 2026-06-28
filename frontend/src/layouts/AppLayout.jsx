@@ -54,6 +54,7 @@ export default function AppLayout() {
     { to: `${prefix}/pos`, icon: ShoppingCart, label: "Kasir", key: "pos" },
     { to: `${prefix}/kds`, icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
     { to: `${prefix}/qr-menu`, icon: QrCode, label: "Menu QR Code", key: "qr-menu" },
+    { to: `${prefix}/edc-simulator`, icon: CreditCard, label: "Simulasi Mesin EDC", key: "edc-simulator" },
     {
       label: "Produk",
       icon: Package,
@@ -180,7 +181,7 @@ export default function AppLayout() {
   ];
 
   const filteredMenu = dynamicMenu.filter((item) => {
-    if (item.key === "dashboard" || item.key === "pos" || item.key === "kds") return true;
+    if (item.key === "dashboard" || item.key === "pos" || item.key === "kds" || item.key === "qr-menu" || item.key === "edc-simulator") return true;
     if (permissions.includes("*")) return true;
     return permissions.includes(item.key);
   });
