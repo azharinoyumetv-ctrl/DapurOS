@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/auth/AuthContext";
 import {
   Utensils, Store, Clock, User, ChefHat, Wine, CheckCircle2, Printer,
   QrCode, Tablet, Database, Plus, Trash2, AlertTriangle, CreditCard,
@@ -8,6 +9,7 @@ import {
 } from "lucide-react";
 
 export default function DapurOS() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("floor"); // floor, kds, qr, inventory
   const [isTermsOpen, setIsTermsOpen] = useState(false);
 
@@ -430,13 +432,23 @@ export default function DapurOS() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 rounded-lg text-slate-700 hover:text-amber-700 hover:bg-amber-100/50 font-bold text-xs transition-all duration-300 border border-amber-200/60"
-              data-testid="nav-login-btn"
-            >
-              Masuk / Login
-            </Link>
+            {user ? (
+              <Link
+                to="/app/dashboard"
+                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition-all duration-300"
+                data-testid="nav-dashboard-btn"
+              >
+                Buka Dashboard Software &rarr;
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                className="px-4 py-2 rounded-lg text-slate-700 hover:text-amber-700 hover:bg-amber-100/50 font-bold text-xs transition-all duration-300 border border-amber-200/60"
+                data-testid="nav-login-btn"
+              >
+                Masuk / Login
+              </Link>
+            )}
             <a
               href="https://wa.me/628999155182?text=Halo%20DagangOS%2C%20saya%20ingin%20mencoba%20DapurOS%20untuk%20restoran%20saya."
               target="_blank"
