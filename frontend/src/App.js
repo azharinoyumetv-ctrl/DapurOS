@@ -172,54 +172,42 @@ function App() {
           <Route path="/register" element={<Register />} />
 
           {/* Management & Dashboard App Layout Routes */}
-          <Route path="/app/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="app/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="/dashboard/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="dashboard/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="/settings/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="settings/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="/payments/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="payments/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="/inventory/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="inventory/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="/products/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="products/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="/pos/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="pos/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="/kds/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
-          <Route path="kds/*" element={<AppLayout />}>
-            {sharedAppRoutes}
-          </Route>
+          <Route path="/app/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="app/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/dashboard/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="dashboard/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/settings/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="settings/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/payments/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="payments/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/reports/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="reports/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/staff/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="staff/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/integrations/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="integrations/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/inventory/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="inventory/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/products/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="products/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/purchase/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="purchase/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/suppliers/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="suppliers/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/customers/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="customers/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/debt/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="debt/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/branches/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="branches/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/billing/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="billing/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/about/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="about/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/pos/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="pos/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="/kds/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
+          <Route path="kds/*" element={<AppLayout />}>{sharedAppRoutes}</Route>
 
           <Route path="*" element={<RootComponent />} />
         </Routes>
