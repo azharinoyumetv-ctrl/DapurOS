@@ -13,6 +13,13 @@ export default function DapurOS() {
   const [activeTab, setActiveTab] = useState("floor"); // floor, kds, qr, inventory
   const [isTermsOpen, setIsTermsOpen] = useState(false);
 
+  useEffect(() => {
+    const token = localStorage.getItem("dagangos_token") || localStorage.getItem("geraina_token") || localStorage.getItem("dapuros_token");
+    if (user || token) {
+      window.location.replace("/dapuros/app/dashboard");
+    }
+  }, [user]);
+
   // --- MOCK DATABASE STATE (Shared across simulator tabs) ---
   const [floors, setFloors] = useState([
     { id: "f1", name: "Lantai 1 (Utama)" },
