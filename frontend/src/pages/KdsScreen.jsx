@@ -66,7 +66,7 @@ export default function KdsScreen() {
       if (envUrl && envUrl !== "undefined" && envUrl !== "") {
         backendHost = envUrl.replace(/https?:\/\//, "");
       } else if (!window.location.origin.includes("localhost")) {
-        backendHost = "geraina-os.vercel.app";
+        backendHost = "dapur-os.vercel.app";
       }
 
       const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -211,7 +211,7 @@ export default function KdsScreen() {
             if (ticketStatus === "Cooking") {
               cardBorder = "border-amber-300 ring-1 ring-amber-100 bg-amber-50/10";
               statusBadge = "pill-warning";
-              actionText = "Tandai Ready";
+              actionText = "Tandai Siap (Ready)";
               ActionIcon = Check;
             } else if (ticketStatus === "Ready") {
               cardBorder = "border-emerald-300 ring-1 ring-emerald-100 bg-emerald-50/10";
