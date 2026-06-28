@@ -297,6 +297,7 @@ export default function AppLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                data-testid={`menu-link-${item.key}`}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                     isActive

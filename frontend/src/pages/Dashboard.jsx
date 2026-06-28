@@ -5,7 +5,8 @@ import { useAuth } from "@/auth/AuthContext";
 import {
   TrendingUp, Package, ShoppingCart, Calendar, Sparkles,
   ArrowRight, Crown, DollarSign, Percent, BarChart3,
-  Briefcase, Activity, AlertTriangle, Landmark, ShieldCheck
+  Briefcase, Activity, AlertTriangle, Landmark, ShieldCheck,
+  ChefHat, QrCode
 } from "lucide-react";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
@@ -105,12 +106,18 @@ export default function Dashboard() {
             Dasbor: {user?.store_name || "DapurOS Store"}.
           </h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-3 py-1 rounded border border-emerald-100 flex items-center gap-1">
             <ShieldCheck size={14} /> Peran: {user?.role || "Owner"}
           </span>
-          <Link to="/dapuros/app/pos" className="btn-primary flex items-center gap-1 text-xs py-2 px-4" data-testid="dashboard-buka-kasir-btn">
-            Buka Kasir <ArrowRight size={14} />
+          <Link to="/dapuros/app/pos" className="btn-primary flex items-center gap-1 text-xs py-2 px-3.5" data-testid="dashboard-buka-kasir-btn">
+            <ShoppingCart size={14} /> Buka Kasir
+          </Link>
+          <Link to="/dapuros/app/kds" className="bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-kds-btn">
+            <ChefHat size={14} /> Layar Dapur (KDS)
+          </Link>
+          <Link to="/dapuros/app/qr-menu" className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-qr-menu-btn">
+            <QrCode size={14} /> Menu QR Code
           </Link>
         </div>
       </div>
