@@ -89,7 +89,7 @@ function getAppSubRoutes() {
       <Route path="license" element={<RoleGuard><LicenseDevices /></RoleGuard>} />
       <Route path="about" element={<RoleGuard><About /></RoleGuard>} />
 
-      {/* Produk */}
+      {/* Produk & Bahan Baku BOM */}
       <Route path="products" element={<RoleGuard><Products /></RoleGuard>} />
       <Route path="products/categories" element={<RoleGuard><Categories /></RoleGuard>} />
       <Route path="products/brands" element={<RoleGuard><Brands /></RoleGuard>} />
@@ -97,6 +97,12 @@ function getAppSubRoutes() {
       <Route path="products/stock-adjustment" element={<RoleGuard><StockAdjustment /></RoleGuard>} />
       <Route path="products/stock-transfer" element={<RoleGuard><StockTransfer /></RoleGuard>} />
       <Route path="products/ingredients" element={<RoleGuard><Ingredients /></RoleGuard>} />
+      <Route path="inventory/ingredients" element={<RoleGuard><Ingredients /></RoleGuard>} />
+      <Route path="inventory/raw-materials" element={<RoleGuard><Ingredients /></RoleGuard>} />
+      <Route path="raw-materials" element={<RoleGuard><Ingredients /></RoleGuard>} />
+      <Route path="ingredients" element={<RoleGuard><Ingredients /></RoleGuard>} />
+      <Route path="bom" element={<RoleGuard><Ingredients /></RoleGuard>} />
+      <Route path="recipes" element={<RoleGuard><Ingredients /></RoleGuard>} />
 
       {/* Inventory */}
       <Route path="inventory" element={<RoleGuard><StockOverview /></RoleGuard>} />
@@ -205,6 +211,10 @@ export default function App() {
             <Route path="staff/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="branches/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="integrations/*" element={<AppLayout />}>{appRoutes}</Route>
+            <Route path="raw-materials/*" element={<AppLayout />}>{appRoutes}</Route>
+            <Route path="ingredients/*" element={<AppLayout />}>{appRoutes}</Route>
+            <Route path="bom/*" element={<AppLayout />}>{appRoutes}</Route>
+            <Route path="recipes/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="settings/*" element={<AppLayout />}>{appRoutes}</Route>
           </Route>
 
