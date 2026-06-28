@@ -142,35 +142,77 @@ const sharedAppRoutes = (
   </>
 );
 
+function RootComponent() {
+  const { user } = useAuth();
+  const token = typeof window !== "undefined" ? (localStorage.getItem("dagangos_token") || localStorage.getItem("geraina_token") || localStorage.getItem("dapuros_token")) : null;
+  if (user || token) {
+    return <AppLayout />;
+  }
+  return <DapurOS />;
+}
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter basename="/dapuros">
         <Routes>
           {/* DapurOS F&B Standalone Routes */}
-          <Route path="/" element={<DapurOS />} />
+          <Route path="/" element={<RootComponent />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
+          {/* Management & Dashboard App Layout Routes */}
           <Route path="/app/*" element={<AppLayout />}>
             {sharedAppRoutes}
           </Route>
-
-          {/* Direct un-prefixed management routes & deep links */}
+          <Route path="app/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="/dashboard/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="dashboard/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
           <Route path="/settings/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="settings/*" element={<AppLayout />}>
             {sharedAppRoutes}
           </Route>
           <Route path="/payments/*" element={<AppLayout />}>
             {sharedAppRoutes}
           </Route>
+          <Route path="payments/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
           <Route path="/inventory/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="inventory/*" element={<AppLayout />}>
             {sharedAppRoutes}
           </Route>
           <Route path="/products/*" element={<AppLayout />}>
             {sharedAppRoutes}
           </Route>
+          <Route path="products/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="/pos/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="pos/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="/kds/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
+          <Route path="kds/*" element={<AppLayout />}>
+            {sharedAppRoutes}
+          </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<RootComponent />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
