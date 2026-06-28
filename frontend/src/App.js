@@ -57,6 +57,7 @@ import Settings from "@/pages/settings/Settings";
 
 import RoleGuard from "@/components/RoleGuard";
 import KdsScreen from "@/pages/KdsScreen";
+import QrMenu from "@/pages/products/QrMenu";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -73,6 +74,7 @@ const sharedAppRoutes = (
     <Route path="dashboard" element={<RoleGuard><Dashboard /></RoleGuard>} />
     <Route path="pos" element={<RoleGuard><POS /></RoleGuard>} />
     <Route path="kds" element={<RoleGuard><KdsScreen /></RoleGuard>} />
+    <Route path="qr-menu" element={<RoleGuard><QrMenu /></RoleGuard>} />
     <Route path="sales" element={<RoleGuard><Sales /></RoleGuard>} />
     <Route path="license" element={<RoleGuard><LicenseDevices /></RoleGuard>} />
     <Route path="about" element={<RoleGuard><About /></RoleGuard>} />

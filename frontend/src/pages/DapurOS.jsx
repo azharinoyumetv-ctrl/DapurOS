@@ -457,14 +457,6 @@ export default function DapurOS() {
               </Link>
             )}
             <a
-              href="https://wa.me/628999155182?text=Halo%20DagangOS%2C%20saya%20ingin%20mencoba%20DapurOS%20untuk%20restoran%20saya."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-outline border-amber-200 text-amber-800 hover:bg-amber-50 hover:border-amber-400 py-2 px-4 text-xs font-bold rounded-lg transition-all duration-300"
-            >
-              Hubungi Sales
-            </a>
-            <a
               href="#demo"
               className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-lg text-xs transition-all duration-300 shadow-md shadow-amber-600/20"
             >

@@ -5,17 +5,17 @@ import {
   LayoutDashboard, ShoppingCart, Package, Warehouse, ClipboardList,
   Truck, Users, Landmark, CreditCard, BarChart3, UserCheck,
   GitBranch, Cpu, Settings, Info, ChevronDown, ChevronRight,
-  LogOut, Sparkles, Crown, Shield, Leaf, Utensils, ChefHat
+  LogOut, Sparkles, Crown, Shield, Leaf, Utensils, ChefHat, QrCode
 } from "lucide-react";
 
 const ROLE_PERMISSIONS = {
   Owner: ["*"],
   Manager: [
-    "dashboard", "pos", "kds", "products", "inventory", "purchase",
+    "dashboard", "pos", "kds", "qr-menu", "products", "inventory", "purchase",
     "suppliers", "customers", "debt", "payments", "reports", "staff", "settings", "billing", "about"
   ],
   Cashier: [
-    "dashboard", "pos", "kds", "products", "customers", "about"
+    "dashboard", "pos", "kds", "qr-menu", "products", "customers", "about"
   ],
   Warehouse: [
     "products", "inventory", "purchase", "suppliers", "about"
@@ -53,6 +53,7 @@ export default function AppLayout() {
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: "Dasbor", key: "dashboard" },
     { to: `${prefix}/pos`, icon: ShoppingCart, label: "Kasir", key: "pos" },
     { to: `${prefix}/kds`, icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
+    { to: `${prefix}/qr-menu`, icon: QrCode, label: "Menu QR Code", key: "qr-menu" },
     {
       label: "Produk",
       icon: Package,
