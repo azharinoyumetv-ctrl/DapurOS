@@ -139,14 +139,36 @@ function ReceiptDialog({ order, onClose }) {
   );
 }
 
+const DEFAULT_FLOORS = [
+  { id: "fl-main", name: "Lantai 1 (Utama)", level: 1 },
+  { id: "fl-vip", name: "Lantai 2 (VIP Sofa)", level: 2 },
+  { id: "fl-rooftop", name: "Rooftop (Outdoor)", level: 3 },
+];
+
+const DEFAULT_TABLES = [
+  { id: "tbl-01", floor_id: "fl-main", label: "Meja 01", capacity: 2, status: "Vacant" },
+  { id: "tbl-02", floor_id: "fl-main", label: "Meja 02", capacity: 4, status: "Seated" },
+  { id: "tbl-03", floor_id: "fl-main", label: "Meja 03", capacity: 4, status: "Dining" },
+  { id: "tbl-04", floor_id: "fl-main", label: "Meja 04", capacity: 6, status: "Billing" },
+  { id: "tbl-05", floor_id: "fl-main", label: "Meja 05", capacity: 6, status: "Vacant" },
+  { id: "tbl-06", floor_id: "fl-main", label: "Meja Bar 01", capacity: 2, status: "Vacant" },
+  
+  { id: "tbl-v1", floor_id: "fl-vip", label: "VIP Sofa A", capacity: 8, status: "Dining" },
+  { id: "tbl-v2", floor_id: "fl-vip", label: "VIP Sofa B", capacity: 8, status: "Vacant" },
+
+  { id: "tbl-r1", floor_id: "fl-rooftop", label: "Outdoor 01", capacity: 2, status: "Vacant" },
+  { id: "tbl-r2", floor_id: "fl-rooftop", label: "Outdoor 02", capacity: 4, status: "Vacant" },
+  { id: "tbl-r3", floor_id: "fl-rooftop", label: "Outdoor 03", capacity: 2, status: "Vacant" },
+];
+
 export default function POS() {
   const { user } = useAuth();
   const [viewMode, setViewMode] = useState("floor"); // floor | catalog
   
   // Floors and Tables state
-  const [floors, setFloors] = useState([]);
-  const [selectedFloorId, setSelectedFloorId] = useState("");
-  const [tables, setTables] = useState([]);
+  const [floors, setFloors] = useState(DEFAULT_FLOORS);
+  const [selectedFloorId, setSelectedFloorId] = useState("fl-main");
+  const [tables, setTables] = useState(DEFAULT_TABLES);
   const [selectedTable, setSelectedTable] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [websocketConnected, setWebsocketConnected] = useState(false);
@@ -185,18 +207,32 @@ export default function POS() {
   const loadFloors = async () => {
     try {
       const res = await api.get("/floors");
-      setFloors(res.data);
-      if (res.data.length > 0 && !selectedFloorId) {
-        setSelectedFloorId(res.data[0].id);
+      if (res.data && res.data.length > 0) {
+        setFloors(res.data);
+        if (!selectedFloorId || !res.data.some(f => f.id === selectedFloorId)) {
+          setSelectedFloorId(res.data[0].id);
+        }
+      } else {
+        setFloors(DEFAULT_FLOORS);
+        if (!selectedFloorId) setSelectedFloorId(DEFAULT_FLOORS[0].id);
       }
-    } catch (e) {}
+    } catch (e) {
+      setFloors(DEFAULT_FLOORS);
+      if (!selectedFloorId) setSelectedFloorId(DEFAULT_FLOORS[0].id);
+    }
   };
 
   const loadTables = async () => {
     try {
       const res = await api.get("/tables");
-      setTables(res.data);
-    } catch (e) {}
+      if (res.data && res.data.length > 0) {
+        setTables(res.data);
+      } else {
+        setTables(DEFAULT_TABLES);
+      }
+    } catch (e) {
+      setTables(DEFAULT_TABLES);
+    }
   };
 
   const loadActiveTableSession = async (tableId) => {
