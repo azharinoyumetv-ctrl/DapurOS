@@ -6,7 +6,7 @@ import {
   TrendingUp, Package, ShoppingCart, Calendar, Sparkles,
   ArrowRight, Crown, DollarSign, Percent, BarChart3,
   Briefcase, Activity, AlertTriangle, Landmark, ShieldCheck,
-  ChefHat, QrCode
+  ChefHat, QrCode, CreditCard
 } from "lucide-react";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
