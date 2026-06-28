@@ -74,12 +74,11 @@ export default function Ingredients() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Hapus bahan baku ini? Menghapus bahan baku akan melepaskannya dari resep produk.")) return;
     try {
       await api.delete(`/ingredients/${id}`);
       loadIngredients();
     } catch (e) {
-      alert(e?.response?.data?.detail || "Gagal menghapus");
+      if (process.env.NODE_ENV !== "production") console.warn(e);
     }
   };
 
