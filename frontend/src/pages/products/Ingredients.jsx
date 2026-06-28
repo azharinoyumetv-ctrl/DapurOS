@@ -122,7 +122,7 @@ export default function Ingredients() {
             }}
             className="btn-outline text-red-600 border-red-200 hover:bg-red-50 text-xs py-2"
           >
-            Log Spoilage / Waste
+            Catat Bahan Terbuang
           </button>
           <button onClick={openAdd} className="btn-primary text-xs py-2 flex items-center gap-1">
             <Plus size={14} /> Tambah Bahan
@@ -289,7 +289,7 @@ export default function Ingredients() {
         <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" onClick={() => setWasteOpen(false)}>
           <form onSubmit={handleWasteSubmit} className="card-surface bg-white p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
-              <h2 className="font-display text-lg font-bold text-red-700">Catat Spoilage / Waste</h2>
+              <h2 className="font-display text-lg font-bold text-red-700">Catat Bahan Terbuang (Spoilage)</h2>
               <button type="button" onClick={() => setWasteOpen(false)} className="btn-ghost p-1">
                 <X size={18} />
               </button>

@@ -50,7 +50,7 @@ export default function AppLayout() {
   const brandName = "DapurOS";
 
   const dynamicMenu = [
-    { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
+    { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: "Dasbor", key: "dashboard" },
     { to: `${prefix}/pos`, icon: ShoppingCart, label: "POS Kasir", key: "pos" },
     { to: `${prefix}/kds`, icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
     {
@@ -86,10 +86,10 @@ export default function AppLayout() {
       sub: [
         { to: `${prefix}/purchase/orders`, label: "Order Pembelian (PO)" },
         { to: `${prefix}/purchase/receiving`, label: "Penerimaan Barang" },
-        { to: `${prefix}/purchase/invoices`, label: "Faktur Supplier" }
+        { to: `${prefix}/purchase/invoices`, label: "Faktur Pemasok" }
       ]
     },
-    { to: `${prefix}/suppliers`, icon: Truck, label: "Supplier", key: "suppliers" },
+    { to: `${prefix}/suppliers`, icon: Truck, label: "Pemasok", key: "suppliers" },
     {
       label: "Pelanggan",
       icon: Users,
@@ -167,14 +167,14 @@ export default function AppLayout() {
       sub: [
         { to: `${prefix}/settings/general`, label: "Umum" },
         { to: `${prefix}/settings/store`, label: "Toko" },
-        { to: `${prefix}/settings/billing`, label: "Langganan & Billing (Subscription)" },
+        { to: `${prefix}/settings/billing`, label: "Langganan & Tagihan" },
         { to: `${prefix}/settings/receipt`, label: "Struk" },
         { to: `${prefix}/settings/printer`, label: "Printer" },
         { to: `${prefix}/settings/users`, label: "Pengguna" },
         { to: `${prefix}/settings/license`, label: "Lisensi" }
       ]
     },
-    { to: `${prefix}/settings/billing`, icon: CreditCard, label: "Subscription & Billing", key: "billing" },
+    { to: `${prefix}/settings/billing`, icon: CreditCard, label: "Langganan & Tagihan", key: "billing" },
     { to: `${prefix}/about`, icon: Info, label: "Tentang", key: "about" }
   ];
 
@@ -195,11 +195,11 @@ export default function AppLayout() {
             <button
               onClick={() => setShowEcosystemSwitcher(!showEcosystemSwitcher)}
               className="p-1.5 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] transition-all flex items-center gap-1 text-xs font-bold"
-              title="Switch Ecosystem App (Odoo Style)"
+              title="Beralih Aplikasi Ekosistem (Gaya Odoo)"
               data-testid="odoo-ecosystem-switcher-btn"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px]">Suite</span>
+              <span className="text-[10px]">Aplikasi</span>
               <ChevronDown size={12} />
             </button>
           </div>
@@ -208,8 +208,8 @@ export default function AppLayout() {
           {showEcosystemSwitcher && (
             <div className="absolute top-14 left-2 right-2 bg-slate-900 text-white p-3 rounded-2xl shadow-2xl border border-slate-700 z-[100] animate-fadein space-y-2 text-left" data-testid="odoo-ecosystem-menu">
               <div className="flex justify-between items-center px-1 pb-2 border-b border-slate-800">
-                <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">DagangOS Ecosystem Apps</span>
-                <span className="text-[9px] bg-blue-600/30 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-mono">SSO Active</span>
+                <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Aplikasi Ekosistem DagangOS</span>
+                <span className="text-[9px] bg-blue-600/30 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-mono">SSO Aktif</span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-1">

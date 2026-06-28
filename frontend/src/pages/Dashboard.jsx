@@ -100,9 +100,9 @@ export default function Dashboard() {
     <div className="p-8 space-y-6" data-testid="dashboard-page">
       <div className="flex items-center justify-between">
         <div>
-          <span className="label-tiny">POS Komersial</span>
+          <span className="label-tiny">POS Komersial & Restoran</span>
           <h1 className="font-display text-3xl font-bold mt-1" data-testid="dashboard-greeting">
-            Dashboard: {user?.store_name || "DagangOS Store"}.
+            Dasbor: {user?.store_name || "DapurOS Store"}.
           </h1>
         </div>
         <div className="flex items-center gap-3">
@@ -123,16 +123,16 @@ export default function Dashboard() {
         >
           <div className="text-white">
             <span className="pill" style={{ background: "hsl(9,65%,55%,0.25)", color: "hsl(9,65%,75%)" }}>
-              <Crown size={12} /> Trial Mode
+              <Crown size={12} /> Mode Uji Coba (Trial)
             </span>
             <h2 className="font-display text-xl font-bold mt-1.5">
               {days} hari tersisa di trial — upgrade untuk mengunci semua fitur.
             </h2>
             <p className="text-white/70 text-xs mt-0.5">
-              Pilih paket Starter / Pro / Business sebelum trial berakhir agar operasional toko tidak terputus.
+              Pilih paket Starter / Pro / Business sebelum trial berakhir agar operasional restoran tidak terputus.
             </p>
           </div>
-          <Link to="/geraina/pricing" className="btn-accent shrink-0 text-xs" data-testid="trial-banner-upgrade-cta">
+          <Link to="/app/pricing" className="btn-accent shrink-0 text-xs" data-testid="trial-banner-upgrade-cta">
             <Sparkles size={14} /> Upgrade Paket
           </Link>
         </div>
@@ -254,7 +254,7 @@ export default function Dashboard() {
         <div className="col-span-12 lg:col-span-6 card-surface p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display font-bold text-sm">Transaksi POS Terbaru</h3>
-            <Link to="/geraina/app/sales" className="text-xs text-[hsl(var(--primary))] font-semibold">Semua →</Link>
+            <Link to="/app/sales" className="text-xs text-[hsl(var(--primary))] font-semibold">Semua →</Link>
           </div>
           <div className="overflow-x-auto flex-1">
             <table className="w-full text-left text-xs border-collapse">
@@ -294,7 +294,7 @@ export default function Dashboard() {
               <p className="text-xs text-[hsl(var(--muted))] py-4 text-center">Semua stok aman dan mencukupi.</p>
             )}
           </div>
-          <Link to="/geraina/app/inventory/low-stock" className="btn-outline w-full py-1.5 text-center text-[10px] font-semibold block">
+          <Link to="/app/inventory/low-stock" className="btn-outline w-full py-1.5 text-center text-[10px] font-semibold block">
             Kelola Stok Menipis ({lowStockCount})
           </Link>
         </div>
@@ -309,7 +309,7 @@ export default function Dashboard() {
             </p>
             <p className="text-[10px] text-[hsl(var(--muted))] mt-1">Berdasarkan akumulasi harga pokok beli.</p>
           </div>
-          <Link to="/geraina/app/inventory/valuation" className="btn-outline w-full py-1.5 text-center text-[10px] font-semibold block">
+          <Link to="/app/inventory/valuation" className="btn-outline w-full py-1.5 text-center text-[10px] font-semibold block">
             Detail Aset Persediaan
           </Link>
         </div>
@@ -342,14 +342,14 @@ export default function Dashboard() {
                 <span className="text-[10px] text-[hsl(var(--muted))] uppercase font-semibold">Total Piutang</span>
                 <p className="font-mono font-bold text-emerald-600 text-sm">{fmtIDR(totalReceivable)}</p>
               </div>
-              <Link to="/geraina/app/debt/receivable" className="text-[10px] font-bold text-[hsl(var(--primary))] bg-[hsl(var(--primary))]/8 px-2.5 py-1 rounded">Kelola</Link>
+              <Link to="/app/debt/receivable" className="text-[10px] font-bold text-[hsl(var(--primary))] bg-[hsl(var(--primary))]/8 px-2.5 py-1 rounded">Kelola</Link>
             </div>
             <div className="flex justify-between items-center">
               <div>
                 <span className="text-[10px] text-[hsl(var(--muted))] uppercase font-semibold">Total Utang</span>
                 <p className="font-mono font-bold text-red-500 text-sm">{fmtIDR(totalPayable)}</p>
               </div>
-              <Link to="/geraina/app/debt/payable" className="text-[10px] font-bold text-[hsl(var(--primary))] bg-[hsl(var(--primary))]/8 px-2.5 py-1 rounded">Kelola</Link>
+              <Link to="/app/debt/payable" className="text-[10px] font-bold text-[hsl(var(--primary))] bg-[hsl(var(--primary))]/8 px-2.5 py-1 rounded">Kelola</Link>
             </div>
           </div>
         </div>
@@ -375,7 +375,7 @@ export default function Dashboard() {
               <p className="text-xs text-[hsl(var(--muted))] text-center py-4">Belum ada staf melakukan shift hari ini.</p>
             )}
           </div>
-          <Link to="/geraina/app/staff/management" className="btn-outline w-full py-1.5 text-center text-[10px] font-semibold block">
+          <Link to="/app/staff/management" className="btn-outline w-full py-1.5 text-center text-[10px] font-semibold block">
             Kelola Karyawan & Peran
           </Link>
         </div>
