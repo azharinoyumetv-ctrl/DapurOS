@@ -70,7 +70,7 @@ function RootComponent() {
   const { user } = useAuth();
   const token = typeof window !== "undefined" ? (localStorage.getItem("dagangos_token") || localStorage.getItem("geraina_token") || localStorage.getItem("dapuros_token")) : null;
   if (user || token) {
-    return <AppLayout />;
+    return <Navigate to="/dapuros/app/dashboard" replace />;
   }
   return <DapurOS />;
 }
