@@ -68,17 +68,24 @@ function Protected({ children }) {
 }
 
 function RootComponent() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const token = typeof window !== "undefined" ? (localStorage.getItem("dagangos_token") || localStorage.getItem("geraina_token") || localStorage.getItem("dapuros_token")) : null;
+  console.log('[RootComponent] loading:', loading, 'user:', !!user, 'token:', !!token, 'location:', window.location.pathname);
+  if (loading) return <div className="p-10 text-sm text-center text-[hsl(var(--muted))]" data-testid="root-loading">Memuat…</div>;
   if (user || token) {
     return <Navigate to="/dapuros/app/dashboard" replace />;
   }
   return <DapurOS />;
 }
 
+function IndexRedirect() {
+  console.log('[IndexRedirect] Triggered! Redirecting to dashboard from index route, location:', window.location.pathname);
+  return <Navigate to="dashboard" replace />;
+}
+
 function getAppSubRoutes() {
   return [
-    <Route key="idx" index element={<Navigate to="dashboard" replace />} />,
+    <Route key="idx" index element={<IndexRedirect />} />,
     
     /* General Routes */
     <Route key="r-dash" path="dashboard" element={<RoleGuard><Dashboard /></RoleGuard>} />,

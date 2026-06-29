@@ -45,11 +45,14 @@ export default function RoleGuard({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
+  console.log('[RoleGuard] loading:', loading, 'user:', !!user, 'path:', location.pathname);
+
   if (loading) {
     return <div className="p-10 text-sm text-center text-[hsl(var(--muted))]" data-testid="auth-loading">Memuat sesi…</div>;
   }
 
   if (!user) {
+    console.log('[RoleGuard] No user, redirecting to /login');
     return <Navigate to="/login" replace />;
   }
 
