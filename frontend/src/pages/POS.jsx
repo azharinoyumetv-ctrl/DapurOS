@@ -5,7 +5,7 @@ import { useAuth } from "@/auth/AuthContext";
 import {
   Search, Plus, Minus, Trash2, X, Printer, Download, CheckCircle2,
   Banknote, QrCode, Smartphone, RefreshCw, Barcode, Store, ChefHat,
-  CreditCard, ChevronRight, Layers, ArrowLeft, RefreshCw as LoopIcon, Wifi, WifiOff
+  CreditCard, ChevronRight, Layers, ArrowLeft, RefreshCw as LoopIcon, Wifi, WifiOff, Edit, Edit3
 } from "lucide-react";
 
 const EWALLET_CHANNELS = [
@@ -211,6 +211,154 @@ export default function POS() {
   const [splitEqualResult, setSplitEqualResult] = useState(null);
   const [splitQuantities, setSplitQuantities] = useState({}); // { product_id: split_qty }
   const [splitOrderResult, setSplitOrderResult] = useState(null);
+
+  // Table Management Modal States
+  const [tableModalOpen, setTableModalOpen] = useState(false);
+  const [editingTable, setEditingTable] = useState(null);
+  const [tableForm, setTableForm] = useState({ label: "", capacity: 4, floor_id: "", shape: "rectangle" });
+
+  // Floor Management Modal States
+  const [floorModalOpen, setFloorModalOpen] = useState(false);
+  const [floorForm, setFloorForm] = useState({ name: "", level: 1 });
+
+  // Product Management Modal States
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [productForm, setProductForm] = useState({ name: "", price: 25000, category: "Makanan Utama", stock: 50 });
+
+  const handleManualBarcodeScan = (e) => {
+    e.preventDefault();
+    if (!barcodeInput.trim()) return;
+    const matched = products.find(p => p.sku === barcodeInput.trim() || p.id === barcodeInput.trim() || p.name.toLowerCase().includes(barcodeInput.trim().toLowerCase()));
+    if (matched) {
+      addToCart(matched);
+      setScannedProduct(matched);
+      setTimeout(() => setScannedProduct(null), 3000);
+      setBarcodeInput("");
+    } else {
+      alert(`Menu / Barcode "${barcodeInput}" tidak ditemukan`);
+    }
+  };
+
+  const handleOpenAddTable = () => {
+    setEditingTable(null);
+    setTableForm({ label: `Meja ${tables.length + 1}`, capacity: 4, floor_id: selectedFloorId || (floors[0]?.id || "fl-main"), shape: "rectangle" });
+    setTableModalOpen(true);
+  };
+
+  const handleOpenEditTable = (t, e) => {
+    if (e) e.stopPropagation();
+    setEditingTable(t);
+    setTableForm({ label: t.label, capacity: t.capacity, floor_id: t.floor_id, shape: t.shape || "rectangle" });
+    setTableModalOpen(true);
+  };
+
+  const handleSaveTable = async (e) => {
+    e.preventDefault();
+    if (!tableForm.label.trim()) return;
+    const payload = { ...tableForm, capacity: parseInt(tableForm.capacity) || 2 };
+    try {
+      if (editingTable) {
+        await api.put(`/tables/${editingTable.id}`, payload);
+        setTables(prev => prev.map(t => t.id === editingTable.id ? { ...t, ...payload } : t));
+        if (selectedTable?.id === editingTable.id) setSelectedTable(prev => ({ ...prev, ...payload }));
+      } else {
+        const res = await api.post("/tables", payload);
+        const newT = res.data && res.data.id ? res.data : { id: `tbl-${Date.now()}`, ...payload, status: "Vacant" };
+        setTables(prev => [...prev, newT]);
+      }
+    } catch (err) {
+      if (editingTable) {
+        setTables(prev => prev.map(t => t.id === editingTable.id ? { ...t, ...payload } : t));
+        if (selectedTable?.id === editingTable.id) setSelectedTable(prev => ({ ...prev, ...payload }));
+      } else {
+        const newT = { id: `tbl-${Date.now()}`, ...payload, status: "Vacant" };
+        setTables(prev => [...prev, newT]);
+      }
+    } finally {
+      setTableModalOpen(false);
+    }
+  };
+
+  const handleDeleteTable = async (tableId, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm("Apakah Anda yakin ingin menghapus meja ini?")) return;
+    try {
+      await api.delete(`/tables/${tableId}`);
+    } catch (err) {}
+    setTables(prev => prev.filter(t => t.id !== tableId));
+    if (selectedTable?.id === tableId) setSelectedTable(null);
+  };
+
+  const handleOpenAddFloor = () => {
+    setFloorForm({ name: `Lantai ${floors.length + 1}`, level: floors.length + 1 });
+    setFloorModalOpen(true);
+  };
+
+  const handleSaveFloor = async (e) => {
+    e.preventDefault();
+    if (!floorForm.name.trim()) return;
+    const payload = { name: floorForm.name, level: parseInt(floorForm.level) || 1 };
+    try {
+      const res = await api.post("/floors", payload);
+      const newFl = res.data && res.data.id ? res.data : { id: `fl-${Date.now()}`, ...payload };
+      setFloors(prev => [...prev, newFl]);
+      setSelectedFloorId(newFl.id);
+    } catch (err) {
+      const newFl = { id: `fl-${Date.now()}`, ...payload };
+      setFloors(prev => [...prev, newFl]);
+      setSelectedFloorId(newFl.id);
+    } finally {
+      setFloorModalOpen(false);
+    }
+  };
+
+  const handleOpenAddProduct = () => {
+    setEditingProduct(null);
+    setProductForm({ name: "", price: 25000, category: activeCat !== "all" ? activeCat : "Makanan Utama", stock: 50 });
+    setProductModalOpen(true);
+  };
+
+  const handleOpenEditProduct = (p, e) => {
+    if (e) e.stopPropagation();
+    setEditingProduct(p);
+    setProductForm({ name: p.name, price: p.price, category: p.category, stock: p.stock });
+    setProductModalOpen(true);
+  };
+
+  const handleSaveProduct = async (e) => {
+    e.preventDefault();
+    if (!productForm.name.trim()) return;
+    const payload = { ...productForm, price: parseFloat(productForm.price) || 0, stock: parseInt(productForm.stock) || 0 };
+    try {
+      if (editingProduct) {
+        await api.put(`/products/${editingProduct.id}`, payload);
+        setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...payload } : p));
+      } else {
+        const res = await api.post("/products", payload);
+        const newP = res.data && res.data.id ? res.data : { id: `prod-${Date.now()}`, ...payload };
+        setProducts(prev => [...prev, newP]);
+      }
+    } catch (err) {
+      if (editingProduct) {
+        setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...payload } : p));
+      } else {
+        const newP = { id: `prod-${Date.now()}`, ...payload };
+        setProducts(prev => [...prev, newP]);
+      }
+    } finally {
+      setProductModalOpen(false);
+    }
+  };
+
+  const handleDeleteProduct = async (productId, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm("Apakah Anda yakin ingin menghapus menu produk ini?")) return;
+    try {
+      await api.delete(`/products/${productId}`);
+    } catch (err) {}
+    setProducts(prev => prev.filter(p => p.id !== productId));
+  };
 
   const loadFloors = async () => {
     try {
@@ -635,7 +783,14 @@ export default function POS() {
                   Pilih meja untuk mengatur tagihan dining, pesanan kustom, atau check-out.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenAddTable}
+                  className="btn-primary text-xs py-2 px-3 flex items-center gap-1 bg-amber-600 hover:bg-amber-700 border-amber-600 font-bold"
+                  data-testid="pos-add-table-btn"
+                >
+                  <Plus size={14} /> Meja Baru
+                </button>
                 <span className={`text-[10px] uppercase font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${websocketConnected ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
                   {websocketConnected ? (
                     <><Wifi size={12} /> WebSocket Aktif</>
@@ -653,16 +808,25 @@ export default function POS() {
             </div>
 
             {/* Floor Tabs */}
-            <div className="flex gap-2 border-b border-[hsl(var(--border))] pb-3">
-              {floors.map(fl => (
-                <button
-                  key={fl.id}
-                  onClick={() => setSelectedFloorId(fl.id)}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${selectedFloorId === fl.id ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--surface))] border border-[hsl(var(--border))] text-[hsl(var(--muted))] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))]"}`}
-                >
-                  {fl.name}
-                </button>
-              ))}
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <div className="flex gap-2 overflow-x-auto">
+                {floors.map(fl => (
+                  <button
+                    key={fl.id}
+                    onClick={() => setSelectedFloorId(fl.id)}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${selectedFloorId === fl.id ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--surface))] border border-[hsl(var(--border))] text-[hsl(var(--muted))] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))]"}`}
+                  >
+                    {fl.name}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleOpenAddFloor}
+                className="text-xs text-[hsl(var(--primary))] hover:underline font-bold flex items-center gap-1 shrink-0 ml-2"
+                data-testid="pos-add-floor-btn"
+              >
+                <Plus size={13} /> Tambah Lantai
+              </button>
             </div>
 
             {/* Visual Floor Map Grid */}
@@ -688,10 +852,10 @@ export default function POS() {
                 }
 
                 return (
-                  <button
+                  <div
                     key={t.id}
                     onClick={() => handleSelectTable(t)}
-                    className={`p-5 rounded-xl border flex flex-col items-center justify-between text-center transition-all ${statusBg} ${isSelected ? "ring-2 ring-[hsl(var(--primary))] scale-[1.03]" : ""}`}
+                    className={`p-4 rounded-xl border flex flex-col items-center justify-between text-center transition-all cursor-pointer relative group ${statusBg} ${isSelected ? "ring-2 ring-[hsl(var(--primary))] scale-[1.03]" : ""}`}
                   >
                     <div className="flex items-center justify-between w-full text-[10px] text-[hsl(var(--muted))]">
                       <span className={`w-2 h-2 rounded-full ${dotColor}`} />
@@ -699,12 +863,18 @@ export default function POS() {
                     </div>
                     <span className="font-display font-black text-base text-[hsl(var(--foreground))] mt-2">{t.label}</span>
                     <span className="text-[10px] font-semibold mt-1 opacity-70">{statusText}</span>
-                  </button>
+                    
+                    <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1 bg-white/90 p-1 rounded-md shadow border border-slate-200">
+                      <button onClick={(e) => handleOpenEditTable(t, e)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit Meja"><Edit3 size={12} /></button>
+                      <button onClick={(e) => handleDeleteTable(t.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Hapus Meja"><Trash2 size={12} /></button>
+                    </div>
+                  </div>
                 );
               })}
               {tables.filter(t => t.floor_id === selectedFloorId).length === 0 && (
-                <div className="col-span-full py-12 text-center text-xs text-[hsl(var(--muted))]">
-                  Belum ada meja dikonfigurasi di lantai ini.
+                <div className="col-span-full py-12 text-center text-xs text-[hsl(var(--muted))] space-y-2">
+                  <p>Belum ada meja dikonfigurasi di lantai ini.</p>
+                  <button onClick={handleOpenAddTable} className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1"><Plus size={12} /> Tambah Meja Sekarang</button>
                 </div>
               )}
             </div>
@@ -876,12 +1046,19 @@ export default function POS() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative w-64">
+                <button
+                  onClick={handleOpenAddProduct}
+                  className="btn-primary text-xs py-2 px-3 flex items-center gap-1 font-bold"
+                  data-testid="pos-add-product-btn"
+                >
+                  <Plus size={14} /> Menu Baru
+                </button>
+                <div className="relative w-56">
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted))]" />
                   <input className="input-field pl-9" placeholder="Cari menu resep…"
                          value={q} onChange={(e) => setQ(e.target.value)} data-testid="pos-search" />
                 </div>
-                <form onSubmit={handleManualBarcodeScan} className="relative w-48 flex items-center">
+                <form onSubmit={handleManualBarcodeScan} className="relative w-44 flex items-center">
                   <Barcode size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted))]" />
                   <input className="input-field pl-9 pr-14" placeholder="SKU/Barcode…"
                          value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)} data-testid="pos-barcode-input" />
@@ -905,8 +1082,8 @@ export default function POS() {
 
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3" data-testid="pos-product-grid">
               {filtered.map((p) => (
-                <button key={p.id} onClick={() => addToCart(p)}
-                        className="card-surface p-3 text-left hover:border-[hsl(var(--primary))] hover:shadow-sm transition-all flex flex-col justify-between"
+                <div key={p.id} onClick={() => addToCart(p)}
+                        className="card-surface p-3 text-left hover:border-[hsl(var(--primary))] hover:shadow-sm transition-all flex flex-col justify-between cursor-pointer relative group"
                         data-testid={`pos-product-${p.id}`}>
                   <div>
                     {p.image_url ? (
@@ -927,8 +1104,14 @@ export default function POS() {
                     </div>
                     <p className="font-display font-bold mt-1.5 text-sm leading-snug line-clamp-2">{p.name}</p>
                   </div>
-                  <p className="num-display font-display text-base font-bold text-[hsl(var(--primary))] mt-2">{fmtIDR(p.price)}</p>
-                </button>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+                    <p className="num-display font-display text-base font-bold text-[hsl(var(--primary))]">{fmtIDR(p.price)}</p>
+                    <div className="flex items-center gap-1">
+                      <button onClick={(e) => handleOpenEditProduct(p, e)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit Menu"><Edit3 size={13} /></button>
+                      <button onClick={(e) => handleDeleteProduct(p.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Hapus Menu"><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                </div>
               ))}
               {filtered.length === 0 && <p className="col-span-full text-center text-[hsl(var(--muted))] py-10" data-testid="pos-no-products">Tidak ada menu resep.</p>}
             </div>
@@ -1266,6 +1449,163 @@ export default function POS() {
             <p className="font-bold text-sm leading-tight mt-1 text-[hsl(var(--foreground))]">{scannedProduct.name}</p>
             <p className="font-display font-extrabold text-[hsl(var(--primary))] text-sm mt-1">{fmtIDR(scannedProduct.price)}</p>
           </div>
+        </div>
+      )}
+
+      {/* Table CRUD Modal */}
+      {tableModalOpen && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" onClick={() => setTableModalOpen(false)}>
+          <form onSubmit={handleSaveTable} className="card-surface bg-white p-6 w-full max-w-md space-y-4 text-left" onClick={(e) => e.stopPropagation()} data-testid="table-form-modal">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h2 className="font-display font-bold text-lg">{editingTable ? "Edit Meja" : "Tambah Meja Baru"}</h2>
+              <button type="button" onClick={() => setTableModalOpen(false)} className="btn-ghost p-1"><X size={18} /></button>
+            </div>
+            <div>
+              <label className="label-tiny block mb-1">Nama / Label Meja</label>
+              <input
+                type="text"
+                required
+                value={tableForm.label}
+                onChange={(e) => setTableForm({ ...tableForm, label: e.target.value })}
+                placeholder="Contoh: Meja 07, VIP Sofa A"
+                className="input-field"
+                data-testid="table-label-input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label-tiny block mb-1">Kapasitas (Pax)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  required
+                  value={tableForm.capacity}
+                  onChange={(e) => setTableForm({ ...tableForm, capacity: e.target.value })}
+                  className="input-field"
+                  data-testid="table-capacity-input"
+                />
+              </div>
+              <div>
+                <label className="label-tiny block mb-1">Pilih Lantai</label>
+                <select
+                  value={tableForm.floor_id}
+                  onChange={(e) => setTableForm({ ...tableForm, floor_id: e.target.value })}
+                  className="input-field py-2"
+                  data-testid="table-floor-select"
+                >
+                  {floors.map(fl => (
+                    <option key={fl.id} value={fl.id}>{fl.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button type="button" onClick={() => setTableModalOpen(false)} className="btn-outline text-xs px-4 py-2">Batal</button>
+              <button type="submit" className="btn-primary text-xs px-5 py-2">{editingTable ? "Simpan Perubahan" : "Tambah Meja"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Floor CRUD Modal */}
+      {floorModalOpen && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" onClick={() => setFloorModalOpen(false)}>
+          <form onSubmit={handleSaveFloor} className="card-surface bg-white p-6 w-full max-w-md space-y-4 text-left" onClick={(e) => e.stopPropagation()} data-testid="floor-form-modal">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h2 className="font-display font-bold text-lg">Tambah Lantai Outlet</h2>
+              <button type="button" onClick={() => setFloorModalOpen(false)} className="btn-ghost p-1"><X size={18} /></button>
+            </div>
+            <div>
+              <label className="label-tiny block mb-1">Nama Lantai / Area</label>
+              <input
+                type="text"
+                required
+                value={floorForm.name}
+                onChange={(e) => setFloorForm({ ...floorForm, name: e.target.value })}
+                placeholder="Contoh: Lantai 3, Outdoor Terrace"
+                className="input-field"
+                data-testid="floor-name-input"
+              />
+            </div>
+            <div>
+              <label className="label-tiny block mb-1">Tingkat / Level</label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={floorForm.level}
+                onChange={(e) => setFloorForm({ ...floorForm, level: e.target.value })}
+                className="input-field"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button type="button" onClick={() => setFloorModalOpen(false)} className="btn-outline text-xs px-4 py-2">Batal</button>
+              <button type="submit" className="btn-primary text-xs px-5 py-2">Tambah Lantai</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Product CRUD Modal */}
+      {productModalOpen && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" onClick={() => setProductModalOpen(false)}>
+          <form onSubmit={handleSaveProduct} className="card-surface bg-white p-6 w-full max-w-md space-y-4 text-left" onClick={(e) => e.stopPropagation()} data-testid="product-form-modal">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h2 className="font-display font-bold text-lg">{editingProduct ? "Edit Menu Resep" : "Tambah Menu Baru"}</h2>
+              <button type="button" onClick={() => setProductModalOpen(false)} className="btn-ghost p-1"><X size={18} /></button>
+            </div>
+            <div>
+              <label className="label-tiny block mb-1">Nama Menu / Produk</label>
+              <input
+                type="text"
+                required
+                value={productForm.name}
+                onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                placeholder="Contoh: Es Kopi Susu Aren"
+                className="input-field"
+                data-testid="product-name-input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label-tiny block mb-1">Harga Jual (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  value={productForm.price}
+                  onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
+                  className="input-field"
+                  data-testid="product-price-input"
+                />
+              </div>
+              <div>
+                <label className="label-tiny block mb-1">Kategori</label>
+                <select
+                  value={productForm.category}
+                  onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                  className="input-field py-2"
+                >
+                  {categories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="label-tiny block mb-1">Stok Porsi</label>
+              <input
+                type="number"
+                value={productForm.stock}
+                onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                className="input-field"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button type="button" onClick={() => setProductModalOpen(false)} className="btn-outline text-xs px-4 py-2">Batal</button>
+              <button type="submit" className="btn-primary text-xs px-5 py-2">{editingProduct ? "Simpan Perubahan" : "Simpan Menu"}</button>
+            </div>
+          </form>
         </div>
       )}
     </div>
