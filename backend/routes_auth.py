@@ -13,7 +13,7 @@ def _user_public(user: dict) -> dict:
     return {
         "id": user["id"],
         "email": user["email"],
-        "role": user.get("role", "admin"),
+        "role": user.get("role", "Owner"),
         "store_id": user.get("store_id"),
         "store_name": user.get("store_name"),
         "trial_ends_at": user.get("trial_ends_at"),
@@ -44,7 +44,7 @@ async def register(payload: UserRegister):
         "id": user_id,
         "email": payload.email,
         "password_hash": hash_password(payload.password),
-        "role": "admin",
+        "role": "Owner",
         "store_id": store_id,
         "store_name": payload.store_name,
         "trial_ends_at": trial_ends,
@@ -247,39 +247,9 @@ async def register(payload: UserRegister):
 async def login(payload: UserLogin):
     db = get_db()
     user = await db.users.find_one({"email": payload.email})
-    
-    # Auto-seed master demo accounts on the fly
-    master_emails = ["admin@dagangos.com", "demo@dagangos.com", "owner@geraina.com", "nama@toko.com"]
-    if not user and payload.email in master_emails:
-        store_id = "master-demo-store-001"
-        user_id = "master-demo-user-001"
-        trial_ends = trial_end_iso(365)
-        user_doc = {
-            "id": user_id,
-            "email": payload.email,
-            "password_hash": hash_password(payload.password or "dagangos123"),
-            "role": "admin",
-            "store_id": store_id,
-            "store_name": "DagangOS Master Demo Store",
-            "trial_ends_at": trial_ends,
-            "plan": "enterprise",
-            "created_at": utcnow().isoformat(),
-        }
-        store_doc = {
-            "id": store_id,
-            "name": "DagangOS Master Demo Store",
-            "owner_user_id": user_id,
-            "plan": "enterprise",
-            "trial_ends_at": trial_ends,
-            "created_at": utcnow().isoformat(),
-        }
-        await db.stores.update_one({"id": store_id}, {"$set": store_doc}, upsert=True)
-        await db.users.update_one({"email": payload.email}, {"$set": user_doc}, upsert=True)
-        user = user_doc
-
-    if not user or (payload.password != "dagangos123" and payload.password != "demo123456" and not verify_password(payload.password, user.get("password_hash", ""))):
+    if not user or not verify_password(payload.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Email atau password salah")
-    token = create_access_token(user["id"], user["store_id"], user.get("role", "admin"), user["email"])
+    token = create_access_token(user["id"], user["store_id"], user.get("role", "Owner"), user["email"])
     return Token(access_token=token, user=_user_public(user))
 
 
@@ -289,11 +259,10 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     user = await db.users.find_one({"email": form_data.username})
     if not user or not verify_password(form_data.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Email atau password salah")
-    token = create_access_token(user["id"], user["store_id"], user.get("role", "admin"), user["email"])
+    token = create_access_token(user["id"], user["store_id"], user.get("role", "Owner"), user["email"])
     return Token(access_token=token, user=_user_public(user))
 
 
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
     return _user_public(user)
-

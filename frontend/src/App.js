@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from "@/auth/AuthContext";
 
 import DagangOS from "@/pages/DagangOS";
 import DapurOS from "@/pages/DapurOS";
-import Landing from "@/pages/Landing";
 import Pricing from "@/pages/Pricing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";

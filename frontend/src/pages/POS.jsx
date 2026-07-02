@@ -413,8 +413,11 @@ export default function POS() {
       if (r.data && Array.isArray(r.data) && r.data.length > 0) setProducts(r.data);
       else setProducts(DEFAULT_PRODUCTS);
     }).catch(() => setProducts(DEFAULT_PRODUCTS));
-    api.get("/products/categories").then((r) => {
-      if (r.data && Array.isArray(r.data) && r.data.length > 0) setCategories(r.data);
+    api.get("/products/category-names").then((r) => {
+      const names = (Array.isArray(r.data) ? r.data : [])
+        .map((c) => (typeof c === "string" ? c : c?.name))
+        .filter(Boolean);
+      if (names.length > 0) setCategories(names);
       else setCategories(["Makanan Utama", "Minuman", "Cemilan", "Dessert"]);
     }).catch(() => setCategories(["Makanan Utama", "Minuman", "Cemilan", "Dessert"]));
     api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {});

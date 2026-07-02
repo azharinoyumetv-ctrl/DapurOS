@@ -187,7 +187,7 @@ export default function Settings() {
             <p className="text-xs text-[hsl(var(--muted))]">
               Manajemen kredensial login sistem kasir offline / backoffice DagangOS.
             </p>
-            <Link to="/geraina/app/staff/management" className="btn-outline py-2 px-4 text-xs flex items-center gap-2 w-max">
+            <Link to="/dapuros/app/staff/management" className="btn-outline py-2 px-4 text-xs flex items-center gap-2 w-max">
               <UserPlus size={14} /> Kelola User & Karyawan
             </Link>
           </div>

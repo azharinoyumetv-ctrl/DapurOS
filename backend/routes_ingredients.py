@@ -1,13 +1,25 @@
-"""Ingredients CRUD + seeding for DapurOS BOM."""
+"""Ingredients CRUD + seeding for DapurOS BOM + Spoilage Log."""
 import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from database import get_db, utcnow
-from models import Ingredient, IngredientCreate, IngredientUpdate
+from models import (
+    Ingredient, IngredientCreate, IngredientUpdate,
+    SpoilageCreate, SpoilageLog, SPOILAGE_REASONS, SPOILAGE_REASON_ALIASES,
+)
 from auth import get_current_user
 
 router = APIRouter(prefix="/api/ingredients", tags=["ingredients"])
+
+
+async def _notify_stock(store_id: str):
+    """Broadcast pembaruan stok ke seluruh klien WebSocket toko."""
+    try:
+        from server import ws_manager
+        await ws_manager.broadcast(store_id, {"type": "STOCK_UPDATE"})
+    except Exception:
+        pass
 
 
 def _strip_id(d: dict) -> dict:
@@ -83,6 +95,72 @@ async def update_ingredient(ingredient_id: str, payload: IngredientUpdate, user:
     if not res:
         raise HTTPException(status_code=404, detail="Bahan baku tidak ditemukan")
     return res
+
+
+@router.get("/spoilage/logs", response_model=List[SpoilageLog])
+async def list_spoilage_logs(user: dict = Depends(get_current_user)):
+    """Riwayat pencatatan bahan terbuang / rusak (Spoilage Log)."""
+    db = get_db()
+    cursor = db.spoilage_logs.find(
+        {"store_id": user["store_id"]}, {"_id": 0}
+    ).sort("created_at", -1)
+    return await cursor.to_list(length=200)
+
+
+@router.get("/spoilage/reasons")
+async def list_spoilage_reasons():
+    """Daftar alasan resmi pembuangan bahan baku."""
+    return {"reasons": SPOILAGE_REASONS}
+
+
+@router.post("/{ingredient_id}/spoilage", response_model=SpoilageLog)
+async def log_spoilage(ingredient_id: str, payload: SpoilageCreate, user: dict = Depends(get_current_user)):
+    """Catat bahan terbuang: potong stok secara atomik + simpan log audit."""
+    db = get_db()
+
+    # Normalisasi alasan (terima alias bahasa Inggris lama)
+    reason = SPOILAGE_REASON_ALIASES.get(payload.reason.strip().lower(), payload.reason)
+    if reason not in SPOILAGE_REASONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Alasan tidak valid. Pilihan resmi: {', '.join(SPOILAGE_REASONS)}",
+        )
+
+    # Potong stok secara atomik — hanya jika stok mencukupi
+    ing = await db.ingredients.find_one_and_update(
+        {
+            "id": ingredient_id,
+            "store_id": user["store_id"],
+            "stock": {"$gte": payload.quantity_lost},
+        },
+        {
+            "$inc": {"stock": -payload.quantity_lost},
+            "$set": {"updated_at": utcnow().isoformat()},
+        },
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not ing:
+        exists = await db.ingredients.find_one({"id": ingredient_id, "store_id": user["store_id"]})
+        if not exists:
+            raise HTTPException(status_code=404, detail="Bahan baku tidak ditemukan")
+        raise HTTPException(status_code=400, detail="Stok tidak mencukupi untuk jumlah yang dibuang")
+
+    log = {
+        "id": str(uuid.uuid4()),
+        "store_id": user["store_id"],
+        "ingredient_id": ingredient_id,
+        "ingredient_name": ing.get("name", "-"),
+        "unit": ing.get("unit", "-"),
+        "quantity_lost": payload.quantity_lost,
+        "reason": reason,
+        "notes": payload.notes,
+        "created_by": user.get("email"),
+        "created_at": utcnow().isoformat(),
+    }
+    await db.spoilage_logs.insert_one(dict(log))
+    await _notify_stock(user["store_id"])
+    return log
 
 
 @router.delete("/{ingredient_id}")

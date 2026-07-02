@@ -4,6 +4,7 @@ import { ShieldAlert } from "lucide-react";
 
 const ROLE_PERMISSIONS = {
   Owner: ["*"],
+  admin: ["*"], // akun lama dengan peran "admin" setara Owner
   Manager: [
     "dashboard",
     "pos",
@@ -63,8 +64,10 @@ export default function RoleGuard({ children }) {
     return children;
   }
 
-  // Check if any part of the path matches allowed permissions
-  const pathParts = location.pathname.split("/").filter(Boolean);
+  // Robustly get the module name following the "app" segment in the URL
+  const pathParts = location.pathname.split("/");
+  const appIndex = pathParts.indexOf("app");
+  const moduleName = appIndex !== -1 ? pathParts[appIndex + 1] : "";
   
   // Always allow core operational pages for everyone
   if (
@@ -76,7 +79,7 @@ export default function RoleGuard({ children }) {
     return children;
   }
 
-  const hasAccess = pathParts.some((part) => permissions.includes(part)) || permissions.includes("products");
+  const hasAccess = pathParts.some((part) => permissions.includes(part));
 
   if (!hasAccess) {
     return (

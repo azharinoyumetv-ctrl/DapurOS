@@ -191,7 +191,7 @@ export default function Pricing() {
                 )
               ) : (
                 <Link
-                  to="/geraina/register"
+                  to="/dapuros/register"
                   className={`mt-auto ${t.highlight ? "btn-accent" : "btn-outline"} w-full text-center py-2`}
                   data-testid={`pricing-cta-${t.id}`}
                 >

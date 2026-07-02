@@ -380,6 +380,42 @@ class Ingredient(IngredientBase):
     updated_at: str = Field(default_factory=utcnow_iso)
 
 
+# ---------- Spoilage Log (Modul Pencatatan Bahan Terbuang) ----------
+SPOILAGE_REASONS = [
+    "Kedaluwarsa (Expired)",
+    "Tumpah / Rusak Fisik (Spilled)",
+    "Kesalahan Pembuatan (Prep Error)",
+]
+
+# Peta alias agar nilai lama berbahasa Inggris tetap diterima
+SPOILAGE_REASON_ALIASES = {
+    "expired": "Kedaluwarsa (Expired)",
+    "spilled": "Tumpah / Rusak Fisik (Spilled)",
+    "prep error": "Kesalahan Pembuatan (Prep Error)",
+    "prep_error": "Kesalahan Pembuatan (Prep Error)",
+}
+
+
+class SpoilageCreate(BaseModel):
+    quantity_lost: float = Field(gt=0)
+    reason: str
+    notes: Optional[str] = None
+
+
+class SpoilageLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    store_id: str
+    ingredient_id: str
+    ingredient_name: str
+    unit: str
+    quantity_lost: float
+    reason: str
+    notes: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=utcnow_iso)
+
+
 # ---------- Floors & Tables (DapurOS F&B) ----------
 class FloorBase(BaseModel):
     name: str
