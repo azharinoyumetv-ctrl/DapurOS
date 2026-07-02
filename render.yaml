@@ -1,13 +1,19 @@
 services:
   - type: web
-    name: geraina-pos-backend
+    name: dagangos-backend
     env: python
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn server:app --app-dir backend --host 0.0.0.0 --port $PORT
     envVars:
       - key: MONGO_URL
-        sync: false
+        sync: false          # isi manual di dashboard Render (connection string dagangos_prod)
       - key: DB_NAME
-        value: geraina
+        value: dagangos
       - key: JWT_SECRET_KEY
-        generateValue: true
+        generateValue: true  # Render membuat secret acak otomatis
+      - key: ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: https://dagangos.com
+      - key: ALLOW_WEBHOOK_SIMULATE
+        value: "false"
