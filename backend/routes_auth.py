@@ -1,6 +1,6 @@
 """Auth routes: register store + login + me."""
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from database import get_db, utcnow, trial_end_iso
 from models import UserRegister, UserLogin, Token
@@ -22,8 +22,9 @@ def _user_public(user: dict) -> dict:
 
 
 @router.post("/register", response_model=Token)
-async def register(payload: UserRegister):
+async def register(payload: UserRegister, x_dagangos_module: str = Header(default="dapuros", alias="X-DagangOS-Module")):
     db = get_db()
+    module = (x_dagangos_module or "dapuros").lower()
     existing = await db.users.find_one({"email": payload.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email sudah terdaftar")
@@ -68,6 +69,7 @@ async def register(payload: UserRegister):
         docs.append({
             "id": str(uuid.uuid4()),
             "store_id": store_id,
+            "module": module,
             "sku": "GR-" + str(uuid.uuid4())[:6].upper(),
             "active": True,
             "image_url": None,

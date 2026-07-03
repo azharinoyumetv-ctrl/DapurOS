@@ -2,13 +2,18 @@
 import io
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Header
 
 from database import get_db, utcnow
 from models import ProductCreate, ProductUpdate, BulkImportResult
 from auth import get_current_user
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+
+def get_module(x_dagangos_module: str = Header(default="dapuros", alias="X-DagangOS-Module")):
+    """Modul aplikasi yang meminta (dapuros / geraina). Untuk memisahkan katalog per aplikasi."""
+    return (x_dagangos_module or "dapuros").lower()
 
 
 def _strip_id(p: dict) -> dict:
@@ -19,12 +24,13 @@ def _strip_id(p: dict) -> dict:
 @router.get("")
 async def list_products(
     user: dict = Depends(get_current_user),
+    module: str = Depends(get_module),
     q: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     limit: int = 500,
 ):
     db = get_db()
-    flt = {"store_id": user["store_id"]}
+    flt = {"store_id": user["store_id"], "module": module}
     if q:
         flt["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
@@ -38,19 +44,20 @@ async def list_products(
 
 
 @router.get("/category-names")
-async def list_category_names(user: dict = Depends(get_current_user)):
+async def list_category_names(user: dict = Depends(get_current_user), module: str = Depends(get_module)):
     """Daftar nama kategori unik dari produk (untuk filter chip Kasir)."""
     db = get_db()
-    cats = await db.products.distinct("category", {"store_id": user["store_id"]})
+    cats = await db.products.distinct("category", {"store_id": user["store_id"], "module": module})
     return [c for c in cats if c]
 
 
 @router.post("")
-async def create_product(payload: ProductCreate, user: dict = Depends(get_current_user)):
+async def create_product(payload: ProductCreate, user: dict = Depends(get_current_user), module: str = Depends(get_module)):
     db = get_db()
     doc = {
         "id": str(uuid.uuid4()),
         "store_id": user["store_id"],
+        "module": module,
         "created_at": utcnow().isoformat(),
         "updated_at": utcnow().isoformat(),
         **payload.model_dump(),
@@ -112,6 +119,7 @@ async def delete_product(product_id: str, user: dict = Depends(get_current_user)
 async def bulk_import(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
+    module: str = Depends(get_module),
 ):
     """Import dari Excel (.xlsx) atau CSV.
 
@@ -240,13 +248,14 @@ async def bulk_import(
                 "image_url": image_url,
                 "active": active,
                 "store_id": user["store_id"],
+                "module": module,
                 "updated_at": utcnow().isoformat(),
             }
 
-            # Upsert by SKU within store, else insert new
+            # Upsert by SKU within store + module, else insert new
             existing = None
             if doc["sku"]:
-                existing = await db.products.find_one({"store_id": user["store_id"], "sku": doc["sku"]})
+                existing = await db.products.find_one({"store_id": user["store_id"], "module": module, "sku": doc["sku"]})
 
             if existing:
                 await db.products.update_one({"id": existing["id"]}, {"$set": doc})
