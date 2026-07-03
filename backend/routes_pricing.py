@@ -121,12 +121,22 @@ async def list_addons():
     return ADDONS
 
 
+# Paket yang boleh diaktifkan mandiri tanpa pembayaran (gratis).
+# Paket berbayar dikunci sampai gateway pembayaran (Xendit/Midtrans) aktif.
+FREE_SELF_SERVE_TIERS = {"trial"}
+
+
 @router.post("/upgrade")
 async def upgrade_plan(payload: dict, user: dict = Depends(get_current_user)):
     tier_id = payload.get("tier_id")
     if not tier_id or tier_id not in [t["id"] for t in TIERS]:
         raise HTTPException(status_code=400, detail="Paket tidak valid")
-    
+    if tier_id not in FREE_SELF_SERVE_TIERS:
+        raise HTTPException(
+            status_code=403,
+            detail="Aktivasi paket berbayar belum tersedia. Pembayaran sedang disiapkan — silakan hubungi sales untuk aktivasi manual.",
+        )
+
     db = get_db()
     await db.users.find_one_and_update(
         {"id": user["id"]},

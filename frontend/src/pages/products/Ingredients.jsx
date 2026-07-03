@@ -20,6 +20,23 @@ export default function Ingredients() {
   const [wasteOpen, setWasteOpen] = useState(false);
   const [wasteForm, setWasteForm] = useState({ ingredientId: "", qty: 0, reason: SPOILAGE_REASONS[0] });
   const [spoilageLogs, setSpoilageLogs] = useState([]);
+  const [units, setUnits] = useState([]);
+
+  const DEFAULT_UNITS = [
+    { name: "Gram", short_name: "g" },
+    { name: "Mililiter", short_name: "ml" },
+    { name: "Pieces", short_name: "pcs" },
+    { name: "Kilogram", short_name: "kg" },
+    { name: "Botol", short_name: "btl" },
+  ];
+  const loadUnits = async () => {
+    try {
+      const res = await api.get("/products/units");
+      setUnits(Array.isArray(res.data) && res.data.length ? res.data : DEFAULT_UNITS);
+    } catch (e) {
+      setUnits(DEFAULT_UNITS);
+    }
+  };
 
   const loadSpoilageLogs = async () => {
     try {
@@ -62,6 +79,7 @@ export default function Ingredients() {
   useEffect(() => {
     loadIngredients();
     loadSpoilageLogs();
+    loadUnits();
   }, []);
 
   const openAdd = () => {
@@ -392,12 +410,14 @@ export default function Ingredients() {
                   value={form.unit}
                   onChange={(e) => setForm({ ...form, unit: e.target.value })}
                 >
-                  <option value="g">Gram (g)</option>
-                  <option value="ml">Mililiter (ml)</option>
-                  <option value="pcs">Pieces (pcs)</option>
-                  <option value="kg">Kilogram (kg)</option>
-                  <option value="btl">Botol (btl)</option>
+                  {(units.length ? units : DEFAULT_UNITS).map((u) => (
+                    <option key={u.short_name || u.id} value={u.short_name}>{u.name} ({u.short_name})</option>
+                  ))}
+                  {form.unit && !(units.length ? units : DEFAULT_UNITS).some((u) => u.short_name === form.unit) && (
+                    <option value={form.unit}>{form.unit}</option>
+                  )}
                 </select>
+                <p className="text-[10px] text-[hsl(var(--muted))] mt-1">Kelola daftar satuan di menu Produk → Satuan.</p>
               </div>
             </div>
 

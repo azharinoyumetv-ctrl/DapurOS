@@ -24,20 +24,43 @@ function ProductForm({ product, onClose, onSaved }) {
   const [ingredients, setIngredients] = useState([]);
   const [selectedIngredientId, setSelectedIngredientId] = useState("");
   const [ingredientQty, setIngredientQty] = useState("");
+  const [units, setUnits] = useState([]);
+  const [newIngOpen, setNewIngOpen] = useState(false);
+  const [newIng, setNewIng] = useState({ name: "", unit: "g" });
+  const [creatingIng, setCreatingIng] = useState(false);
+
+  const loadIngredients = async (selectId) => {
+    try {
+      const res = await api.get("/ingredients");
+      setIngredients(res.data);
+      if (selectId) setSelectedIngredientId(selectId);
+      else if (res.data.length > 0) setSelectedIngredientId((cur) => cur || res.data[0].id);
+    } catch (err) {
+      console.error("Gagal memuat bahan baku", err);
+    }
+  };
 
   useEffect(() => {
     if (!isDapurOS) return;
-    const fetchIngs = async () => {
-      try {
-        const res = await api.get("/ingredients");
-        setIngredients(res.data);
-        if (res.data.length > 0) setSelectedIngredientId(res.data[0].id);
-      } catch (err) {
-        console.error("Gagal memuat bahan baku", err);
-      }
-    };
-    fetchIngs();
+    loadIngredients();
+    api.get("/products/units").then((r) => setUnits(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDapurOS]);
+
+  const createIngredient = async () => {
+    if (!newIng.name.trim()) return;
+    setCreatingIng(true);
+    try {
+      const res = await api.post("/ingredients", { name: newIng.name.trim(), stock: 0, safety_stock: 0, unit: newIng.unit });
+      await loadIngredients(res.data?.id);
+      setNewIng({ name: "", unit: "g" });
+      setNewIngOpen(false);
+    } catch (e) {
+      alert(e?.response?.data?.detail || "Gagal menambah bahan baku");
+    } finally {
+      setCreatingIng(false);
+    }
+  };
 
   const addIngredientToRecipe = () => {
     const qty = parseFloat(ingredientQty);
@@ -193,6 +216,31 @@ function ProductForm({ product, onClose, onSaved }) {
                 <p className="text-[10px] text-[hsl(var(--muted))] mt-1">
                   Gunakan resep jika produk ini diproduksi dari bahan mentah. Penjualan otomatis memotong stok bahan baku.
                 </p>
+              </div>
+
+              <div>
+                <button type="button" onClick={() => setNewIngOpen((o) => !o)} className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1" data-testid="bom-add-ingredient-toggle">
+                  <Plus size={13} /> {newIngOpen ? "Tutup form bahan" : "Tambah bahan baku baru"}
+                </button>
+                {newIngOpen && (
+                  <div className="mt-2 flex gap-2 items-end bg-white p-2.5 rounded-lg border border-amber-100">
+                    <div className="flex-1 text-xs">
+                      <label className="label-tiny block mb-1">Nama bahan</label>
+                      <input className="input-field py-1.5 text-xs" placeholder="Cth: Gula Aren" value={newIng.name} onChange={(e) => setNewIng({ ...newIng, name: e.target.value })} data-testid="bom-new-ing-name" />
+                    </div>
+                    <div className="w-24 text-xs">
+                      <label className="label-tiny block mb-1">Satuan</label>
+                      <select className="input-field py-1.5 text-xs" value={newIng.unit} onChange={(e) => setNewIng({ ...newIng, unit: e.target.value })}>
+                        {(units.length ? units : [{ name: "Gram", short_name: "g" }, { name: "Mililiter", short_name: "ml" }, { name: "Pieces", short_name: "pcs" }, { name: "Kilogram", short_name: "kg" }, { name: "Botol", short_name: "btl" }]).map((u) => (
+                          <option key={u.short_name || u.id} value={u.short_name}>{u.short_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button type="button" onClick={createIngredient} disabled={creatingIng || !newIng.name.trim()} className="btn-primary py-1.5 px-3 text-xs bg-amber-600 hover:bg-amber-700 border-amber-600 font-bold shrink-0 text-white rounded" data-testid="bom-new-ing-save">
+                      {creatingIng ? "…" : "Simpan"}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 items-end bg-amber-50/40 p-3 rounded-lg border border-amber-100/50">
