@@ -62,7 +62,11 @@ async def create_product(payload: ProductCreate, user: dict = Depends(get_curren
 @router.put("/{product_id}")
 async def update_product(product_id: str, payload: ProductUpdate, user: dict = Depends(get_current_user)):
     db = get_db()
-    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    data = payload.model_dump(exclude_unset=True)
+    update = {k: v for k, v in data.items() if v is not None}
+    # Izinkan menghapus foto produk secara eksplisit (image_url = null)
+    if "image_url" in data and data["image_url"] is None:
+        update["image_url"] = None
     if not update:
         raise HTTPException(status_code=400, detail="Tidak ada perubahan")
     update["updated_at"] = utcnow().isoformat()
