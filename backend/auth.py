@@ -1,4 +1,8 @@
-"""JWT auth helpers."""
+"""JWT auth helpers.
+
+SYNC: KEEP IN SYNC dengan GerainaOS/backend/auth.py — dua backend terpisah berbagi DB +
+JWT_SECRET yang sama, jadi logika auth multi-store harus identik (beda hanya default module).
+"""
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional

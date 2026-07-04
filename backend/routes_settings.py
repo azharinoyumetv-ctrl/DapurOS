@@ -118,19 +118,16 @@ async def save_integrations(payload: Dict[str, Any], user: dict = Depends(get_cu
 @router.get("/api/billing")
 @router.get("/api/subscription")
 async def get_subscription(user: dict = Depends(get_current_user)):
-    db = get_db()
-    res = await db.subscription.find_one({"store_id": user["store_id"]}, {"_id": 0})
-    if not res:
-        # Reflect the account's REAL plan — no fake "Enterprise" demo tier.
-        plan = (user.get("plan") or "trial").lower()
-        return {
-            "plan": plan,
-            "tier": plan,
-            "status": "trial" if plan == "trial" else "active",
-            "trial_ends_at": user.get("trial_ends_at"),
-            "auto_debit": False,
-        }
-    return res
+    # Selalu kembalikan plan ASLI dari akun; abaikan dokumen langganan lama yg bisa berisi
+    # data demo ("Enterprise" palsu). Plan per-akun mencakup semua toko.
+    plan = (user.get("plan") or "trial").lower()
+    return {
+        "plan": plan,
+        "tier": plan,
+        "status": "trial" if plan == "trial" else "active",
+        "trial_ends_at": user.get("trial_ends_at"),
+        "auto_debit": False,
+    }
 
 @router.post("/api/billing")
 @router.post("/api/subscription")
