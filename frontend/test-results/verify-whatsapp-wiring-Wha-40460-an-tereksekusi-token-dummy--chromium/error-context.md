@@ -12,7 +12,7 @@
 # Error details
 
 ```
-Error: respons PO memuat hasil whatsapp (engine tereksekusi)
+Error: respons order memuat hasil whatsapp (engine tereksekusi)
 
 expect(received).toBeTruthy()
 
@@ -34,7 +34,7 @@ Received: undefined
           - button "Suite" [ref=e11] [cursor=pointer]:
             - generic [ref=e13]: Suite
             - img [ref=e14]
-        - paragraph [ref=e16]: E2E WA 1783180165450
+        - paragraph [ref=e16]: E2E WA 1783182539024
       - navigation [ref=e17]:
         - link "Dasbor" [ref=e18] [cursor=pointer]:
           - /url: /dapuros/app/dashboard
@@ -135,7 +135,7 @@ Received: undefined
             - option "Cashier"
             - option "Warehouse"
         - generic [ref=e160]:
-          - paragraph [ref=e162]: e2e.wa.1783180165450@gmail.com
+          - paragraph [ref=e162]: e2e.wa.1783182539024@gmail.com
           - button "Keluar" [ref=e163] [cursor=pointer]:
             - img [ref=e164]
     - main [ref=e167]:
@@ -143,7 +143,7 @@ Received: undefined
         - generic [ref=e169]:
           - generic [ref=e170]:
             - text: POS Komersial & Restoran
-            - 'heading "Dasbor: E2E WA 1783180165450." [level=1] [ref=e171]'
+            - 'heading "Dasbor: E2E WA 1783182539024." [level=1] [ref=e171]'
           - generic [ref=e172]:
             - generic [ref=e173]:
               - img [ref=e174]
@@ -373,29 +373,31 @@ Received: undefined
   44 |     headers,
   45 |     data: { po_no: `E2E-PO-${STAMP}`, supplier_id: sup.id, supplier_name: sup.name, total: 50000, status: "Ordered" },
   46 |   });
-  47 |   expect(poRes.ok(), `PO create -> ${poRes.status()}`).toBeTruthy();
-  48 |   const po = await poRes.json();
-> 49 |   expect(po.whatsapp, "respons PO memuat hasil whatsapp (engine tereksekusi)").toBeTruthy();
-     |                                                                                ^ Error: respons PO memuat hasil whatsapp (engine tereksekusi)
-  50 |   expect(po.whatsapp.sent, "kirim gagal dgn token dummy TAPI PO tetap tersimpan").toBe(false);
-  51 | 
-  52 |   // Penjualan dgn nomor pelanggan + WA aktif -> path struk otomatis jalan; order tetap SUKSES.
-  53 |   const prod = await (await request.post("/api/products", {
-  54 |     headers, data: { name: `E2E Prod ${STAMP}`, price: 20000, cost: 8000, stock: 5, category: "Umum", unit: "pcs" },
-  55 |   })).json();
-  56 |   const ordRes = await request.post("/api/orders", {
-  57 |     headers,
-  58 |     data: {
-  59 |       items: [{ product_id: prod.id, name: prod.name, price: 20000, quantity: 1, subtotal: 20000 }],
-  60 |       payment_method: "cash", cash_received: 50000, tax_percent: 10, dining_option: "Takeaway",
-  61 |       customer_name: "E2E Cust", customer_phone: "081234567890",
-  62 |     },
-  63 |   });
-  64 |   expect(ordRes.ok(), `order create -> ${ordRes.status()}`).toBeTruthy();
-  65 |   const ord = await ordRes.json();
-  66 |   expect(ord.payment_status, "order lunas meski WA best-effort").toBe("paid");
-  67 | 
-  68 |   console.log(`\nWA wiring OK — PO.whatsapp=${JSON.stringify(po.whatsapp)}\n`);
-  69 | });
-  70 | 
+  47 |   // PO pakai response_model -> field whatsapp tak ikut di respons; cukup pastikan PO TERSIMPAN
+  48 |   // (engine WA tak membatalkan PO). Bukti "engine tereksekusi" dicek via respons order di bawah.
+  49 |   expect(poRes.ok(), `PO create -> ${poRes.status()}`).toBeTruthy();
+  50 | 
+  51 |   // Penjualan dgn nomor pelanggan + WA aktif -> path struk otomatis jalan; order tetap SUKSES.
+  52 |   const prod = await (await request.post("/api/products", {
+  53 |     headers, data: { name: `E2E Prod ${STAMP}`, price: 20000, cost: 8000, stock: 5, category: "Umum", unit: "pcs" },
+  54 |   })).json();
+  55 |   const ordRes = await request.post("/api/orders", {
+  56 |     headers,
+  57 |     data: {
+  58 |       items: [{ product_id: prod.id, name: prod.name, price: 20000, quantity: 1, subtotal: 20000 }],
+  59 |       payment_method: "cash", cash_received: 50000, tax_percent: 10, dining_option: "Takeaway",
+  60 |       customer_name: "E2E Cust", customer_phone: "081234567890",
+  61 |     },
+  62 |   });
+  63 |   expect(ordRes.ok(), `order create -> ${ordRes.status()}`).toBeTruthy();
+  64 |   const ord = await ordRes.json();
+  65 |   expect(ord.payment_status, "order lunas meski WA best-effort").toBe("paid");
+  66 |   // Respons order (tanpa response_model) memuat hasil kirim -> engine BENAR tereksekusi.
+> 67 |   expect(ord.whatsapp, "respons order memuat hasil whatsapp (engine tereksekusi)").toBeTruthy();
+     |                                                                                    ^ Error: respons order memuat hasil whatsapp (engine tereksekusi)
+  68 |   expect(ord.whatsapp.sent, "kirim gagal dgn token dummy TAPI order tetap lunas").toBe(false);
+  69 | 
+  70 |   console.log(`\nWA wiring OK - order.whatsapp=${JSON.stringify(ord.whatsapp)}\n`);
+  71 | });
+  72 | 
 ```
