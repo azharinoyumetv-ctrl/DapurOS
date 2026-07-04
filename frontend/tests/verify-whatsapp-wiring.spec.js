@@ -44,10 +44,9 @@ test("WhatsApp engine — wiring aman & tereksekusi (token dummy)", async ({ pag
     headers,
     data: { po_no: `E2E-PO-${STAMP}`, supplier_id: sup.id, supplier_name: sup.name, total: 50000, status: "Ordered" },
   });
+  // PO pakai response_model -> field whatsapp tak ikut di respons; cukup pastikan PO TERSIMPAN
+  // (engine WA tak membatalkan PO). Bukti "engine tereksekusi" dicek via respons order di bawah.
   expect(poRes.ok(), `PO create -> ${poRes.status()}`).toBeTruthy();
-  const po = await poRes.json();
-  expect(po.whatsapp, "respons PO memuat hasil whatsapp (engine tereksekusi)").toBeTruthy();
-  expect(po.whatsapp.sent, "kirim gagal dgn token dummy TAPI PO tetap tersimpan").toBe(false);
 
   // Penjualan dgn nomor pelanggan + WA aktif -> path struk otomatis jalan; order tetap SUKSES.
   const prod = await (await request.post("/api/products", {
@@ -64,6 +63,9 @@ test("WhatsApp engine — wiring aman & tereksekusi (token dummy)", async ({ pag
   expect(ordRes.ok(), `order create -> ${ordRes.status()}`).toBeTruthy();
   const ord = await ordRes.json();
   expect(ord.payment_status, "order lunas meski WA best-effort").toBe("paid");
+  // Respons order (tanpa response_model) memuat hasil kirim -> engine BENAR tereksekusi.
+  expect(ord.whatsapp, "respons order memuat hasil whatsapp (engine tereksekusi)").toBeTruthy();
+  expect(ord.whatsapp.sent, "kirim gagal dgn token dummy TAPI order tetap lunas").toBe(false);
 
-  console.log(`\nWA wiring OK — PO.whatsapp=${JSON.stringify(po.whatsapp)}\n`);
+  console.log(`\nWA wiring OK - order.whatsapp=${JSON.stringify(ord.whatsapp)}\n`);
 });
