@@ -4,7 +4,7 @@ from typing import List, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from database import get_db, utcnow
 from models import Branch, BranchBase
-from auth import get_current_user
+from auth import get_current_user, require_admin
 
 router = APIRouter(tags=["settings"])
 
@@ -121,20 +121,20 @@ async def get_subscription(user: dict = Depends(get_current_user)):
     db = get_db()
     res = await db.subscription.find_one({"store_id": user["store_id"]}, {"_id": 0})
     if not res:
+        # Reflect the account's REAL plan — no fake "Enterprise" demo tier.
+        plan = (user.get("plan") or "trial").lower()
         return {
-            "plan": "Enterprise Multi-Outlet SaaS Plan",
-            "tier": "enterprise",
-            "status": "ACTIVE ENTERPRISE TIER",
-            "outlets_count": 3,
-            "next_renewal": "2026-07-28T00:00:00Z",
-            "monthly_rate": "Rp 299.000 / bln",
-            "auto_debit": True
+            "plan": plan,
+            "tier": plan,
+            "status": "trial" if plan == "trial" else "active",
+            "trial_ends_at": user.get("trial_ends_at"),
+            "auto_debit": False,
         }
     return res
 
 @router.post("/api/billing")
 @router.post("/api/subscription")
-async def save_subscription(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
+async def save_subscription(payload: Dict[str, Any], user: dict = Depends(require_admin)):
     db = get_db()
     update_data = {k: v for k, v in payload.items() if k not in ("_id", "store_id")}
     res = await db.subscription.find_one_and_update(

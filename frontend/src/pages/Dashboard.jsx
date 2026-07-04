@@ -6,7 +6,7 @@ import {
   TrendingUp, Package, ShoppingCart, Calendar, Sparkles,
   ArrowRight, Crown, DollarSign, Percent, BarChart3,
   Briefcase, Activity, AlertTriangle, Landmark, ShieldCheck,
-  ChefHat, QrCode, CreditCard
+  ChefHat, QrCode
 } from "lucide-react";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
@@ -118,9 +118,6 @@ export default function Dashboard() {
           </Link>
           <Link to="/dapuros/app/qr-menu" className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-qr-menu-btn">
             <QrCode size={14} /> Menu QR Code
-          </Link>
-          <Link to="/dapuros/app/edc-simulator" className="bg-purple-600 hover:bg-purple-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-edc-btn">
-            <CreditCard size={14} /> Simulasi Mesin EDC
           </Link>
         </div>
       </div>

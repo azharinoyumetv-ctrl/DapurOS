@@ -265,7 +265,7 @@ export default function Settings() {
             </div>
 
             <div className="border-t border-[hsl(var(--border))] pt-4 flex justify-between items-center">
-              <Link to="/pricing" className="text-xs font-bold text-blue-600 hover:underline" data-testid="view-pricing-matrix-link">
+              <Link to="/dapuros/pricing" className="text-xs font-bold text-blue-600 hover:underline" data-testid="view-pricing-matrix-link">
                 Lihat Matrix Matriks Harga lengkap &rarr;
               </Link>
               <button

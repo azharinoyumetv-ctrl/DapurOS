@@ -57,7 +57,7 @@ import Settings from "@/pages/settings/Settings";
 import RoleGuard from "@/components/RoleGuard";
 import KdsScreen from "@/pages/KdsScreen";
 import QrMenu from "@/pages/products/QrMenu";
-import EdcSimulator from "@/pages/payments/EdcSimulator";
+import Activate from "@/pages/Activate";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -91,10 +91,6 @@ function getAppSubRoutes() {
     <Route key="r-pos" path="pos" element={<RoleGuard><POS /></RoleGuard>} />,
     <Route key="r-kds" path="kds" element={<RoleGuard><KdsScreen /></RoleGuard>} />,
     <Route key="r-qr" path="qr-menu" element={<RoleGuard><QrMenu /></RoleGuard>} />,
-    <Route key="r-edc1" path="edc-simulator" element={<RoleGuard><EdcSimulator /></RoleGuard>} />,
-    <Route key="r-edc2" path="edc" element={<RoleGuard><EdcSimulator /></RoleGuard>} />,
-    <Route key="r-edc3" path="payments/edc-simulator" element={<RoleGuard><EdcSimulator /></RoleGuard>} />,
-    <Route key="r-edc4" path="payments/edc" element={<RoleGuard><EdcSimulator /></RoleGuard>} />,
     <Route key="r-sales" path="sales" element={<RoleGuard><Sales /></RoleGuard>} />,
     <Route key="r-lic" path="license" element={<RoleGuard><LicenseDevices /></RoleGuard>} />,
     <Route key="r-abt" path="about" element={<RoleGuard><About /></RoleGuard>} />,
@@ -191,6 +187,7 @@ export default function App() {
           <Route path="/dapuros/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/dapuros/register" element={<Register />} />
+          <Route path="/dapuros/activate" element={<Protected><Activate /></Protected>} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/dapuros/pricing" element={<Pricing />} />
 
@@ -200,7 +197,8 @@ export default function App() {
             <Route path="pricing" element={<Pricing />} />
             <Route path="login" element={<Login />} />
             <Route path="register" element={<Register />} />
-            
+            <Route path="activate" element={<Protected><Activate /></Protected>} />
+
             {/* Standard prefixed app routes */}
             <Route path="app/*" element={<AppLayout />}>{appRoutes}</Route>
 
@@ -209,8 +207,6 @@ export default function App() {
             <Route path="pos/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="kds/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="qr-menu/*" element={<AppLayout />}>{appRoutes}</Route>
-            <Route path="edc-simulator/*" element={<AppLayout />}>{appRoutes}</Route>
-            <Route path="edc/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="products/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="inventory/*" element={<AppLayout />}>{appRoutes}</Route>
             <Route path="purchase/*" element={<AppLayout />}>{appRoutes}</Route>

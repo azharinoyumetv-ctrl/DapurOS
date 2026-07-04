@@ -128,8 +128,8 @@ function ReceiptDialog({ order, onClose }) {
         </div>
 
         {!isPaid && o.payment_method !== "cash" && (
-          <button onClick={simulatePaid} className="btn-ghost w-full mt-2 text-xs" data-testid="receipt-simulate-paid">
-            <RefreshCw size={13} /> Simulasi: tandai lunas
+          <button onClick={simulatePaid} className="btn-ghost w-full mt-2 text-xs" data-testid="receipt-mark-paid">
+            <RefreshCw size={13} /> Tandai sudah dibayar
           </button>
         )}
 
@@ -201,7 +201,6 @@ export default function POS() {
   
   // Custom EDC Simulator State
   const [edcSimulating, setEdcSimulating] = useState(false);
-  const [edcTimer, setEdcTimer] = useState(3);
   const [edcSplitSimulating, setEdcSplitSimulating] = useState(false);
   
   // Split bill states
@@ -599,7 +598,6 @@ export default function POS() {
     // Simulate local EDC terminal payload push for card and EDC transactions
     if (paymentMethod === "edc" || paymentMethod === "debit" || paymentMethod === "credit") {
       setEdcSimulating(true);
-      setEdcTimer(3);
       return;
     }
     
@@ -654,20 +652,15 @@ export default function POS() {
     }
   };
 
-  // EDC Simulator Countdown
-  useEffect(() => {
-    if (!edcSimulating) return;
-    if (edcTimer === 0) {
-      if (edcSplitSimulating) {
-        processSplitEdc();
-      } else {
-        processCheckout(true); // Settle as Card payment
-      }
-      return;
+  // EDC card payments are confirmed MANUALLY by the cashier after the card clears
+  // on the merchant's own physical EDC terminal. No auto-approval / countdown.
+  const confirmEdcPayment = () => {
+    if (edcSplitSimulating) {
+      processSplitEdc();
+    } else {
+      processCheckout(true); // Settle as manually-confirmed card payment
     }
-    const t = setTimeout(() => setEdcTimer(edcTimer - 1), 1000);
-    return () => clearTimeout(t);
-  }, [edcSimulating, edcTimer, edcSplitSimulating]);
+  };
 
   // Open active session
   const handleOpenTableSession = async (table) => {
@@ -734,7 +727,6 @@ export default function POS() {
     if (payMethod === "edc") {
       setEdcSplitSimulating(true);
       setEdcSimulating(true);
-      setEdcTimer(3);
       return;
     }
     
@@ -1282,26 +1274,28 @@ export default function POS() {
 
       {receipt && <ReceiptDialog order={receipt} onClose={() => setReceipt(null)} />}
 
-      {/* Visual EDC Payment Simulator Modal */}
+      {/* EDC / card payment — MANUAL confirmation on the merchant's own terminal */}
       {edcSimulating && (
         <div className="fixed inset-0 bg-black/60 grid place-items-center z-50 p-4">
-          <div className="card-surface bg-slate-900 border border-slate-800 text-white w-full max-w-sm p-6 text-center space-y-4">
-            <CreditCard size={48} className="mx-auto text-amber-500 animate-pulse" />
-            <h2 className="font-display text-lg font-bold">Simulasi Integrasi EDC</h2>
+          <div className="card-surface bg-slate-900 border border-slate-800 text-white w-full max-w-sm p-6 text-center space-y-4" data-testid="edc-confirm-modal">
+            <CreditCard size={48} className="mx-auto text-amber-500" />
+            <h2 className="font-display text-lg font-bold">Pembayaran Kartu / EDC</h2>
             <p className="text-xs text-slate-400">
-              Mengirimkan nominal pembayaran <span className="font-bold text-white font-mono">{fmtIDR(splitOrderResult ? splitOrderResult.total : total)}</span> ke terminal EDC local card reader...
-            </p>
-            <div className="py-2">
-              <span className="text-2xl font-mono font-black">{edcTimer}s</span>
-            </div>
-            <p className="text-[10px] text-slate-500">
-              Mohon dekatkan atau gesek kartu debit/kredit pelanggan pada terminal EDC untuk simulasi checkout.
+              Proses pembayaran <span className="font-bold text-white font-mono">{fmtIDR(splitOrderResult ? splitOrderResult.total : total)}</span> pada mesin EDC bank Anda. Setelah transaksi <span className="font-semibold text-slate-200">disetujui di terminal</span>, konfirmasi di bawah.
             </p>
             <button
-              onClick={() => setEdcSimulating(false)}
+              onClick={confirmEdcPayment}
+              disabled={submitting}
+              className="btn-primary w-full text-sm py-2.5 disabled:opacity-60"
+              data-testid="edc-confirm-paid-btn"
+            >
+              {submitting ? "Memproses..." : "Konfirmasi Pembayaran Diterima"}
+            </button>
+            <button
+              onClick={() => { setEdcSimulating(false); setEdcSplitSimulating(false); }}
               className="btn-outline border-slate-700 text-slate-300 w-full text-xs py-2"
             >
-              Batal Pembayaran
+              Batal
             </button>
           </div>
         </div>
