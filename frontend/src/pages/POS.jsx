@@ -189,7 +189,7 @@ export default function POS() {
   const [paymentMethod, setPaymentMethod] = useState("cash"); // cash | qris | ewallet | edc
   const [ewallet, setEwallet] = useState("ID_DANA");
   const [cashReceived, setCashReceived] = useState("");
-  const [taxPercent, setTaxPercent] = useState(0); // for retail takeaway
+  const [taxPercent, setTaxPercent] = useState(10); // takeaway: PB1/pajak 10% otomatis (bisa diubah), tanpa service
   const [discount, setDiscount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState(null);
@@ -203,6 +203,9 @@ export default function POS() {
   const [edcSimulating, setEdcSimulating] = useState(false);
   const [edcSplitSimulating, setEdcSplitSimulating] = useState(false);
   
+  // Settle (bayar & tutup meja dine-in)
+  const [settleOpen, setSettleOpen] = useState(false);
+
   // Split bill states
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitType, setSplitType] = useState("equal"); // equal | item
@@ -591,16 +594,30 @@ export default function POS() {
     setSelectedCustomerId("");
   };
 
+  // Keypad numerik untuk input nominal tunai manual (layar sentuh)
+  const keypadPress = (k) => {
+    setCashReceived((prev) => {
+      const cur = String(prev || "");
+      if (k === "back") return cur.slice(0, -1);
+      return cur + k;
+    });
+  };
+
   // F&B checkout or Direct retail checkout
   const checkout = async () => {
     if (cart.length === 0) return;
     
     // Simulate local EDC terminal payload push for card and EDC transactions
+    // Dine-in: simpan pesanan ke bill terbuka (belum dibayar). Pembayaran saat settle meja.
+    if (isDineIn) {
+      processCheckout();
+      return;
+    }
     if (paymentMethod === "edc" || paymentMethod === "debit" || paymentMethod === "credit") {
       setEdcSimulating(true);
       return;
     }
-    
+
     processCheckout();
   };
 
@@ -616,7 +633,7 @@ export default function POS() {
       };
 
       if (isDineIn && activeSession) {
-        payload.session_id = activeSession.session.id;
+        payload.session_id = activeSession?.session?.id || activeSession?.id;
         payload.dining_option = "Dine-In";
       } else {
         payload.dining_option = "Takeaway";
@@ -630,18 +647,16 @@ export default function POS() {
       }
       
       const r = await api.post("/orders", payload);
-      
-      // If Dine-In checkout, automatically close session & clear table
+
       if (isDineIn) {
-        await api.post(`/tables/${selectedTable.id}/checkout`, {
-          payment_method: directPaid ? "card" : paymentMethod
-        });
-        setSelectedTable(null);
-        setActiveSession(null);
+        // Simpan ke bill terbuka; JANGAN settle/close. Pembayaran dilakukan saat tamu minta bill.
+        clearCart();
         setViewMode("floor");
-        loadTables();
+        await loadTables();
+        await loadActiveTableSession(selectedTable.id);
+        return;
       }
-      
+
       setReceipt(r.data);
       clearCart();
     } catch (e) {
@@ -668,6 +683,24 @@ export default function POS() {
     setSelectedTable(table);
     setActiveSession(res.data);
     loadActiveTableSession(table.id);
+  };
+
+  // Bayar & tutup meja: settle semua order sesi jadi lunas, lalu kosongkan meja.
+  const settleDineIn = async (method) => {
+    if (!selectedTable) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/tables/${selectedTable.id}/checkout`, { payment_method: method });
+      setSettleOpen(false);
+      setSelectedTable(null);
+      setActiveSession(null);
+      setViewMode("floor");
+      await loadTables();
+    } catch (e) {
+      alert(e?.response?.data?.detail || "Gagal menyelesaikan pembayaran meja");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSelectTable = (table) => {
@@ -952,23 +985,11 @@ export default function POS() {
                         
                         {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 ? (
                           <button
-                            onClick={() => {
-                              // Settle checkout flow
-                              // Map active session items to cart format
-                              const mapped = (activeSession.items || []).map(it => ({
-                                product_id: it.product_id || it.menu_item_id,
-                                name: it.name,
-                                price: it.price,
-                                quantity: it.qty,
-                                subtotal: (it.price || 0) * (it.qty || 1),
-                                note: it.notes
-                              }));
-                              setCart(mapped);
-                              setViewMode("catalog");
-                            }}
+                            onClick={() => setSettleOpen(true)}
                             className="btn-primary py-2.5 text-xs font-bold"
+                            data-testid="settle-open-btn"
                           >
-                            Checkout Settle
+                            Bayar &amp; Tutup Meja
                           </button>
                         ) : (
                           <button
@@ -1209,6 +1230,7 @@ export default function POS() {
                 </div>
               </div>
 
+              {!isDineIn && (
               <div className="text-left">
                 <label className="label-tiny mb-2 block">Metode Pembayaran</label>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
@@ -1232,8 +1254,9 @@ export default function POS() {
                           data-testid="pm-edc"><CreditCard size={12} className="mx-auto mb-1" />EDC EDC</button>
                 </div>
               </div>
+              )}
 
-              {paymentMethod === "cash" && (
+              {!isDineIn && paymentMethod === "cash" && (
                 <div data-testid="pm-cash-details" className="text-left">
                   <label className="label-tiny">Diterima Tunai (Rp)</label>
                   <input className="input-field mt-1 py-2 text-sm" type="number" value={cashReceived}
@@ -1243,10 +1266,30 @@ export default function POS() {
                       {change >= 0 ? `Kembalian: ${fmtIDR(change)}` : `Kurang: ${fmtIDR(-change)}`}
                     </p>
                   )}
+                  {/* Keypad numerik */}
+                  <div className="grid grid-cols-3 gap-1.5 mt-2" data-testid="cash-keypad">
+                    {["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "back"].map((k) => (
+                      <button key={k} type="button" onClick={() => keypadPress(k)}
+                              className="py-2.5 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-sm font-bold hover:bg-[hsl(var(--secondary))]"
+                              data-testid={`keypad-${k}`}>
+                        {k === "back" ? "⌫" : k}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                    <button type="button" onClick={() => setCashReceived(String(Math.ceil(total)))}
+                            className="py-2 rounded-md text-xs font-bold border border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10" data-testid="keypad-exact">
+                      Uang Pas
+                    </button>
+                    <button type="button" onClick={() => setCashReceived("")}
+                            className="py-2 rounded-md text-xs font-bold border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))]" data-testid="keypad-clear">
+                      Hapus
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {paymentMethod === "ewallet" && (
+              {!isDineIn && paymentMethod === "ewallet" && (
                 <div data-testid="pm-ewallet-details" className="text-left">
                   <label className="label-tiny">Pilih E-Wallet</label>
                   <div className="grid grid-cols-2 gap-1.5 mt-1">
@@ -1261,11 +1304,11 @@ export default function POS() {
 
               <button
                 onClick={checkout}
-                disabled={submitting || cart.length === 0 || (paymentMethod === "cash" && (parseFloat(cashReceived || 0) < total))}
+                disabled={submitting || cart.length === 0 || (!isDineIn && paymentMethod === "cash" && (parseFloat(cashReceived || 0) < total))}
                 className="btn-primary w-full py-3"
                 data-testid="checkout-btn"
               >
-                {submitting ? "Memproses…" : `Bayar ${fmtIDR(total)}`}
+                {submitting ? "Memproses…" : (isDineIn ? "Kirim Pesanan ke Dapur" : `Bayar ${fmtIDR(total)}`)}
               </button>
             </div>
           </aside>
@@ -1297,6 +1340,27 @@ export default function POS() {
             >
               Batal
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Settle Meja (Bayar & Tutup) Modal */}
+      {settleOpen && selectedTable && activeSession && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" onClick={() => setSettleOpen(false)}>
+          <div className="card-surface bg-white p-6 w-full max-w-sm space-y-4 text-left" onClick={(e) => e.stopPropagation()} data-testid="settle-modal">
+            <div className="border-b border-[hsl(var(--border))] pb-3">
+              <h2 className="font-display text-lg font-bold">Bayar &amp; Tutup Meja</h2>
+              <span className="text-[11px] text-[hsl(var(--muted))]">Meja {selectedTable.label} · Total {fmtIDR(activeSession.grand_total || 0)}</span>
+            </div>
+            <p className="text-xs text-[hsl(var(--muted))]">Pilih metode pembayaran yang diterima dari pelanggan:</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[{ m: "cash", l: "Tunai" }, { m: "qris", l: "QRIS" }, { m: "ewallet", l: "E-Wallet" }, { m: "edc", l: "Kartu / EDC" }].map(({ m, l }) => (
+                <button key={m} type="button" disabled={submitting} onClick={() => settleDineIn(m)}
+                        className="py-3 rounded-xl border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] text-sm font-bold disabled:opacity-60"
+                        data-testid={`settle-${m}`}>{l}</button>
+              ))}
+            </div>
+            <button type="button" onClick={() => setSettleOpen(false)} className="btn-ghost w-full text-xs py-2">Batal</button>
           </div>
         </div>
       )}

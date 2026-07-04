@@ -175,7 +175,6 @@ export default function AppLayout() {
         { to: `${prefix}/settings/license`, label: "Lisensi" }
       ]
     },
-    { to: `${prefix}/settings/billing`, icon: CreditCard, label: "Langganan & Tagihan", key: "billing" },
     { to: `${prefix}/about`, icon: Info, label: "Tentang", key: "about" }
   ];
 
