@@ -80,7 +80,7 @@ export default function Login() {
           </ul>
         </div>
 
-        <p className="relative text-white/40 text-xs">© 2026 DapurOS · Ekosistem DagangOS</p>
+        <p className="relative text-white/40 text-xs">© 2026 DapurOS · DagangOS Digital Indonesia</p>
       </div>
 
       {/* Form */}
