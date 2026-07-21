@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
 import { CreditCard, Check } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 export default function SupplierInvoice() {
   const [invoices, setInvoices] = useState([]);
@@ -15,11 +16,15 @@ export default function SupplierInvoice() {
 
   const handlePay = (id) => {
     if (confirm("Konfirmasi pembayaran faktur supplier ini?")) {
-      // In mockDb, we can adjust the invoice record to paid
-      // Let's call mock API
-      api.post("/purchase/invoices", { id, status: "Paid" }).then(() => {
+      // HISTORY: this used to POST {id, status: "Paid"} straight to the CREATE endpoint,
+      // which ignores 'id' and requires invoice_no/po_no/amount/due_date that were never
+      // sent -- always 422'd, silently (no .catch()). Real fix: PUT to the invoice's own
+      // URL. This exact bug also exists on GerainaOS; fixed there too.
+      api.put(`/purchase/invoices/${id}`, { status: "Paid" }).then(() => {
         fetchInvoices();
-        alert("Faktur berhasil ditandai Lunas!");
+        toast.success("Faktur berhasil ditandai Lunas!");
+      }).catch((err) => {
+        toast.error(err?.response?.data?.detail || "Gagal menandai faktur lunas.");
       });
     }
   };
