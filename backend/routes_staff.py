@@ -1,10 +1,11 @@
 """Staff and Attendance logging routes."""
+import secrets
 import uuid
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from database import get_db, utcnow
 from models import Staff, StaffBase, Attendance, AttendanceCreate
-from auth import get_current_user
+from auth import get_current_user, require_admin
 
 router = APIRouter(tags=["staff"])
 
@@ -15,8 +16,8 @@ async def list_staff(user: dict = Depends(get_current_user)):
     cursor = db.staff.find({"store_id": user["store_id"]}, {"_id": 0}).sort("name", 1)
     return await cursor.to_list(length=100)
 
-@router.post("/api/staff", response_model=Staff)
-async def create_staff(payload: StaffBase, user: dict = Depends(get_current_user)):
+@router.post("/api/staff")
+async def create_staff(payload: StaffBase, user: dict = Depends(require_admin)):
     db = get_db()
     existing = await db.staff.find_one({"store_id": user["store_id"], "email": payload.email})
     if existing:
@@ -32,15 +33,18 @@ async def create_staff(payload: StaffBase, user: dict = Depends(get_current_user
         "created_at": utcnow().isoformat()
     }
     await db.staff.insert_one(doc)
-    
-    # Also auto-create a user login credential in the users collection with a default password (e.g. geraina123)
+
+    # Also auto-create a user login credential in the users collection with a randomly
+    # generated password (never a hardcoded default) — returned once so the admin can share it.
     from auth import hash_password
+    generated_password = None
     user_existing = await db.users.find_one({"email": payload.email})
     if not user_existing:
+        generated_password = secrets.token_urlsafe(9)
         user_doc = {
             "id": doc["id"],
             "email": payload.email,
-            "password_hash": hash_password("geraina123"),
+            "password_hash": hash_password(generated_password),
             "role": payload.role,
             "store_id": user["store_id"],
             "store_name": user.get("store_name", "Toko Anda"),
@@ -49,12 +53,14 @@ async def create_staff(payload: StaffBase, user: dict = Depends(get_current_user
             "created_at": utcnow().isoformat(),
         }
         await db.users.insert_one(user_doc)
-        
+
     doc.pop("_id", None)
+    if generated_password:
+        doc["generated_password"] = generated_password
     return doc
 
 @router.put("/api/staff/{staff_id}", response_model=Staff)
-async def update_staff(staff_id: str, payload: StaffBase, user: dict = Depends(get_current_user)):
+async def update_staff(staff_id: str, payload: StaffBase, user: dict = Depends(require_admin)):
     db = get_db()
     res = await db.staff.find_one_and_update(
         {"id": staff_id, "store_id": user["store_id"]},
@@ -70,17 +76,17 @@ async def update_staff(staff_id: str, payload: StaffBase, user: dict = Depends(g
     )
     if not res:
         raise HTTPException(status_code=404, detail="Staff tidak ditemukan")
-    
+
     # Keep users collection role in sync
     await db.users.update_one(
         {"id": staff_id},
         {"$set": {"role": payload.role, "email": payload.email}}
     )
-    
+
     return res
 
 @router.delete("/api/staff/{staff_id}")
-async def delete_staff(staff_id: str, user: dict = Depends(get_current_user)):
+async def delete_staff(staff_id: str, user: dict = Depends(require_admin)):
     db = get_db()
     res = await db.staff.delete_one({"id": staff_id, "store_id": user["store_id"]})
     if res.deleted_count == 0:

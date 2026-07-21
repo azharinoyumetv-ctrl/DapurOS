@@ -1,4 +1,5 @@
 """DB connection + helpers."""
+import hashlib
 import os
 from datetime import datetime, timezone, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -37,7 +38,15 @@ def trial_end_iso(days: int = 14) -> str:
 
 
 async def next_order_no(store_id: str) -> str:
-    """Increment order counter per store, generate order no like GR-20260108-0001."""
+    """Increment order counter per store, generate order no like GR-A1B2-20260108-0001.
+
+    The 4-char hex suffix is a short hash of store_id. order_no is the public token that
+    payment webhooks (e.g. Xendit) match against to flip payment_status — without a
+    store-specific component here, two different stores could get an identical order_no
+    on the same day (both counters reset daily), letting a webhook for one store's payment
+    mark a different store's order as paid. The suffix makes that collision practically
+    impossible while keeping the string short enough for a receipt.
+    """
     db = get_db()
     today = utcnow().strftime("%Y%m%d")
     key = f"{store_id}:{today}"
@@ -48,4 +57,5 @@ async def next_order_no(store_id: str) -> str:
         return_document=True,
     )
     seq = res.get("seq", 1) if res else 1
-    return f"GR-{today}-{seq:04d}"
+    store_suffix = hashlib.sha1(store_id.encode()).hexdigest()[:4].upper()
+    return f"GR-{store_suffix}-{today}-{seq:04d}"

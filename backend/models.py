@@ -1,6 +1,6 @@
 """Geraina POS by DagangOS - Backend Models."""
 from datetime import datetime, timezone
-from typing import List, Optional, Any, Annotated
+from typing import List, Optional, Any, Annotated, Literal
 import uuid
 from pydantic import BaseModel, EmailStr, Field, BeforeValidator, ConfigDict
 
@@ -326,7 +326,7 @@ class DebtPayable(DebtPayableCreate):
 class StaffBase(BaseModel):
     name: str
     email: EmailStr
-    role: str
+    role: Literal["Owner", "Manager", "Cashier", "Warehouse"]
     phone: Optional[str] = None
     status: str = "Aktif"
 
@@ -487,6 +487,20 @@ class KdsItem(BaseModel):
     qty: int
     notes: Optional[str] = None
     status: str = "Pending" # Pending | Cooking | Ready | Served
+
+# ---------- Expenses (Laporan Laba Rugi & Arus Kas) ----------
+class ExpenseCreate(BaseModel):
+    category: str  # e.g. "Sewa", "Gaji", "Listrik", "Bahan Baku", "Lainnya"
+    description: Optional[str] = None
+    amount: float = Field(gt=0)
+    expense_date: str  # ISO date the expense was incurred (not necessarily today)
+
+class Expense(ExpenseCreate):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    store_id: str
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=utcnow_iso)
+
 
 class KdsTicket(BaseModel):
     model_config = ConfigDict(extra="ignore")
