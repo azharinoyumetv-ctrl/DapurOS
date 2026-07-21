@@ -1251,7 +1251,7 @@ export default function POS() {
                           data-testid="pm-credit"><CreditCard size={12} className="mx-auto mb-1 text-amber-500" />Kartu Kredit</button>
                   <button onClick={() => setPaymentMethod("edc")}
                           className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "edc" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-edc"><CreditCard size={12} className="mx-auto mb-1" />EDC EDC</button>
+                          data-testid="pm-edc"><CreditCard size={12} className="mx-auto mb-1" />Kartu (EDC)</button>
                 </div>
               </div>
               )}

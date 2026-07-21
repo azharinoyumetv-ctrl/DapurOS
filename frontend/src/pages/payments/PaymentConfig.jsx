@@ -6,6 +6,13 @@ import { toast } from "@/components/ui/sonner";
 
 import { Link } from "react-router-dom";
 
+const EDC_BANKS = [
+  { id: "bca", label: "BCA" },
+  { id: "mandiri", label: "Mandiri" },
+  { id: "bri", label: "BRI" },
+  { id: "bni", label: "BNI" },
+];
+
 const DEFAULT_PAYMENT_CONFIG = {
   cash: { is_active: true, provider: "Sistem Kasir Lokal", require_drawer: true, active_drawer_port: "COM3" },
   qris: { is_active: true, provider: "Xendit", type: "dynamic", merchant_id: "MID-DPR-QRIS-99", callback_status: "Active" },
@@ -19,7 +26,7 @@ const DEFAULT_PAYMENT_CONFIG = {
     provider: "Midtrans",
     banks: { BCA: true, BNI: true, BRI: true, Mandiri: true, Permata: true, CIMB: true, Maybank: false, Danamon: false, Neo: false, BSI: true }
   },
-  debit_card: { is_active: true, provider: "Mesin EDC Multibank", edc_brand: "BCA EDC Dual Merchant", terminal_id: "TID-8829102", merchant_id: "MID-DEBIT-001", enable_surcharge: false, surcharge_percent: 0 },
+  debit_card: { is_active: false, provider: "", edc_brand: "", terminal_id: "", merchant_id: "", enable_surcharge: false, surcharge_percent: 0 },
   credit_card: { is_active: true, provider: "Stripe", enable_3ds: true, merchant_id: "MID-CC-88219", installment_banks: ["Mandiri", "BCA", "CIMB"] },
   bank_transfer: { is_active: true, accounts: [{ bank: "Bank Central Asia", account_no: "8820987111", account_name: "DagangOS DapurOS POS" }] }
 };
@@ -246,14 +253,34 @@ export default function PaymentConfig() {
                 className="rounded border-[hsl(var(--border))]"
               />
             </div>
+            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs leading-relaxed">
+              Integrasi EDC memerlukan SDK resmi dan proses sertifikasi dari bank terkait sebelum bisa memproses transaksi kartu sungguhan secara elektronik. Memilih bank di bawah hanya menyimpan preferensi Anda — belum mengaktifkan pemrosesan otomatis. Kasir tetap menggesek/tap kartu langsung di mesin EDC fisik dan mengonfirmasi manual di POS setelah disetujui, seperti biasa.
+            </div>
+            <div className="flex flex-col space-y-1 pb-2">
+              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Bank EDC</label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-1">
+                {EDC_BANKS.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), provider: b.id } })}
+                    className={`p-3 rounded-lg border text-left ${config?.debit_card?.provider === b.id ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5" : "border-[hsl(var(--border))]"}`}
+                  >
+                    <p className="text-sm font-semibold">{b.label}</p>
+                    <p className="text-[10px] text-amber-600 font-semibold mt-1">Belum Tersedia</p>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Merk / Tipe Mesin EDC</label>
                 <select
-                  value={config?.debit_card?.edc_brand || "BCA EDC Dual Merchant"}
+                  value={config?.debit_card?.edc_brand || ""}
                   onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), edc_brand: e.target.value } })}
                   className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
                 >
+                  <option value="">Pilih merk mesin...</option>
                   <option value="BCA EDC Dual Merchant">BCA EDC Dual Merchant</option>
                   <option value="Mandiri EDC Android">Mandiri EDC Android</option>
                   <option value="BRI EDC Smart">BRI EDC Smart</option>
@@ -265,7 +292,7 @@ export default function PaymentConfig() {
                 <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Terminal ID (TID)</label>
                 <input
                   type="text"
-                  value={config?.debit_card?.terminal_id || "TID-8829102"}
+                  value={config?.debit_card?.terminal_id || ""}
                   onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), terminal_id: e.target.value } })}
                   className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
                   placeholder="Contoh: TID-998231"
@@ -277,7 +304,7 @@ export default function PaymentConfig() {
                 <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Merchant ID (MID)</label>
                 <input
                   type="text"
-                  value={config?.debit_card?.merchant_id || "MID-DEBIT-001"}
+                  value={config?.debit_card?.merchant_id || ""}
                   onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), merchant_id: e.target.value } })}
                   className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
                   placeholder="Contoh: MID-88291"
@@ -432,7 +459,7 @@ export default function PaymentConfig() {
     { id: "qris", label: "QRIS", path: "/dapuros/app/payments/qris" },
     { id: "ewallet", label: "E-Wallet", path: "/dapuros/app/payments/ewallet" },
     { id: "va", label: "Virtual Account", path: "/dapuros/app/payments/va" },
-    { id: "debit_card", label: "Kartu Debit", path: "/dapuros/app/payments/debit-card" },
+    { id: "debit_card", label: "Kartu Debit (EDC)", path: "/dapuros/app/payments/debit-card" },
     { id: "credit_card", label: "Kartu Kredit", path: "/dapuros/app/payments/credit-card" },
     { id: "bank_transfer", label: "Transfer Bank", path: "/dapuros/app/payments/bank-transfer" }
   ];

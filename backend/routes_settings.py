@@ -18,7 +18,7 @@ async def get_settings(user: dict = Depends(get_current_user)):
         return {
             "general": { "store_name": user.get("store_name", "Toko Senja"), "currency": "IDR", "timezone": "WIB (UTC+7)", "language": "id" },
             "receipt": { "header_text": "Terima Kasih Telah Berkunjung!", "footer_text": "Powered by DagangOS - Struk Resmi", "show_logo": True, "show_cashier": True },
-            "printer": { "default_printer": "Bluetooth 80mm", "paper_size": "80mm", "auto_print": True }
+            "printer": { "mode": "local", "default_printer": "Bluetooth 80mm", "paper_size": "80mm", "auto_print": True, "printer_ip": "", "printer_port": 9100, "bridge_port": 9899 }
         }
     return res
 
@@ -61,6 +61,7 @@ async def get_payments_config(user: dict = Depends(get_current_user)):
                     "CIMB": False, "Maybank": False, "Danamon": False, "Neo": False, "BSI": False
                 }
             },
+            "debit_card": { "is_active": False, "provider": "", "edc_brand": "", "terminal_id": "", "merchant_id": "", "enable_surcharge": False, "surcharge_percent": 0 },
             "credit_card": { "is_active": False, "provider": "Stripe", "enable_3ds": True, "installment_banks": [] },
             "bank_transfer": { "is_active": False, "accounts": [] }
         }
