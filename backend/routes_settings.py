@@ -97,7 +97,7 @@ async def get_integrations(user: dict = Depends(get_current_user)):
             "xendit": { "is_active": False, "secret_key": "", "webhook_token": "" },
             "midtrans": { "is_active": False, "client_key": "", "server_key": "" },
             "stripe": { "is_active": False, "publishable_key": "", "secret_key": "" },
-            "whatsapp": { "is_active": False, "provider": "", "api_token": "", "auto_send_receipt": False },
+            "whatsapp": { "is_active": False, "phone_number_id": "", "access_token": "", "app_secret": "", "webhook_verify_token": "", "template_receipt": "dagangos_order_receipt", "template_receipt_lang": "id", "template_po": "dagangos_po_notify", "template_po_lang": "id", "auto_send_receipt": False },
             "telegram": { "is_active": False, "bot_token": "", "chat_id": "" },
             "email": { "is_active": False, "smtp_host": "", "smtp_port": 587, "smtp_user": "" },
             "doku": { "is_active": False, "client_id": "", "shared_key": "", "environment": "sandbox", "preferred_channel": "all" }
@@ -107,6 +107,21 @@ async def get_integrations(user: dict = Depends(get_current_user)):
 @router.post("/api/integrations")
 async def save_integrations(payload: Dict[str, Any], user: dict = Depends(require_admin)):
     db = get_db()
+
+    # WhatsApp inbound routing/signature verification key on webhook_verify_token and
+    # phone_number_id being unique per tenant -- a collision lets one store's Meta verification
+    # overwrite another store's saved phone_number_id. Reject collisions up front. Added when
+    # migrating whatsapp off the old Fonnte/Wablas gateway shape onto Meta Cloud API (mirrors
+    # GerainaOS).
+    wa = payload.get("whatsapp") or {}
+    verify_token = str(wa.get("webhook_verify_token") or "").strip()
+    if verify_token:
+        clash = await db.integrations.find_one({
+            "whatsapp.webhook_verify_token": verify_token,
+            "store_id": {"$ne": user["store_id"]},
+        })
+        if clash:
+            raise HTTPException(status_code=400, detail="Webhook Verify Token WhatsApp ini sudah dipakai toko lain — pilih string yang unik")
 
     # DOKU's Client-Id is how the inbound webhook resolves which tenant's shared_key to
     # verify the HMAC signature against (see routes_webhooks.py _process_doku) -- two stores
@@ -147,17 +162,24 @@ async def save_integrations(payload: Dict[str, Any], user: dict = Depends(requir
     return res
 
 @router.post("/api/integrations/whatsapp/test")
-async def test_whatsapp(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
-    """Kirim pesan tes WhatsApp memakai kredensial yang sedang diisi (tak perlu simpan dulu)."""
-    from whatsapp_client import send_whatsapp
+async def test_whatsapp(payload: Dict[str, Any], user: dict = Depends(require_admin)):
+    """Kirim pesan tes WhatsApp memakai kredensial yang sedang diisi (tak perlu simpan dulu).
+
+    Pakai template 'hello_world' -- template utility bawaan yang otomatis tersedia & disetujui
+    di setiap WABA baru tanpa perlu approval Meta dulu, jadi tombol tes ini langsung bisa
+    memverifikasi kredensial & koneksi hari ini juga, sebelum template struk/PO kustom
+    (dagangos_order_receipt / dagangos_po_notify) selesai disetujui Meta. Mirrors GerainaOS
+    (also tightened from get_current_user to require_admin to match)."""
+    from whatsapp_client import send_meta_message
     target = str(payload.get("target") or "").strip()
     if not target:
         raise HTTPException(status_code=400, detail="Nomor tujuan wajib diisi")
-    token = str(payload.get("api_token") or "").strip()
-    if not token:
-        raise HTTPException(status_code=400, detail="API token WhatsApp belum diisi")
-    cfg = {"is_active": True, "provider": payload.get("provider") or "fonnte", "api_token": token}
-    return await send_whatsapp(cfg, target, "Tes koneksi WhatsApp DagangOS berhasil.")
+    phone_number_id = str(payload.get("phone_number_id") or "").strip()
+    access_token = str(payload.get("access_token") or "").strip()
+    if not phone_number_id or not access_token:
+        raise HTTPException(status_code=400, detail="Phone Number ID dan Access Token WhatsApp belum diisi")
+    cfg = {"is_active": True, "phone_number_id": phone_number_id, "access_token": access_token}
+    return await send_meta_message(cfg, target, template_name="hello_world", params=[], lang="en_US")
 
 # ---------- Tenant Billing & Subscription ----------
 @router.get("/api/billing")
