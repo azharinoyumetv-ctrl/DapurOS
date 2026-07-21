@@ -23,7 +23,8 @@ export default function Integrations() {
     qris: { is_active: false, nmid: "", merchant_name: "" },
     whatsapp: { is_active: false, provider: "", api_token: "" },
     telegram: { is_active: false, bot_token: "", chat_id: "" },
-    email: { is_active: false, smtp_host: "", smtp_port: 587, smtp_user: "" }
+    email: { is_active: false, smtp_host: "", smtp_port: 587, smtp_user: "" },
+    doku: { is_active: false, client_id: "", shared_key: "", environment: "sandbox", preferred_channel: "all" }
   });
 
   // Same unsequenced-GET race fixed in GerainaOS's Integrations.jsx: this effect re-fires on
@@ -244,6 +245,68 @@ export default function Integrations() {
           </div>
         );
 
+      case "doku":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold">Aktifkan DOKU Gateway</label>
+              <input
+                type="checkbox"
+                checked={integrations.doku?.is_active || false}
+                onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, is_active: e.target.checked } })}
+                className="rounded border-[hsl(var(--border))]"
+              />
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Client ID</label>
+                <input
+                  type="text"
+                  value={integrations.doku?.client_id || ""}
+                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, client_id: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Shared Key</label>
+                <input
+                  type="password"
+                  value={integrations.doku?.shared_key || ""}
+                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, shared_key: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Environment</label>
+                <select
+                  value={integrations.doku?.environment || "sandbox"}
+                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, environment: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
+                >
+                  <option value="sandbox">Sandbox (Uji Coba)</option>
+                  <option value="production">Production (Live)</option>
+                </select>
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Saluran Pembayaran</label>
+                <select
+                  value={integrations.doku?.preferred_channel || "all"}
+                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, preferred_channel: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
+                >
+                  <option value="all">Semua Saluran</option>
+                  <option value="va">Virtual Account Saja</option>
+                  <option value="ewallet">E-Wallet Saja</option>
+                  <option value="minimart">Minimarket Saja</option>
+                </select>
+              </div>
+            </div>
+            <p className="text-[11px] text-[hsl(var(--muted))]">Gunakan kredensial DOKU milik toko Anda sendiri (Client ID &amp; Shared Key dari DOKU Merchant Dashboard). Webhook callback: <code>https://api.dagangos.com/api/webhooks/doku</code>.</p>
+          </div>
+        );
+
       case "telegram":
         return (
           <div className="space-y-4">
@@ -333,6 +396,7 @@ export default function Integrations() {
     { id: "midtrans", label: "Midtrans", path: "/dapuros/app/integrations/midtrans" },
     { id: "stripe", label: "Stripe", path: "/dapuros/app/integrations/stripe" },
     { id: "qris", label: "QRIS", path: "/dapuros/app/integrations/qris" },
+    { id: "doku", label: "DOKU", path: "/dapuros/app/integrations/doku" },
     { id: "whatsapp", label: "WhatsApp", path: "/dapuros/app/integrations/whatsapp" },
     { id: "telegram", label: "Telegram", path: "/dapuros/app/integrations/telegram" },
     { id: "email", label: "Email SMTP", path: "/dapuros/app/integrations/email" }

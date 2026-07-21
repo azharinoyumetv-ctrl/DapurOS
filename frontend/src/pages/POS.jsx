@@ -5,7 +5,8 @@ import { useAuth } from "@/auth/AuthContext";
 import {
   Search, Plus, Minus, Trash2, X, Printer, Download, CheckCircle2,
   Banknote, QrCode, Smartphone, RefreshCw, Barcode, Store, ChefHat,
-  CreditCard, ChevronRight, Layers, ArrowLeft, RefreshCw as LoopIcon, Wifi, WifiOff, Edit, Edit3
+  CreditCard, ChevronRight, Layers, ArrowLeft, RefreshCw as LoopIcon, Wifi, WifiOff, Edit, Edit3,
+  Landmark
 } from "lucide-react";
 
 const EWALLET_CHANNELS = [
@@ -76,6 +77,15 @@ function ReceiptDialog({ order, onClose }) {
             <p className="text-sm mb-2">Lanjutkan pembayaran di:</p>
             <a href={o.xendit_checkout_url} target="_blank" rel="noreferrer" className="btn-accent" data-testid="ewallet-open-link">
               Buka {o.ewallet_channel}
+            </a>
+          </div>
+        )}
+
+        {o.payment_method === "doku" && o.doku_checkout_url && !isPaid && (
+          <div className="text-center mb-4" data-testid="doku-display">
+            <p className="text-sm mb-2">Lanjutkan pembayaran DOKU (VA/E-Wallet/Minimarket) di:</p>
+            <a href={o.doku_checkout_url} target="_blank" rel="noreferrer" className="btn-accent" data-testid="doku-open-link">
+              Buka Halaman Pembayaran DOKU
             </a>
           </div>
         )}
@@ -1233,7 +1243,7 @@ export default function POS() {
               {!isDineIn && (
               <div className="text-left">
                 <label className="label-tiny mb-2 block">Metode Pembayaran</label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+                <div className="grid grid-cols-3 sm:grid-cols-7 gap-1">
                   <button onClick={() => setPaymentMethod("cash")}
                           className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "cash" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
                           data-testid="pm-cash"><Banknote size={12} className="mx-auto mb-1" />Tunai</button>
@@ -1243,6 +1253,9 @@ export default function POS() {
                   <button onClick={() => setPaymentMethod("ewallet")}
                           className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "ewallet" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
                           data-testid="pm-ewallet"><Smartphone size={12} className="mx-auto mb-1" />E-Wallet</button>
+                  <button onClick={() => setPaymentMethod("doku")}
+                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "doku" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
+                          data-testid="pm-doku"><Landmark size={12} className="mx-auto mb-1" />DOKU (VA)</button>
                   <button onClick={() => setPaymentMethod("debit")}
                           className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "debit" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
                           data-testid="pm-debit"><CreditCard size={12} className="mx-auto mb-1" />Kartu Debit</button>

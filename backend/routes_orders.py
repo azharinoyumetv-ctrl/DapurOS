@@ -8,6 +8,7 @@ from database import get_db, utcnow, next_order_no
 from models import OrderCreate, Order, OrderLineItem
 from auth import get_current_user, require_admin
 from xendit_client import create_qris, create_ewallet_charge
+from doku_client import create_doku_checkout, DokuNotConfiguredError
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -89,7 +90,100 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
         "updated_at": utcnow().isoformat(),
     }
 
+    # Payment gateway calls resolved BEFORE stock/KDS side effects below -- a misconfigured
+    # or failed gateway must fail the request cleanly (no stock decrement, no kitchen ticket,
+    # no order) instead of silently sending an unpayable order to the kitchen. An earlier
+    # version swallowed this exception into xendit_raw only, which the frontend never
+    # surfaces (POS.jsx only renders the QR/link block when xendit_qr_string /
+    # xendit_checkout_url is present) -- customer and cashier saw nothing, silently, while
+    # stock was already decremented and a KDS ticket already fired for a sale nobody could
+    # actually pay for. Same class of fix as GerainaOS's routes_orders.py.
+    #
+    # Xendit/DOKU are both BYO per-store: credentials come from this store's own
+    # integrations.{xendit,doku} config entered via Pengaturan > Integrasi, never a shared/
+    # global key. (xendit_client.py used to read a single global XENDIT_SECRET_KEY env var
+    # instead -- meaning a merchant's own saved key was silently never used for their own
+    # store's transactions. Fixed to match DOKU/WhatsApp's per-tenant pattern.)
+    integ = await db.integrations.find_one({"store_id": user["store_id"]}, {"_id": 0}) if payload.payment_method in ("qris", "ewallet", "doku") else None
+
+    if payload.payment_method == "qris":
+        xendit_cfg = (integ or {}).get("xendit") or {}
+        try:
+            res = await create_qris(cfg=xendit_cfg, external_id=order_no, amount=int(round(calc["total"])))
+        except Exception as e:
+            # 400, not 502: this is a "not configured / gateway declined" business outcome,
+            # not an actual gateway failure -- Cloudflare intercepts 502/504/52x responses
+            # from the origin and replaces them with its own generic error page.
+            raise HTTPException(status_code=400, detail=f"QRIS belum dikonfigurasi atau gagal membuat kode QR ({e}). Atur Xendit di Pengaturan > Integrasi.")
+        # v3 Payment Request API: id is payment_request_id, not id -- and QR string lives
+        # in an actions[] entry (already flattened onto res["qr_string"] by create_qris).
+        doc["xendit_id"] = res.get("payment_request_id") or res.get("id")
+        doc["xendit_reference_id"] = order_no
+        doc["xendit_qr_string"] = res.get("qr_string")
+        doc["xendit_raw"] = res
+    elif payload.payment_method == "ewallet":
+        if not payload.ewallet_channel:
+            raise HTTPException(status_code=400, detail="ewallet_channel wajib untuk e-wallet")
+        xendit_cfg = (integ or {}).get("xendit") or {}
+        try:
+            res = await create_ewallet_charge(
+                cfg=xendit_cfg,
+                reference_id=order_no,
+                amount=int(round(calc["total"])),
+                channel_code=payload.ewallet_channel,
+                customer_phone=payload.customer_phone,
+                customer_email=payload.customer_email,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"E-Wallet belum dikonfigurasi atau gagal memulai pembayaran ({e}). Atur Xendit di Pengaturan > Integrasi.")
+        # Same v3 shape as QRIS above -- checkout_url already flattened by
+        # create_ewallet_charge from the actions[] entry.
+        doc["xendit_id"] = res.get("payment_request_id") or res.get("id")
+        doc["xendit_reference_id"] = order_no
+        doc["xendit_checkout_url"] = res.get("checkout_url")
+        doc["xendit_raw"] = res
+    elif payload.payment_method == "doku":
+        doku_cfg = (integ or {}).get("doku") or {}
+        return_base = os.environ.get("DOKU_RETURN_URL", "https://dagangos.com/dapuros/app/pos")
+        try:
+            res = await create_doku_checkout(
+                cfg=doku_cfg,
+                order_id=order_no,
+                amount=int(round(calc["total"])),
+                callback_url=f"{return_base}?order={order_no}",
+                callback_url_result=f"{return_base}?order={order_no}",
+                customer_name=payload.customer_name,
+                customer_email=payload.customer_email,
+                customer_phone=payload.customer_phone,
+            )
+        except DokuNotConfiguredError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"DOKU gagal membuat pembayaran ({e}). Atur DOKU di Pengaturan > Integrasi.")
+        # From this point DOKU has already committed the transaction on its own side
+        # (invoice created, may already have emailed the customer a payment link) -- nothing
+        # below may raise and lose the order, or DapurOS ends up with a real pending DOKU
+        # payment with zero local record (the webhook later no-ops silently since there's no
+        # matching order_no to update). Parse defensively: an unexpected response shape must
+        # degrade to missing fields, never an exception.
+        doku_payment: dict = {}
+        try:
+            resp_block = res.get("response") if isinstance(res, dict) else None
+            if isinstance(resp_block, dict) and isinstance(resp_block.get("payment"), dict):
+                doku_payment = resp_block["payment"]
+            elif isinstance(res, dict) and isinstance(res.get("payment"), dict):
+                doku_payment = res["payment"]
+        except Exception:
+            doku_payment = {}
+        doc["doku_id"] = ((res.get("order") or {}).get("invoice_number") if isinstance(res, dict) else None) or order_no
+        doc["doku_token_id"] = doku_payment.get("token_id")
+        doc["doku_checkout_url"] = doku_payment.get("url") or doku_payment.get("checkout_url")
+        doc["doku_raw"] = res
+
     # Reduce stock atomically (supports BOM recipe-level deduction or standard product stock)
+    # -- only after the payment gateway step above succeeded (or wasn't needed), so a failed
+    # qris/ewallet/doku init never leaves stock decremented or a KDS ticket fired for an
+    # order that was never actually payable.
     for it in payload.items:
         prod = await db.products.find_one({"id": it.product_id, "store_id": user["store_id"]})
         if prod and prod.get("recipe"):
@@ -162,40 +256,16 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
     except Exception:
         pass
 
-    # Xendit integrations
-    if payload.payment_method == "qris":
-        try:
-            res = await create_qris(external_id=order_no, amount=int(round(calc["total"])))
-            doc["xendit_id"] = res.get("id")
-            doc["xendit_reference_id"] = order_no
-            doc["xendit_qr_string"] = res.get("qr_string")
-            doc["xendit_raw"] = res
-        except Exception as e:
-            doc["xendit_raw"] = {"error": str(e)}
-    elif payload.payment_method == "ewallet":
-        if not payload.ewallet_channel:
-            raise HTTPException(status_code=400, detail="ewallet_channel wajib untuk e-wallet")
-        try:
-            res = await create_ewallet_charge(
-                reference_id=order_no,
-                amount=int(round(calc["total"])),
-                channel_code=payload.ewallet_channel,
-                customer_phone=payload.customer_phone,
-                customer_email=payload.customer_email,
-            )
-            doc["xendit_id"] = res.get("id")
-            doc["xendit_reference_id"] = order_no
-            actions = res.get("actions") or {}
-            doc["xendit_checkout_url"] = (
-                actions.get("desktop_web_checkout_url")
-                or actions.get("mobile_web_checkout_url")
-                or actions.get("mobile_deeplink_checkout_url")
-            )
-            doc["xendit_raw"] = res
-        except Exception as e:
-            doc["xendit_raw"] = {"error": str(e)}
-
-    await db.orders.insert_one(doc)
+    try:
+        await db.orders.insert_one(doc)
+    except Exception:
+        # Gateway (if any) already committed externally by this point, so losing the order
+        # here would be worse than a slightly incomplete record. Retry once with the raw
+        # gateway payload stripped, in case an oversized/odd-shaped doku_raw/xendit_raw blob
+        # was what BSON choked on.
+        doc.pop("doku_raw", None)
+        doc.pop("xendit_raw", None)
+        await db.orders.insert_one(doc)
 
     # Auto-kirim struk ke WhatsApp pelanggan (best-effort; toggle "Kirim Struk Otomatis")
     try:

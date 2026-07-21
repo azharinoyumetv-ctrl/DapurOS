@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 
 from database import get_db
+from doku_client import verify_doku_signature, map_doku_status
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
@@ -145,4 +146,96 @@ async def simulate_stripe_webhook(payload: dict, req: Request):
     if mapped["status"] == "SUCCEEDED":
         mapped["status"] = "SUCCEEDED"
     await _process(mapped)
+    return {"ok": True}
+
+
+# ---------- DOKU ----------
+# Single shared URL for every tenant: https://api.dagangos.com/api/webhooks/doku
+# Each store's own DOKU merchant account is configured (BYO) to call back here. DOKU's
+# inbound Client-Id header tells us which tenant's shared_key to verify the HMAC signature
+# against -- nothing from the payload is trusted or acted on until that store's own key
+# verifies it. Ported from GerainaOS/backend/routes_webhooks.py.
+
+async def _process_doku(raw_body: bytes, headers: dict):
+    db = get_db()
+    client_id = headers.get("client-id", "")
+    request_id = headers.get("request-id", "")
+    timestamp = headers.get("request-timestamp", "")
+    signature = headers.get("signature", "")
+    if not client_id:
+        return
+
+    tenant = await db.integrations.find_one({"doku.client_id": client_id})
+    if not tenant:
+        return
+    doku_cfg = tenant.get("doku") or {}
+    if not doku_cfg.get("is_active"):
+        return
+    shared_key = doku_cfg.get("shared_key") or ""
+
+    ok = verify_doku_signature(
+        client_id=client_id,
+        request_id=request_id,
+        timestamp=timestamp,
+        request_target="/api/webhooks/doku",
+        raw_body=raw_body,
+        shared_key=shared_key,
+        incoming_signature=signature,
+    )
+    if not ok:
+        return
+
+    try:
+        payload = __import__("json").loads(raw_body or b"{}")
+    except Exception:
+        return
+
+    invoice_number = (payload.get("order") or {}).get("invoice_number") or payload.get("invoice_number")
+    if not invoice_number:
+        return
+    new_status = map_doku_status(payload)
+    await db.orders.update_one(
+        {"order_no": invoice_number, "store_id": tenant.get("store_id")},
+        {
+            "$set": {
+                "payment_status": new_status,
+                "doku_webhook_payload": payload,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+
+
+@router.post("/doku")
+async def doku_webhook(req: Request, background: BackgroundTasks):
+    """DOKU always expects a 200 with a specific ack body -- verification failures are
+    logged internally (via _process_doku silently discarding), not surfaced as HTTP errors,
+    since DOKU will otherwise retry-storm an endpoint that 4xx/5xxs it."""
+    raw = await req.body()
+    headers = {k.lower(): v for k, v in req.headers.items()}
+    background.add_task(_process_doku, raw, headers)
+    return {"received": True}
+
+
+@router.post("/doku/simulate")
+async def simulate_doku_webhook(payload: dict, req: Request, store_id: str = ""):
+    """Dev-only DOKU webhook simulator (no signature required). Requires an explicit
+    store_id (same contract as the real handler's Client-Id tenant resolution above) --
+    matching purely by order_no with no store scope at all would be the same cross-tenant
+    collision class already fixed for /xendit's handlers, even though order_no now also
+    carries a store-hash suffix (see next_order_no in database.py) that makes a same-day
+    collision practically impossible on its own."""
+    if (os.environ.get("ALLOW_WEBHOOK_SIMULATE", "false").lower() not in ("1", "true", "yes")):
+        raise HTTPException(status_code=403, detail="Simulator disabled")
+    if not store_id:
+        raise HTTPException(status_code=400, detail="store_id wajib diisi untuk simulator")
+    db = get_db()
+    invoice_number = (payload.get("order") or {}).get("invoice_number") or payload.get("invoice_number")
+    if not invoice_number:
+        return {"ok": False}
+    new_status = map_doku_status(payload)
+    await db.orders.update_one(
+        {"order_no": invoice_number, "store_id": store_id},
+        {"$set": {"payment_status": new_status, "doku_webhook_payload": payload, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
     return {"ok": True}

@@ -99,13 +99,43 @@ async def get_integrations(user: dict = Depends(get_current_user)):
             "stripe": { "is_active": False, "publishable_key": "", "secret_key": "" },
             "whatsapp": { "is_active": False, "provider": "", "api_token": "", "auto_send_receipt": False },
             "telegram": { "is_active": False, "bot_token": "", "chat_id": "" },
-            "email": { "is_active": False, "smtp_host": "", "smtp_port": 587, "smtp_user": "" }
+            "email": { "is_active": False, "smtp_host": "", "smtp_port": 587, "smtp_user": "" },
+            "doku": { "is_active": False, "client_id": "", "shared_key": "", "environment": "sandbox", "preferred_channel": "all" }
         }
     return res
 
 @router.post("/api/integrations")
 async def save_integrations(payload: Dict[str, Any], user: dict = Depends(require_admin)):
     db = get_db()
+
+    # DOKU's Client-Id is how the inbound webhook resolves which tenant's shared_key to
+    # verify the HMAC signature against (see routes_webhooks.py _process_doku) -- two stores
+    # sharing one would let DOKU's callback for store A get matched against store B's saved
+    # order/credentials. Reject collisions up front, same guard GerainaOS applies.
+    doku = payload.get("doku") or {}
+    doku_client_id = str(doku.get("client_id") or "").strip()
+    if doku_client_id:
+        clash = await db.integrations.find_one({
+            "doku.client_id": doku_client_id,
+            "store_id": {"$ne": user["store_id"]},
+        })
+        if clash:
+            raise HTTPException(status_code=400, detail="Client ID DOKU ini sudah dipakai toko lain")
+
+    # Same collision guard for Xendit's webhook_token -- now that Xendit is per-store BYO
+    # (see xendit_client.py history note) rather than a single global key, an inbound
+    # webhook resolving by this token would let a duplicate misroute one store's payment
+    # callbacks onto another's orders.
+    xendit = payload.get("xendit") or {}
+    xendit_token = str(xendit.get("webhook_token") or "").strip()
+    if xendit_token:
+        clash = await db.integrations.find_one({
+            "xendit.webhook_token": xendit_token,
+            "store_id": {"$ne": user["store_id"]},
+        })
+        if clash:
+            raise HTTPException(status_code=400, detail="Webhook Token Xendit ini sudah dipakai toko lain — pilih string yang unik")
+
     update_data = {k: v for k, v in payload.items() if k not in ("_id", "store_id")}
     res = await db.integrations.find_one_and_update(
         {"store_id": user["store_id"]},
