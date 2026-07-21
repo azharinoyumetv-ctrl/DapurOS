@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
 import { Check, ArrowRight, ChevronDown, Utensils } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
+import { toast } from "@/components/ui/sonner";
 
 const JK = "'Plus Jakarta Sans', 'Figtree', sans-serif";
 const ORANGE = "#e8630a";
@@ -31,13 +32,30 @@ export default function Pricing() {
   const [addons, setAddons] = useState([]);
   const [openFaq, setOpenFaq] = useState(null);
   const [billing, setBilling] = useState("monthly");
-  const { user, refresh, setPlan } = useAuth();
+  const { user, refresh } = useAuth();
   const [upgradingId, setUpgradingId] = useState(null);
+  // Whether this authenticated account already has a DapurOS store. null = not checked yet
+  // (don't render either way until known, to avoid flashing the wrong CTA). This is what lets
+  // us show a real "Aktifkan DapurOS" entry point for a DagangOS account that has a store in
+  // another module (e.g. GerainaOS) but not this one -- previously the only way to reach
+  // /dapuros/activate was accidentally, via some unrelated API call once already inside the
+  // app. "Mulai Gratis" in the nav is deliberately anonymous-only (new account + first
+  // store), so it's the wrong CTA for this case by design, not a bug -- this adds the CTA
+  // that was actually missing (mirrors GerainaOS's Pricing.jsx hasGerainaStore).
+  const [hasDapurosStore, setHasDapurosStore] = useState(null);
 
   useEffect(() => {
     api.get("/pricing/tiers").then((r) => setTiers(r.data)).catch(() => {});
     api.get("/pricing/addons").then((r) => setAddons(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!user) { setHasDapurosStore(null); return; }
+    api.get("/auth/me").then((r) => {
+      const stores = r.data?.stores || [];
+      setHasDapurosStore(stores.some((s) => s.module === "dapuros"));
+    }).catch(() => {});
+  }, [user]);
 
   const isYearly = billing === "yearly";
 
@@ -46,10 +64,14 @@ export default function Pricing() {
     try {
       await api.post("/pricing/upgrade", { tier_id: tierId });
       await refresh();
-      alert(`Sukses mengubah paket ke ${tierId.toUpperCase()}!`);
+      toast.success(`Sukses mengubah paket ke ${tierId.toUpperCase()}!`);
     } catch (err) {
-      setPlan(tierId);
-      alert(`Sukses mengubah paket ke ${tierId.toUpperCase()}!`);
+      // Was previously faking success on failure -- calling setPlan(tierId) to force the
+      // displayed plan locally with no server truth behind it, then still showing "Sukses".
+      // A failed upgrade must say so, not lie about it (same fake-success bug already fixed
+      // in GerainaOS's Pricing.jsx).
+      const msg = err?.response?.data?.detail || "Gagal terhubung ke server.";
+      toast.error(`Gagal mengubah paket ke ${tierId.toUpperCase()}: ${msg}`);
     } finally {
       setUpgradingId(null);
     }
@@ -78,7 +100,12 @@ export default function Pricing() {
           </Link>
           <div className="flex items-center gap-2">
             {user ? (
-              <Link to="/dapuros/app/dashboard" className="px-4 py-2 rounded-xl text-white font-semibold text-sm" style={{ background: ORANGE }} data-testid="pricing-nav-dashboard">Ke Dashboard →</Link>
+              <>
+                {hasDapurosStore === false && (
+                  <Link to="/dapuros/activate" className="px-4 py-2 rounded-xl font-semibold text-sm hover:bg-orange-50" style={{ color: INK }} data-testid="pricing-nav-activate">Aktifkan DapurOS</Link>
+                )}
+                <Link to="/dapuros/app/dashboard" className="px-4 py-2 rounded-xl text-white font-semibold text-sm" style={{ background: ORANGE }} data-testid="pricing-nav-dashboard">Ke Dashboard →</Link>
+              </>
             ) : (
               <>
                 <Link to="/dapuros/login" className="px-4 py-2 rounded-xl font-semibold text-sm hover:bg-orange-50" style={{ color: INK }} data-testid="pricing-nav-login">Masuk</Link>
