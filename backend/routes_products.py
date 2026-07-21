@@ -214,8 +214,15 @@ async def bulk_import(
                 continue
             
             price_val = row.get("price")
-            price = float(price_val) if _is_not_empty(price_val) else 0.0
-            
+            if not _is_not_empty(price_val):
+                # price is a required column (see docstring) -- silently defaulting a missing
+                # price to 0.0 let a row through as a free product with no signal anything was
+                # wrong. Same bug class already fixed in GerainaOS (commit 436fbce): treat a
+                # missing price as a row-level error instead of writing a broken product.
+                errors.append(f"Baris {idx + 2}: kolom 'price' wajib diisi")
+                continue
+            price = float(price_val)
+
             sku = str(row.get("sku")).strip() if _is_not_empty(row.get("sku")) else None
             
             cost_val = row.get("cost")

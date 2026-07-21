@@ -23,7 +23,7 @@ async def get_settings(user: dict = Depends(get_current_user)):
     return res
 
 @router.post("/api/settings")
-async def save_settings(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
+async def save_settings(payload: Dict[str, Any], user: dict = Depends(require_admin)):
     db = get_db()
     update_data = {k: v for k, v in payload.items() if k not in ("_id", "store_id")}
     res = await db.settings.find_one_and_update(
@@ -41,33 +41,33 @@ async def get_payments_config(user: dict = Depends(get_current_user)):
     db = get_db()
     res = await db.payments_config.find_one({"store_id": user["store_id"]}, {"_id": 0})
     if not res:
-        # Default Indonesian payment channels config
+        # Default KOSONG (BYO) — merchant belum konfigurasi apa pun, jangan pura-pura aktif.
         return {
-            "cash": { "is_active": True, "provider": "Sistem Kasir Lokal", "require_drawer": True, "active_drawer_port": "COM3" },
-            "qris": { "is_active": True, "provider": "Xendit", "type": "dynamic", "merchant_id": "MID-GER-QRIS-99", "callback_status": "Active" },
+            "cash": { "is_active": True, "provider": "Sistem Kasir Lokal", "require_drawer": False, "active_drawer_port": "" },
+            "qris": { "is_active": False, "provider": "Xendit", "type": "dynamic", "merchant_id": "", "callback_status": "Belum Aktif" },
             "ewallet": {
-                "is_active": True,
+                "is_active": False,
                 "provider": "Xendit",
                 "channels": {
-                    "GoPay": True, "OVO": True, "DANA": True, "ShopeePay": True, "LinkAja": True,
-                    "AstraPay": False, "Sakuku": False, "iSaku": False, "MotionPay": False, "JeniusPay": True
+                    "GoPay": False, "OVO": False, "DANA": False, "ShopeePay": False, "LinkAja": False,
+                    "AstraPay": False, "Sakuku": False, "iSaku": False, "MotionPay": False, "JeniusPay": False
                 }
             },
             "va": {
-                "is_active": True,
+                "is_active": False,
                 "provider": "Midtrans",
                 "banks": {
-                    "BCA": True, "BNI": True, "BRI": True, "Mandiri": True, "Permata": True,
-                    "CIMB": True, "Maybank": False, "Danamon": False, "Neo": False, "BSI": True
+                    "BCA": False, "BNI": False, "BRI": False, "Mandiri": False, "Permata": False,
+                    "CIMB": False, "Maybank": False, "Danamon": False, "Neo": False, "BSI": False
                 }
             },
-            "credit_card": { "is_active": True, "provider": "Stripe", "enable_3ds": True, "installment_banks": ["Mandiri", "BCA", "CIMB"] },
-            "bank_transfer": { "is_active": True, "accounts": [{ "bank": "Bank Central Asia", "account_no": "8820987111", "account_name": "DagangOS Geraina POS" }] }
+            "credit_card": { "is_active": False, "provider": "Stripe", "enable_3ds": True, "installment_banks": [] },
+            "bank_transfer": { "is_active": False, "accounts": [] }
         }
     return res
 
 @router.post("/api/payments/config")
-async def save_payments_config(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
+async def save_payments_config(payload: Dict[str, Any], user: dict = Depends(require_admin)):
     qris = payload.get("qris")
     if qris and qris.get("is_active"):
         mid = qris.get("merchant_id")
@@ -103,7 +103,7 @@ async def get_integrations(user: dict = Depends(get_current_user)):
     return res
 
 @router.post("/api/integrations")
-async def save_integrations(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
+async def save_integrations(payload: Dict[str, Any], user: dict = Depends(require_admin)):
     db = get_db()
     update_data = {k: v for k, v in payload.items() if k not in ("_id", "store_id")}
     res = await db.integrations.find_one_and_update(

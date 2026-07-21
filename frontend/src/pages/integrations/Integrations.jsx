@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "@/api/client";
-import { Save, Link2 } from "lucide-react";
+import { Save, Link2, FlaskConical } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
+import { useAuth } from "@/auth/AuthContext";
 
 import { Link } from "react-router-dom";
 
@@ -10,6 +12,8 @@ export default function Integrations() {
   const pathPart = typeof window !== "undefined" ? window.location.pathname.split("/").pop() : "";
   const rawType = params.type || pathPart || "xendit";
   const type = (rawType === "integrations" || !rawType) ? "xendit" : rawType.toLowerCase();
+
+  const { user } = useAuth();
 
   // Empty by default — each store brings its own (BYO) payment/notification credentials.
   const [integrations, setIntegrations] = useState({
@@ -22,18 +26,23 @@ export default function Integrations() {
     email: { is_active: false, smtp_host: "", smtp_port: 587, smtp_user: "" }
   });
 
+  // Same unsequenced-GET race fixed in GerainaOS's Integrations.jsx: this effect re-fires on
+  // every subtab switch, so a slow GET from an earlier tab can resolve after a newer one and
+  // overwrite it with stale data.
+  const reqIdRef = useRef(0);
   useEffect(() => {
+    const reqId = ++reqIdRef.current;
     api.get("/integrations").then((r) => {
-      if (r.data) setIntegrations(r.data);
+      if (r.data && reqId === reqIdRef.current) setIntegrations(r.data);
     }).catch(() => {});
   }, [type]);
 
   const handleSave = (e) => {
     e.preventDefault();
     api.post("/integrations", integrations).then(() => {
-      alert(`Konfigurasi integrasi ${(type || 'midtrans').toUpperCase()} berhasil disimpan!`);
+      toast.success(`Konfigurasi integrasi ${(type || 'midtrans').toUpperCase()} berhasil disimpan!`);
     }).catch(() => {
-      alert(`Gagal menyimpan konfigurasi ${(type || 'midtrans').toUpperCase()}.`);
+      toast.error(`Gagal menyimpan konfigurasi ${(type || 'midtrans').toUpperCase()}.`);
     });
   };
 

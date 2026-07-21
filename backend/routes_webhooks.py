@@ -4,6 +4,7 @@ Endpoint: POST /api/webhooks/xendit
 Auth: header x-callback-token must match XENDIT_WEBHOOK_TOKEN.
 Maps reference_id back to order, updates payment_status.
 """
+import logging
 import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
@@ -11,6 +12,8 @@ from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from database import get_db
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
+
+logger = logging.getLogger("dapuros.webhooks")
 
 WEBHOOK_TOKEN = os.environ.get("XENDIT_WEBHOOK_TOKEN", "")
 
@@ -43,9 +46,47 @@ async def _process(payload: dict):
     )
     if not ref:
         return
+
+    # Look up the order first (instead of blind update_one) so we know which store it
+    # belongs to and what it's actually worth. order_no/xendit_reference_id is meant to be
+    # unique, but a payload alone carries no store scoping — resolving the order here lets
+    # us filter the update by store_id and verify the amount before ever flipping to "paid",
+    # so a webhook meant for one store's payment can't silently mark a different store's
+    # order as paid.
+    order = await db.orders.find_one(
+        {"xendit_reference_id": ref}, {"_id": 0, "id": 1, "store_id": 1, "total": 1, "order_no": 1}
+    )
+    if not order:
+        logger.warning("Xendit webhook: no order found for reference_id=%s", ref)
+        return
+
     new_status = _map_status(payload if "status" in payload else (payload.get("data") or payload))
+
+    if new_status == "paid":
+        webhook_amount = (
+            payload.get("amount")
+            or payload.get("capture_amount")
+            or payload.get("charge_amount")
+            or (payload.get("data") or {}).get("amount")
+        )
+        if webhook_amount is not None:
+            try:
+                if round(float(webhook_amount)) != round(float(order.get("total", 0))):
+                    logger.warning(
+                        "Xendit webhook amount mismatch for order_no=%s store_id=%s: "
+                        "webhook_amount=%r order_total=%r — ignoring payment_status update.",
+                        order.get("order_no"), order.get("store_id"), webhook_amount, order.get("total"),
+                    )
+                    return
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Xendit webhook: could not parse amount %r for order_no=%s — ignoring payment_status update.",
+                    webhook_amount, order.get("order_no"),
+                )
+                return
+
     await db.orders.update_one(
-        {"xendit_reference_id": ref},
+        {"xendit_reference_id": ref, "store_id": order["store_id"]},
         {
             "$set": {
                 "payment_status": new_status,

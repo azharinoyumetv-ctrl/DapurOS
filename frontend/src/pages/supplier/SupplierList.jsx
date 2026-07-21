@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "@/api/client";
 import { Plus, Trash2, Edit } from "lucide-react";
 
@@ -10,8 +10,13 @@ export default function SupplierList() {
   const [address, setAddress] = useState("");
   const [editingId, setEditingId] = useState(null);
 
+  // Same unsequenced-GET race fixed in GerainaOS's SupplierList.jsx (commit 4ebf8f4).
+  const fetchReqIdRef = useRef(0);
   const fetchSuppliers = () => {
-    api.get("/suppliers").then((r) => setSuppliers(r.data)).catch(() => {});
+    const reqId = ++fetchReqIdRef.current;
+    api.get("/suppliers").then((r) => {
+      if (reqId === fetchReqIdRef.current) setSuppliers(r.data);
+    }).catch(() => {});
   };
 
   useEffect(() => {
@@ -134,7 +139,7 @@ export default function SupplierList() {
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
                 {suppliers.map((s) => (
-                  <tr key={s.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors">
+                  <tr key={s.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors" data-testid={`supplier-row-${s.id}`}>
                     <td className="py-3 font-medium text-xs">{s.name}</td>
                     <td className="py-3 text-xs">
                       <div>{s.phone || "-"}</div>
@@ -142,10 +147,10 @@ export default function SupplierList() {
                     </td>
                     <td className="py-3 text-xs text-[hsl(var(--muted))] truncate max-w-[200px]">{s.address || "-"}</td>
                     <td className="py-3 text-right flex justify-end gap-2">
-                      <button onClick={() => handleEdit(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Edit">
+                      <button onClick={() => handleEdit(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Edit" data-testid={`supplier-edit-${s.id}`}>
                         <Edit size={16} />
                       </button>
-                      <button onClick={() => handleDelete(s.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Hapus">
+                      <button onClick={() => handleDelete(s.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Hapus" data-testid={`supplier-delete-${s.id}`}>
                         <Trash2 size={16} />
                       </button>
                     </td>

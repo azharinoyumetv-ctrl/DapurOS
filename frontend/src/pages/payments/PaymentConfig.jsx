@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "@/api/client";
 import { Save, ShieldCheck } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 import { Link } from "react-router-dom";
 
 const DEFAULT_PAYMENT_CONFIG = {
   cash: { is_active: true, provider: "Sistem Kasir Lokal", require_drawer: true, active_drawer_port: "COM3" },
-  qris: { is_active: true, provider: "Xendit", type: "dynamic", merchant_id: "MID-GER-QRIS-99", callback_status: "Active" },
+  qris: { is_active: true, provider: "Xendit", type: "dynamic", merchant_id: "MID-DPR-QRIS-99", callback_status: "Active" },
   ewallet: {
     is_active: true,
     provider: "Xendit",
@@ -20,7 +21,7 @@ const DEFAULT_PAYMENT_CONFIG = {
   },
   debit_card: { is_active: true, provider: "Mesin EDC Multibank", edc_brand: "BCA EDC Dual Merchant", terminal_id: "TID-8829102", merchant_id: "MID-DEBIT-001", enable_surcharge: false, surcharge_percent: 0 },
   credit_card: { is_active: true, provider: "Stripe", enable_3ds: true, merchant_id: "MID-CC-88219", installment_banks: ["Mandiri", "BCA", "CIMB"] },
-  bank_transfer: { is_active: true, accounts: [{ bank: "Bank Central Asia", account_no: "8820987111", account_name: "DagangOS Geraina POS" }] }
+  bank_transfer: { is_active: true, accounts: [{ bank: "Bank Central Asia", account_no: "8820987111", account_name: "DagangOS DapurOS POS" }] }
 };
 
 export default function PaymentConfig() {
@@ -34,9 +35,16 @@ export default function PaymentConfig() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // Same unsequenced-GET race fixed in GerainaOS's PaymentConfig.jsx (commit 75307b2): this
+  // effect re-fires on every subtab switch, so a slow GET from an earlier tab can resolve
+  // after a newer tab's GET (or after a save's own setConfig call) and silently overwrite
+  // fresher state with stale data. reqIdRef is bumped at request-*issue* time for both the
+  // mount-effect GET and the save's POST, so whichever request was issued last always wins.
+  const reqIdRef = useRef(0);
   useEffect(() => {
+    const reqId = ++reqIdRef.current;
     api.get("/payments/config").then((r) => {
-      if (r.data) setConfig(r.data);
+      if (r.data && reqId === reqIdRef.current) setConfig(r.data);
     }).catch(() => {});
   }, [type]);
 
@@ -402,13 +410,17 @@ export default function PaymentConfig() {
       return;
     }
     setSaving(true);
+    const reqId = ++reqIdRef.current;
     api.post("/payments/config", config)
       .then((r) => {
-        if (r.data) setConfig(r.data);
-        alert(`Konfigurasi pembayaran ${type.toUpperCase()} berhasil disimpan!`);
+        if (r.data && reqId === reqIdRef.current) setConfig(r.data);
+        toast.success(`Konfigurasi pembayaran ${type.toUpperCase()} berhasil disimpan!`);
       })
       .catch((err) => {
-        alert(`Konfigurasi pembayaran ${type.toUpperCase()} berhasil disimpan! (Local Mode)`);
+        // Was previously claiming success even when the save request actually failed
+        // ("... berhasil disimpan! (Local Mode)") -- same fake-success-on-error bug already
+        // fixed in GerainaOS's PaymentConfig.jsx. A failed save must say so, not lie about it.
+        toast.error(err?.response?.data?.detail || `Gagal menyimpan konfigurasi pembayaran ${type.toUpperCase()}.`);
       })
       .finally(() => {
         setSaving(false);

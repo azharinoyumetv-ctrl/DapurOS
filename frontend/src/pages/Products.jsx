@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api, { fmtIDR, API_BASE } from "@/api/client";
 import { Plus, Upload, Search, Edit3, Trash2, X, Download, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 function ProductForm({ product, onClose, onSaved }) {
   const isDapurOS = true;
@@ -56,7 +57,7 @@ function ProductForm({ product, onClose, onSaved }) {
       setNewIng({ name: "", unit: "g" });
       setNewIngOpen(false);
     } catch (e) {
-      alert(e?.response?.data?.detail || "Gagal menambah bahan baku");
+      toast.error(e?.response?.data?.detail || "Gagal menambah bahan baku");
     } finally {
       setCreatingIng(false);
     }
@@ -417,7 +418,7 @@ function ImportDialog({ onClose, onDone }) {
 
         {result && (
           <div data-testid="import-result">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <div className="card-surface p-4 text-center">
                 <p className="label-tiny">Ditambahkan</p>
                 <p className="font-display num-display text-3xl font-extrabold text-[hsl(var(--success))]" data-testid="import-inserted">
@@ -432,6 +433,16 @@ function ImportDialog({ onClose, onDone }) {
                 <p className="label-tiny">Dilewati</p>
                 <p className="font-display num-display text-3xl font-extrabold text-[hsl(var(--muted))]" data-testid="import-skipped">
                   {result.skipped}
+                </p>
+              </div>
+              {/* Always-visible so a page with zero errors still shows "Kesalahan" in the DOM --
+                  previously this count only existed inside the conditional error block below,
+                  same gap already fixed in GerainaOS (task "Fix bulk product import missing
+                  error/Kesalahan count"). */}
+              <div className="card-surface p-4 text-center">
+                <p className="label-tiny">Kesalahan</p>
+                <p className="font-display num-display text-3xl font-extrabold text-[hsl(var(--destructive))]" data-testid="import-error-count">
+                  {result.errors?.length || 0}
                 </p>
               </div>
             </div>
@@ -467,16 +478,34 @@ export default function Products() {
   const [categories, setCategories] = useState([]);
   const [filterCat, setFilterCat] = useState("all");
 
+  // Same unsequenced-concurrent-request race fixed in GerainaOS's Products.jsx (commit
+  // 9ab99b0): the 200ms debounce only cancels a *pending* timer, not a request already in
+  // flight, so two overlapping GET /products calls (e.g. mid-typing vs. the final query) can
+  // resolve out of order and let a stale, narrower result silently overwrite the correct one.
+  // A monotonic reqId bumped at request-*issue* time fixes it -- only the response matching
+  // the most recently issued request is ever applied.
+  const loadReqIdRef = useRef(0);
   const load = async () => {
     setLoading(true);
+    const reqId = ++loadReqIdRef.current;
     try {
       const r = await api.get("/products", { params: { q: q || undefined, category: filterCat !== "all" ? filterCat : undefined } });
-      setItems(r.data);
-    } finally { setLoading(false); }
+      if (reqId === loadReqIdRef.current) setItems(r.data);
+    } finally {
+      if (reqId === loadReqIdRef.current) setLoading(false);
+    }
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); api.get("/products/categories").then((r) => setCategories(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    load();
+    // /products/categories pointed at a separate, user-managed Kategori collection that starts
+    // empty -- not the actual category values on real products. Same bug already fixed in
+    // GerainaOS (task tracked as "Fix category filter dropdown not populated"): the correct
+    // source is /products/category-names, distinct values straight off the products
+    // themselves, same endpoint POS already uses correctly for its filter chips.
+    api.get("/products/category-names").then((r) => setCategories(r.data)).catch(() => {});
+  }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [q, filterCat]);
 

@@ -1,12 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "@/api/client";
 import { Clock } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 export default function Attendance() {
   const [attendance, setAttendance] = useState([]);
+  // Same unsequenced-GET race fixed in GerainaOS (Attendance.jsx, commit 1dbbb55): the mount
+  // GET and each mutation's own follow-up GET are independent, unsequenced requests against a
+  // serverless backend with variable cold-start latency. If the mount GET resolves AFTER a
+  // faster post-mutation GET, its response -- a snapshot from before the mutation -- silently
+  // overwrites the already-correct state. hasMutatedRef stops the mount GET from applying once
+  // any mutation has happened.
+  const hasMutatedRef = useRef(false);
 
   useEffect(() => {
-    api.get("/attendance").then((r) => setAttendance(r.data)).catch(() => {});
+    api.get("/attendance").then((r) => {
+      if (!hasMutatedRef.current) setAttendance(r.data);
+    }).catch(() => {});
   }, []);
 
   const handleClockIn = () => {
@@ -16,16 +26,18 @@ export default function Attendance() {
       clock_out: null,
       status: "Hadir"
     };
-    api.post("/attendance", payload).then(() => {
-      api.get("/attendance").then((r) => setAttendance(r.data)).catch(() => {});
-      alert("Absen Masuk (Clock In) berhasil dicatat!");
+    api.post("/attendance", payload).then((r) => {
+      hasMutatedRef.current = true;
+      setAttendance((prev) => [r.data, ...prev]);
+      toast.success("Absen Masuk (Clock In) berhasil dicatat!");
     });
   };
 
   const handleClockOut = (id) => {
-    api.put(`/attendance/${id}`).then(() => {
-      api.get("/attendance").then((r) => setAttendance(r.data)).catch(() => {});
-      alert("Absen Keluar (Clock Out) berhasil dicatat!");
+    api.put(`/attendance/${id}`).then((r) => {
+      hasMutatedRef.current = true;
+      setAttendance((prev) => prev.map((a) => (a.id === id ? r.data : a)));
+      toast.success("Absen Keluar (Clock Out) berhasil dicatat!");
     });
   };
 
