@@ -298,6 +298,63 @@ async def product_sales(user: dict = Depends(get_current_user), days: int = 30, 
     ]
 
 
+@router.get("/sales-trend")
+async def sales_trend(user: dict = Depends(get_current_user), days: int = 7):
+    """Real daily sales aggregation (paid orders only) for the last N days.
+
+    Replaces the previous frontend pattern of inventing a daily breakdown by
+    multiplying a weekly total by fixed percentages.
+    """
+    db = get_db()
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    cur = db.orders.aggregate([
+        {"$match": {"store_id": user["store_id"], "payment_status": "paid", "created_at": {"$gte": start.isoformat()}}},
+        {"$addFields": {"_created_dt": {"$dateFromString": {"dateString": "$created_at"}}}},
+        {"$group": {
+            "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$_created_dt"}},
+            "sales": {"$sum": "$total"},
+            "orders": {"$sum": 1},
+        }},
+    ])
+    rows = await cur.to_list(length=days)
+    by_date = {r["_id"]: r for r in rows}
+    day_labels_id = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+    result = []
+    for i in range(days - 1, -1, -1):
+        d = now - timedelta(days=i)
+        key = d.strftime("%Y-%m-%d")
+        row = by_date.get(key)
+        result.append({
+            "date": key,
+            "day": day_labels_id[d.weekday()],
+            "sales": round(row["sales"], 2) if row else 0.0,
+            "orders": row["orders"] if row else 0,
+        })
+    return result
+
+
+@router.get("/payment-methods")
+async def payment_methods(user: dict = Depends(get_current_user), days: int = 7):
+    """Real payment-method breakdown (paid orders only) for the last N days.
+
+    Replaces the previous frontend pattern of a flat, never-updated payment-method split.
+    """
+    db = get_db()
+    from datetime import datetime, timezone, timedelta
+    after = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cur = db.orders.aggregate([
+        {"$match": {"store_id": user["store_id"], "payment_status": "paid", "created_at": {"$gte": after}}},
+        {"$group": {"_id": "$payment_method", "total": {"$sum": "$total"}, "count": {"$sum": 1}}},
+    ])
+    rows = await cur.to_list(length=20)
+    return [
+        {"method": (r["_id"] or "unknown"), "total": round(r.get("total", 0), 2), "count": r.get("count", 0)}
+        for r in rows
+    ]
+
+
 @router.get("/{order_id}")
 async def get_order(order_id: str, user: dict = Depends(get_current_user)):
     db = get_db()

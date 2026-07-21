@@ -61,11 +61,11 @@ def _thermal_pdf(order: dict, store: dict) -> bytes:
     y = height - 6 * mm
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(BRAND_GREEN)
-    c.drawCentredString(width / 2, y, store.get("name", "Geraina POS"))
+    c.drawCentredString(width / 2, y, store.get("name", "Toko"))
     y -= 4.5 * mm
     c.setFont("Helvetica", 7)
     c.setFillColor(MUTED)
-    c.drawCentredString(width / 2, y, "Geraina POS by DagangOS")
+    c.drawCentredString(width / 2, y, "DapurOS by DagangOS")
     y -= 4 * mm
     y = line_sep(y)
 
@@ -137,7 +137,7 @@ def _thermal_pdf(order: dict, store: dict) -> bytes:
     c.setFillColor(MUTED)
     c.drawCentredString(width / 2, y, "Terima kasih atas kunjungan Anda!")
     y -= 3 * mm
-    c.drawCentredString(width / 2, y, "Powered by Geraina POS")
+    c.drawCentredString(width / 2, y, "Powered by DapurOS")
 
     c.showPage()
     c.save()
@@ -174,7 +174,7 @@ def _invoice_pdf(order: dict, store: dict) -> bytes:
     header_table = Table(
         [[
             [Paragraph("INVOICE", h_title), Paragraph(f"No. {order.get('order_no','-')}", p_meta)],
-            [Paragraph("Geraina POS", p_label), Paragraph(store.get("name", "Geraina Store"), p_value),
+            [Paragraph("DapurOS", p_label), Paragraph(store.get("name", "Toko Anda"), p_value),
              Paragraph("by DagangOS", p_small_right)],
         ]],
         colWidths=[100 * mm, 70 * mm],
@@ -270,7 +270,7 @@ def _invoice_pdf(order: dict, store: dict) -> bytes:
     story.append(Paragraph("Metode Pembayaran", p_label))
     story.append(Paragraph(pm, p_body))
     story.append(Spacer(1, 12 * mm))
-    story.append(Paragraph("Terima kasih telah berbelanja. Invoice ini dihasilkan otomatis oleh Geraina POS.", p_meta))
+    story.append(Paragraph("Terima kasih telah berbelanja. Invoice ini dihasilkan otomatis oleh DapurOS.", p_meta))
 
     doc.build(story)
     buf.seek(0)

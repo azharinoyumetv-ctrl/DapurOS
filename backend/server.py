@@ -28,6 +28,8 @@ from routes_ingredients import router as ingredients_router
 from routes_floors import router as floors_router
 from routes_tables import router as tables_router
 from routes_kds import router as kds_router
+from routes_reports import router as reports_router
+from routes_printer import router as printer_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("geraina")
@@ -120,6 +122,8 @@ app.include_router(ingredients_router)
 app.include_router(floors_router)
 app.include_router(tables_router)
 app.include_router(kds_router)
+app.include_router(reports_router)
+app.include_router(printer_router)
 
 cors_origins = os.environ.get("CORS_ORIGINS", "").split(",")
 cors_origins = [o.strip() for o in cors_origins if o.strip()]

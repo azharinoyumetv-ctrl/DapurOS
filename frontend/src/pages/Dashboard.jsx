@@ -43,6 +43,10 @@ export default function Dashboard() {
   const [payables, setPayables] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [salesTrend, setSalesTrend] = useState(null);
+  const [paymentMethods, setPaymentMethods] = useState(null);
+  const [todayPaymentMethods, setTodayPaymentMethods] = useState(null);
+  const [cashflowReport, setCashflowReport] = useState(null);
 
   useEffect(() => {
     // Parallel fetching for dashboard widgets
@@ -53,6 +57,10 @@ export default function Dashboard() {
     api.get("/debt/payables").then((r) => setPayables(r.data)).catch(() => {});
     api.get("/attendance").then((r) => setAttendance(r.data)).catch(() => {});
     api.get("/branches").then((r) => setBranches(r.data)).catch(() => {});
+    api.get("/orders/sales-trend?days=7").then((r) => setSalesTrend(r.data)).catch(() => setSalesTrend([]));
+    api.get("/orders/payment-methods?days=7").then((r) => setPaymentMethods(r.data)).catch(() => setPaymentMethods([]));
+    api.get("/orders/payment-methods?days=1").then((r) => setTodayPaymentMethods(r.data)).catch(() => setTodayPaymentMethods([]));
+    api.get("/reports/cashflow?weeks=4").then((r) => setCashflowReport(r.data)).catch(() => setCashflowReport(null));
   }, []);
 
   const days = user?.trial_ends_at ? Math.max(0, Math.ceil((new Date(user.trial_ends_at).getTime() - Date.now()) / 86400000)) : 14;
@@ -67,35 +75,19 @@ export default function Dashboard() {
   const inventoryValue = products.reduce((acc, p) => acc + ((p.stock || 0) * (p.cost || 0)), 0);
   const lowStockCount = products.filter(p => p.stock <= 5).length;
 
-  // Chart Data
-  const salesTrendData = [
-    { name: "Senin", Sales: (stats?.week_sales || 150000) * 0.1 },
-    { name: "Selasa", Sales: (stats?.week_sales || 150000) * 0.15 },
-    { name: "Rabu", Sales: (stats?.week_sales || 150000) * 0.12 },
-    { name: "Kamis", Sales: (stats?.week_sales || 150000) * 0.18 },
-    { name: "Jumat", Sales: (stats?.week_sales || 150000) * 0.22 },
-    { name: "Sabtu", Sales: (stats?.week_sales || 150000) * 0.35 },
-    { name: "Minggu", Sales: (stats?.week_sales || 150000) * 0.28 },
-  ];
+  // Chart Data — real, derived from backend aggregations (no fabricated series).
+  const salesTrendData = (salesTrend || []).map((d) => ({ name: d.day, Sales: d.sales }));
 
-  const pmtData = [
-    { name: "Cash", value: 45 },
-    { name: "QRIS", value: 30 },
-    { name: "E-Wallet", value: 15 },
-    { name: "Bank VA", value: 10 },
-  ];
+  const PMT_LABELS = { cash: "Cash", qris: "QRIS", ewallet: "E-Wallet", va: "Bank VA", credit_card: "Kartu Kredit", edc: "EDC (Kartu)" };
+  const pmtData = (paymentMethods || [])
+    .filter((p) => p.total > 0)
+    .map((p) => ({ name: PMT_LABELS[p.method] || p.method, value: p.total }));
 
-  const cashflowData = [
-    { name: "Minggu 1", Inflow: 3500000, Outflow: 2100000 },
-    { name: "Minggu 2", Inflow: 4200000, Outflow: 3400000 },
-    { name: "Minggu 3", Inflow: 3800000, Outflow: 1900000 },
-    { name: "Minggu 4", Inflow: 5300000, Outflow: 2800000 },
-  ];
+  const cashflowData = (cashflowReport?.series || []).map((s) => ({ name: s.name, Inflow: s.inflow, Outflow: s.outflow }));
 
-  const branchData = branches.map((b, idx) => ({
-    name: b.name.split(" ")[0],
-    Sales: (stats?.month_sales || 5000000) * (idx === 0 ? 0.5 : idx === 1 ? 0.35 : 0.15)
-  }));
+  // Per-branch sales attribution isn't available: orders don't carry a branch_id, so any
+  // split here would have to be invented. Honestly show "not available yet" instead.
+  const todayCashSales = (todayPaymentMethods || []).find((p) => p.method === "cash")?.total || 0;
 
   return (
     <div className="p-8 space-y-6" data-testid="dashboard-page">
@@ -180,10 +172,10 @@ export default function Dashboard() {
           colorClass="bg-purple-50 text-purple-700"
         />
         <StatCard
-          label="Posisi Kas"
-          value={fmtIDR((stats?.today_sales || 0) * 0.6 + 500000)} // Cash in hand mock
+          label="Kas Tunai Hari Ini"
+          value={fmtIDR(todayCashSales)}
           icon={DollarSign}
-          hint="Kas dalam laci kasir"
+          hint="Total transaksi tunai hari ini (bukan saldo laci)"
           testid="stat-cash"
           colorClass="bg-rose-50 text-rose-700"
         />
@@ -194,41 +186,51 @@ export default function Dashboard() {
         
         {/* 1. Sales Trend Chart */}
         <div className="col-span-12 lg:col-span-8 card-surface p-6 h-80 flex flex-col justify-between">
-          <h3 className="font-display font-bold text-sm">Tren Grafik Penjualan Mingguan</h3>
+          <h3 className="font-display font-bold text-sm">Tren Grafik Penjualan 7 Hari Terakhir</h3>
           <div className="flex-1 mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={salesTrendData} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(151,39%,17%)" stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor="hsl(151,39%,17%)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={10} tickLine={false} />
-                <YAxis fontSize={10} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
-                <Tooltip formatter={(v) => [fmtIDR(v), "Penjualan"]} />
-                <Area type="monotone" dataKey="Sales" stroke="hsl(151,39%,17%)" strokeWidth={2} fillOpacity={1} fill="url(#colorSales)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {salesTrend === null ? (
+              <div className="h-full flex items-center justify-center text-xs text-[hsl(var(--muted))]">Memuat data penjualan...</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={salesTrendData} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(151,39%,17%)" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="hsl(151,39%,17%)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" fontSize={10} tickLine={false} />
+                  <YAxis fontSize={10} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+                  <Tooltip formatter={(v) => [fmtIDR(v), "Penjualan"]} />
+                  <Area type="monotone" dataKey="Sales" stroke="hsl(151,39%,17%)" strokeWidth={2} fillOpacity={1} fill="url(#colorSales)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
         {/* 2. Payment Distribution Chart */}
         <div className="col-span-12 lg:col-span-4 card-surface p-6 h-80 flex flex-col justify-between">
-          <h3 className="font-display font-bold text-sm">Metode Pembayaran (%)</h3>
+          <h3 className="font-display font-bold text-sm">Metode Pembayaran (7 Hari Terakhir)</h3>
           <div className="flex-1 mt-4 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pmtData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={3} dataKey="value">
-                  {pmtData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v) => `${v}%`} />
-                <Legend layout="horizontal" align="center" verticalAlign="bottom" iconSize={8} formatter={(value) => <span className="text-[10px] font-medium">{value}</span>} />
-              </PieChart>
-            </ResponsiveContainer>
+            {paymentMethods === null ? (
+              <p className="text-xs text-[hsl(var(--muted))]">Memuat data...</p>
+            ) : pmtData.length === 0 ? (
+              <p className="text-xs text-[hsl(var(--muted))] text-center">Belum ada transaksi lunas dalam 7 hari terakhir.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pmtData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={3} dataKey="value">
+                    {pmtData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v) => fmtIDR(v)} />
+                  <Legend layout="horizontal" align="center" verticalAlign="bottom" iconSize={8} formatter={(value) => <span className="text-[10px] font-medium">{value}</span>} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -323,18 +325,22 @@ export default function Dashboard() {
 
         {/* 7. Cashflow Summary Widget */}
         <div className="col-span-12 lg:col-span-4 card-surface p-6 h-60 flex flex-col justify-between">
-          <h3 className="font-display font-bold text-sm">Arus Kas Ringkas</h3>
+          <h3 className="font-display font-bold text-sm">Arus Kas Ringkas (4 Minggu)</h3>
           <div className="flex-1 mt-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={cashflowData} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={8} />
-                <YAxis fontSize={8} tickFormatter={(v) => `${(v/1000000).toFixed(1)}j`} />
-                <Tooltip />
-                <Bar dataKey="Inflow" name="Masuk" fill="hsl(145,46%,33%)" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="Outflow" name="Keluar" fill="hsl(353,98%,41%)" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {cashflowReport === null ? (
+              <div className="h-full flex items-center justify-center text-xs text-[hsl(var(--muted))]">Memuat data arus kas...</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={cashflowData} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" fontSize={8} />
+                  <YAxis fontSize={8} tickFormatter={(v) => `${(v/1000000).toFixed(1)}j`} />
+                  <Tooltip formatter={(v) => fmtIDR(v)} />
+                  <Bar dataKey="Inflow" name="Masuk" fill="hsl(145,46%,33%)" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="Outflow" name="Keluar" fill="hsl(353,98%,41%)" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -390,16 +396,12 @@ export default function Dashboard() {
         {/* 11. Branch Comparison Chart */}
         <div className="col-span-12 lg:col-span-4 card-surface p-6 h-60 flex flex-col justify-between">
           <h3 className="font-display font-bold text-sm">Perbandingan Penjualan Cabang</h3>
-          <div className="flex-1 mt-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={branchData} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={8} />
-                <YAxis fontSize={8} tickFormatter={(v) => `${(v/1000000).toFixed(1)}j`} />
-                <Tooltip />
-                <Bar dataKey="Sales" name="Sales Cabang" fill="hsl(9,65%,55%)" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="flex-1 mt-3 flex items-center justify-center text-center px-2">
+            <p className="text-xs text-[hsl(var(--muted))]">
+              Belum tersedia — transaksi POS saat ini tidak mencatat cabang penjualan, sehingga
+              rincian penjualan per cabang belum bisa ditampilkan.
+              {branches.length > 0 && ` (${branches.length} cabang terdaftar)`}
+            </p>
           </div>
         </div>
 

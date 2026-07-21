@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS = {
   general: { store_name: "DapurOS Master Demo Store", currency: "IDR", timezone: "Asia/Jakarta" },
   store: { legal_name: "PT DagangOS Jaya F&B", npwd: "31.740.123.4-015.000" },
   receipt: { header_text: "Selamat Datang di DapurOS Cafe & Resto", footer_text: "Terima Kasih Atas Kunjungan Anda!", show_logo: true, show_cashier: true },
-  printer: { default_printer: "Thermal 80mm Kitchen", paper_size: "80mm", auto_print: true }
+  printer: { mode: "local", default_printer: "Thermal 80mm Kitchen", paper_size: "80mm", auto_print: true, printer_ip: "", printer_port: 9100, bridge_port: 9899 }
 };
 
 export default function Settings() {
@@ -17,6 +17,7 @@ export default function Settings() {
   const type = (rawType === "settings" || !rawType) ? "general" : rawType.toLowerCase();
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sub, setSub] = useState(null);
+  const [testingPrint, setTestingPrint] = useState(false);
 
   useEffect(() => {
     api.get("/settings").then((r) => {
@@ -34,9 +35,56 @@ export default function Settings() {
     e.preventDefault();
     api.post("/settings", settings).then(() => {
       alert(`Pengaturan ${type.toUpperCase()} berhasil disimpan!`);
-    }).catch(() => {
-      alert(`Pengaturan ${type.toUpperCase()} berhasil disimpan! (Local Mode)`);
+    }).catch((err) => {
+      const msg = err?.response?.data?.detail || "Gagal terhubung ke server.";
+      alert(`Gagal menyimpan pengaturan ${type.toUpperCase()}: ${msg}`);
     });
+  };
+
+  const handleTestPrint = async () => {
+    const mode = settings?.printer?.mode || "local";
+    if (mode === "local") {
+      // Mode A (local/USB): render the print-only receipt template below and hand off to
+      // the browser's own print dialog (works with any USB/shared thermal or regular printer
+      // already installed on this PC — no network/bridge needed).
+      window.print();
+      return;
+    }
+    // Mode B (network/ESC-POS): fetch the raw print bytes from the backend, then hand them
+    // to the local printer-bridge (see printer-bridge/) which forwards them to the LAN
+    // printer. This can't be done directly from the browser or the cloud backend -- neither
+    // can open a raw socket to a printer on the store's own network.
+    const printerIp = (settings?.printer?.printer_ip || "").trim();
+    const printerPort = settings?.printer?.printer_port || 9100;
+    const bridgePort = settings?.printer?.bridge_port || 9899;
+    if (!printerIp) {
+      alert("Isi IP Address printer terlebih dahulu.");
+      return;
+    }
+    setTestingPrint(true);
+    try {
+      const r = await api.get("/printer/test-escpos");
+      const dataB64 = r?.data?.data_base64;
+      if (!dataB64) throw new Error("Backend tidak mengembalikan data cetak.");
+      const resp = await fetch(`http://127.0.0.1:${bridgePort}/print`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ip: printerIp, port: printerPort, data_base64: dataB64 }),
+      });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok || !json?.ok) {
+        throw new Error(json?.error || `HTTP ${resp.status}`);
+      }
+      alert("Test print terkirim ke printer jaringan.");
+    } catch (err) {
+      alert(
+        `Gagal mengirim test print: ${err.message}\n\n` +
+        `Pastikan aplikasi Printer Bridge sedang berjalan di komputer ini (lihat folder printer-bridge/), ` +
+        `dan IP/port printer di atas sudah benar.`
+      );
+    } finally {
+      setTestingPrint(false);
+    }
   };
 
   if (!settings) return <div className="p-8 text-center text-xs text-[hsl(var(--muted))]">Memuat data pengaturan...</div>;
@@ -151,6 +199,20 @@ export default function Settings() {
         return (
           <div className="space-y-4">
             <div className="flex flex-col space-y-1">
+              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Mode Printer</label>
+              <select
+                value={settings.printer.mode || "local"}
+                onChange={(e) => setSettings({ ...settings, printer: { ...settings.printer, mode: e.target.value } })}
+                className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
+              >
+                <option value="local">Lokal / USB (dialog cetak browser)</option>
+                <option value="network">Jaringan / Network (ESC-POS, butuh Printer Bridge)</option>
+              </select>
+              <p className="text-[10px] text-[hsl(var(--muted))] mt-1">
+                Mode Jaringan mengirim struk langsung ke printer thermal via jaringan lokal toko. Ini butuh aplikasi kecil "Printer Bridge" berjalan di komputer kasir Anda — lihat folder <code>printer-bridge/</code> di instalasi DapurOS Anda untuk cara menjalankannya. Browser dan server cloud tidak bisa langsung terhubung ke printer di jaringan lokal toko, jadi bridge ini yang menjembataninya.
+              </p>
+            </div>
+            <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Printer Default Utama</label>
               <input
                 type="text"
@@ -182,8 +244,42 @@ export default function Settings() {
                 />
               </div>
             </div>
-            <button type="button" onClick={() => alert("Mengirim struk test print...")} className="btn-outline py-2 px-4 text-xs flex items-center gap-2">
-              <Printer size={14} /> Kirim Test Print Ke Printer
+
+            {settings.printer.mode === "network" && (
+              <div className="grid grid-cols-3 gap-4 p-3 rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))]">
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">IP Address Printer</label>
+                  <input
+                    type="text"
+                    placeholder="192.168.1.50"
+                    value={settings.printer.printer_ip || ""}
+                    onChange={(e) => setSettings({ ...settings, printer: { ...settings.printer, printer_ip: e.target.value } })}
+                    className="border border-[hsl(var(--border))] rounded-md px-3 py-2 bg-white text-sm font-mono"
+                  />
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Port Printer</label>
+                  <input
+                    type="number"
+                    value={settings.printer.printer_port || 9100}
+                    onChange={(e) => setSettings({ ...settings, printer: { ...settings.printer, printer_port: parseInt(e.target.value, 10) || 9100 } })}
+                    className="border border-[hsl(var(--border))] rounded-md px-3 py-2 bg-white text-sm font-mono"
+                  />
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Port Printer Bridge</label>
+                  <input
+                    type="number"
+                    value={settings.printer.bridge_port || 9899}
+                    onChange={(e) => setSettings({ ...settings, printer: { ...settings.printer, bridge_port: parseInt(e.target.value, 10) || 9899 } })}
+                    className="border border-[hsl(var(--border))] rounded-md px-3 py-2 bg-white text-sm font-mono"
+                  />
+                </div>
+              </div>
+            )}
+
+            <button type="button" onClick={handleTestPrint} disabled={testingPrint} className="btn-outline py-2 px-4 text-xs flex items-center gap-2 disabled:opacity-50">
+              <Printer size={14} /> {testingPrint ? "Mengirim..." : "Kirim Test Print Ke Printer"}
             </button>
           </div>
         );
@@ -275,8 +371,46 @@ export default function Settings() {
     { id: "license", label: "Lisensi", path: "/dapuros/app/settings/license" }
   ];
 
+  const receiptGeneral = settings.general || {};
+  const receiptCfg = settings.receipt || {};
+  const sampleReceiptItems = [
+    { name: "Contoh Produk A", quantity: 2, price: 15000, subtotal: 30000 },
+    { name: "Contoh Produk B", quantity: 1, price: 20000, subtotal: 20000 },
+  ];
+
   return (
     <div className="p-8 space-y-6 text-left" data-testid="settings-page">
+      {/* Print-only sample receipt: hidden in normal view, shown only inside window.print()
+          for the "Mode Lokal / USB" test print button (see handleTestPrint above). */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #print-receipt-area, #print-receipt-area * { visibility: visible; }
+          #print-receipt-area { position: fixed; inset: 0; width: 80mm; margin: 0 auto; padding: 4mm; }
+        }
+      `}</style>
+      <div id="print-receipt-area" className="hidden" data-testid="print-receipt-area">
+        <div style={{ textAlign: "center", fontWeight: "bold" }}>{receiptGeneral.store_name || "Toko"}</div>
+        {receiptCfg.header_text && <div style={{ textAlign: "center" }}>{receiptCfg.header_text}</div>}
+        <hr />
+        <div>No: TEST-0001</div>
+        <div>Tgl: {new Date().toLocaleString("id-ID")}</div>
+        <hr />
+        {sampleReceiptItems.map((it, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between" }}>
+            <span>{it.name} ({it.quantity}x)</span>
+            <span>Rp{it.subtotal.toLocaleString("id-ID")}</span>
+          </div>
+        ))}
+        <hr />
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold" }}>
+          <span>TOTAL</span>
+          <span>Rp{sampleReceiptItems.reduce((a, b) => a + b.subtotal, 0).toLocaleString("id-ID")}</span>
+        </div>
+        <hr />
+        <div style={{ textAlign: "center" }}>{receiptCfg.footer_text || "Terima Kasih!"}</div>
+      </div>
+
       <div>
         <span className="label-tiny">Pengaturan</span>
         <h1 className="font-display text-3xl font-bold mt-1 capitalize">Pengaturan ({type})</h1>
