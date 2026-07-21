@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
 import { Plus, Check, CreditCard } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 export default function AccountsPayable() {
   const [payables, setPayables] = useState([]);
@@ -8,6 +9,8 @@ export default function AccountsPayable() {
   const [invoiceNo, setInvoiceNo] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const fetchPayables = () => {
     api.get("/debt/payables").then((r) => setPayables(r.data)).catch(() => {});
@@ -19,7 +22,13 @@ export default function AccountsPayable() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!supplierName.trim() || !invoiceNo.trim() || !amount) return;
+    // No Faktur/Invoice is required by the backend (DebtPayableCreate.invoice_no). Previously
+    // this just returned silently with zero feedback if left blank.
+    if (!supplierName.trim()) { setFormError("Nama Supplier wajib diisi."); return; }
+    if (!invoiceNo.trim()) { setFormError("No Faktur / Invoice wajib diisi."); return; }
+    if (!amount || parseInt(amount) <= 0) { setFormError("Jumlah Hutang wajib diisi dan lebih besar dari 0."); return; }
+    setFormError("");
+    setSaving(true);
 
     api.post("/debt/payables", {
       supplier_name: supplierName,
@@ -34,8 +43,10 @@ export default function AccountsPayable() {
       setAmount("");
       setDueDate("");
       fetchPayables();
-      alert("Catatan Hutang Baru berhasil ditambahkan!");
-    });
+      toast.success("Catatan Hutang Baru berhasil ditambahkan!");
+    }).catch((err) => {
+      setFormError(err?.response?.data?.detail || "Gagal menyimpan catatan hutang.");
+    }).finally(() => setSaving(false));
   };
 
   const handleSettle = (id, currentPaid, totalAmount) => {
@@ -45,9 +56,13 @@ export default function AccountsPayable() {
     const newPaid = currentPaid + parseInt(pay);
     const status = newPaid >= totalAmount ? "Paid" : "Partial";
 
-    api.post("/debt/payables", { id, paid_amount: newPaid, status }).then(() => {
+    // Same missing-endpoint bug as AccountsReceivable.jsx's handleSettle -- was POSTing to
+    // the create endpoint (422, silently uncaught). Real fix: PUT to the record's own URL.
+    api.put(`/debt/payables/${id}`, { paid_amount: newPaid, status }).then(() => {
       fetchPayables();
-      alert("Pembayaran hutang berhasil dicatat!");
+      toast.success("Pembayaran hutang berhasil dicatat!");
+    }).catch((err) => {
+      toast.error(err?.response?.data?.detail || "Gagal mencatat pembayaran hutang.");
     });
   };
 

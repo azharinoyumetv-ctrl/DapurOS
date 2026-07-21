@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
 import { Plus, Check, HandCoins } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 export default function AccountsReceivable() {
   const [receivables, setReceivables] = useState([]);
@@ -8,6 +9,8 @@ export default function AccountsReceivable() {
   const [orderNo, setOrderNo] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const fetchReceivables = () => {
     api.get("/debt/receivables").then((r) => setReceivables(r.data)).catch(() => {});
@@ -19,7 +22,14 @@ export default function AccountsReceivable() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!customerName.trim() || !orderNo.trim() || !amount) return;
+    // No Referensi/Transaksi POS is required by the backend (DebtReceivableCreate.order_no).
+    // Previously this just returned silently with zero feedback if left blank -- the form
+    // looked like it saved (button clicked, no error) but nothing was ever sent.
+    if (!customerName.trim()) { setFormError("Nama Pelanggan wajib diisi."); return; }
+    if (!orderNo.trim()) { setFormError("No Referensi / Transaksi POS wajib diisi."); return; }
+    if (!amount || parseInt(amount) <= 0) { setFormError("Jumlah Piutang wajib diisi dan lebih besar dari 0."); return; }
+    setFormError("");
+    setSaving(true);
 
     api.post("/debt/receivables", {
       customer_name: customerName,
@@ -34,8 +44,10 @@ export default function AccountsReceivable() {
       setAmount("");
       setDueDate("");
       fetchReceivables();
-      alert("Catatan Piutang Baru berhasil ditambahkan!");
-    });
+      toast.success("Catatan Piutang Baru berhasil ditambahkan!");
+    }).catch((err) => {
+      setFormError(err?.response?.data?.detail || "Gagal menyimpan catatan piutang.");
+    }).finally(() => setSaving(false));
   };
 
   const handleSettle = (id, currentPaid, totalAmount) => {
@@ -45,10 +57,15 @@ export default function AccountsReceivable() {
     const newPaid = currentPaid + parseInt(pay);
     const status = newPaid >= totalAmount ? "Paid" : "Partial";
 
-    // Call mock endpoint
-    api.post("/debt/receivables", { id, paid_amount: newPaid, status }).then(() => {
+    // HISTORY: this used to POST {id, paid_amount, status} straight to the CREATE endpoint,
+    // which ignored the id and always inserted a brand-new, field-incomplete row -- the
+    // request actually 422'd (customer_name/order_no/due_date are required) and, since there
+    // was no .catch(), failed completely silently. Real fix: PUT to the record's own URL.
+    api.put(`/debt/receivables/${id}`, { paid_amount: newPaid, status }).then(() => {
       fetchReceivables();
-      alert("Pembayaran piutang berhasil dicatat!");
+      toast.success("Pembayaran piutang berhasil dicatat!");
+    }).catch((err) => {
+      toast.error(err?.response?.data?.detail || "Gagal mencatat pembayaran piutang.");
     });
   };
 
@@ -107,8 +124,12 @@ export default function AccountsReceivable() {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary w-full py-2 flex items-center justify-center gap-2">
-            <Plus size={16} /> Catat Piutang
+          {formError && (
+            <p className="text-xs text-[hsl(var(--destructive))] font-medium" data-testid="receivable-form-error">{formError}</p>
+          )}
+
+          <button type="submit" disabled={saving} className="btn-primary w-full py-2 flex items-center justify-center gap-2 disabled:opacity-60" data-testid="receivable-submit-btn">
+            <Plus size={16} /> {saving ? "Menyimpan…" : "Catat Piutang"}
           </button>
         </form>
 

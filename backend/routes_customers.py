@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from database import get_db, utcnow
 from models import (
     Customer, CustomerBase, Membership, MembershipBase, LoyaltyRules,
-    DebtReceivable, DebtReceivableCreate, DebtPayable, DebtPayableCreate
+    DebtReceivable, DebtReceivableCreate, DebtReceivableUpdate,
+    DebtPayable, DebtPayableCreate, DebtPayableUpdate
 )
 from auth import get_current_user
 
@@ -139,6 +140,30 @@ async def create_receivable(payload: DebtReceivableCreate, user: dict = Depends(
     doc.pop("_id", None)
     return doc
 
+@router.put("/api/debt/receivables/{receivable_id}", response_model=DebtReceivable)
+async def update_receivable(receivable_id: str, payload: DebtReceivableUpdate, user: dict = Depends(get_current_user)):
+    """Record a payment/settlement against an existing receivable (partial or full).
+
+    HISTORY: this endpoint didn't exist -- the frontend's 'Terima Bayar' button POSTed a
+    client-computed {id, paid_amount, status} straight to the CREATE endpoint above, which
+    ignores any 'id' in the payload, requires customer_name/order_no/due_date that weren't
+    sent, and always inserts a brand-new row. So the button 422'd silently (no .catch() on
+    the frontend) and no payment was ever actually recorded. This PUT is the real fix,
+    mirroring GerainaOS's routes_customers.py."""
+    db = get_db()
+    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Tidak ada perubahan")
+    res = await db.debt_receivables.find_one_and_update(
+        {"id": receivable_id, "store_id": user["store_id"]},
+        {"$set": update},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Catatan piutang tidak ditemukan")
+    return res
+
 # ---------- Debt Payables (Hutang) ----------
 @router.get("/api/debt/payables", response_model=List[DebtPayable])
 async def list_payables(user: dict = Depends(get_current_user)):
@@ -162,3 +187,21 @@ async def create_payable(payload: DebtPayableCreate, user: dict = Depends(get_cu
     await db.debt_payables.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+@router.put("/api/debt/payables/{payable_id}", response_model=DebtPayable)
+async def update_payable(payable_id: str, payload: DebtPayableUpdate, user: dict = Depends(get_current_user)):
+    """Record a payment/settlement against an existing payable (partial or full). Same
+    missing-endpoint bug as update_receivable above, fixed the same way."""
+    db = get_db()
+    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Tidak ada perubahan")
+    res = await db.debt_payables.find_one_and_update(
+        {"id": payable_id, "store_id": user["store_id"]},
+        {"$set": update},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Catatan hutang tidak ditemukan")
+    return res
