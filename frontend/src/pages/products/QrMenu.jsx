@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import api from "@/api/client";
 import { QRCodeSVG } from "qrcode.react";
 import { QrCode, Smartphone, Printer, Download, ShoppingBag, Send, CheckCircle2, Coffee, Sparkles, Plus, Minus } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 const DEFAULT_PRODUCTS = [
   { id: "prod-1", name: "Kopi Susu Gula Aren", price: 22000, category: "Minuman", description: "Espresso dengan susu segar dan gula aren asli" },
@@ -148,7 +149,16 @@ export default function QrMenu() {
               <button onClick={() => window.print()} className="btn-outline flex items-center justify-center gap-2 py-2.5 text-xs font-bold">
                 <Printer size={15} /> Cetak Standee
               </button>
-              <button onClick={() => alert(`URL QR Code Meja: ${qrUrl}`)} className="btn-primary flex items-center justify-center gap-2 py-2.5 text-xs font-bold">
+              <button
+                onClick={() => {
+                  // HISTORY: this used to just alert() the URL as text -- a "Salin Tautan"
+                  // (Copy Link) button that never actually copied anything to the clipboard.
+                  navigator.clipboard.writeText(qrUrl)
+                    .then(() => toast.success("Tautan menu berhasil disalin ke clipboard."))
+                    .catch(() => toast.error(`Gagal menyalin otomatis. Tautan: ${qrUrl}`));
+                }}
+                className="btn-primary flex items-center justify-center gap-2 py-2.5 text-xs font-bold"
+              >
                 <Download size={15} /> Salin Tautan
               </button>
             </div>

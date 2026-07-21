@@ -5,6 +5,7 @@ import {
   ChefHat, Coffee, Clock, Check, Play, CheckCircle2,
   AlertTriangle, RefreshCw, Layers, Wifi, WifiOff
 } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 export default function KdsScreen() {
   const { user } = useAuth();
@@ -127,7 +128,7 @@ export default function KdsScreen() {
       await api.put(`/kds/${ticketId}/status`, { status: nextStatus });
       loadTickets();
     } catch (e) {
-      alert("Gagal mengupdate status tiket");
+      toast.error("Gagal mengupdate status tiket");
     }
   };
 
