@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import api, { fmtIDR, downloadPdf } from "@/api/client";
 import { useAuth } from "@/auth/AuthContext";
+import { toast } from "@/components/ui/sonner";
 import {
   Search, Plus, Minus, Trash2, X, Printer, Download, CheckCircle2,
   Banknote, QrCode, Smartphone, RefreshCw, Barcode, Store, ChefHat,
@@ -9,11 +10,17 @@ import {
   Landmark
 } from "lucide-react";
 
+// HISTORY: these used to carry the old "ID_" prefix (ID_OVO, ID_DANA, ...) left over from
+// Xendit's deprecated /ewallets/charges API. The backend's xendit_client.py was migrated to
+// the v3 Payment Request API this session, whose channel_code values drop that prefix
+// entirely (OVO, DANA, SHOPEEPAY, LINKAJA) -- confirmed against docs.xendit.co. Sending the
+// old prefixed code straight through as channel_code would be rejected by Xendit outright.
+// Mirrors GerainaOS's already-migrated POS.jsx.
 const EWALLET_CHANNELS = [
-  { code: "ID_OVO", label: "OVO" },
-  { code: "ID_DANA", label: "DANA" },
-  { code: "ID_SHOPEEPAY", label: "ShopeePay" },
-  { code: "ID_LINKAJA", label: "LinkAja" },
+  { code: "OVO", label: "OVO" },
+  { code: "DANA", label: "DANA" },
+  { code: "SHOPEEPAY", label: "ShopeePay" },
+  { code: "LINKAJA", label: "LinkAja" },
 ];
 
 function ReceiptDialog({ order, onClose }) {
@@ -197,7 +204,7 @@ export default function POS() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [cart, setCart] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("cash"); // cash | qris | ewallet | edc
-  const [ewallet, setEwallet] = useState("ID_DANA");
+  const [ewallet, setEwallet] = useState("DANA");
   const [cashReceived, setCashReceived] = useState("");
   const [taxPercent, setTaxPercent] = useState(10); // takeaway: PB1/pajak 10% otomatis (bisa diubah), tanpa service
   const [discount, setDiscount] = useState(0);
@@ -248,7 +255,7 @@ export default function POS() {
       setTimeout(() => setScannedProduct(null), 3000);
       setBarcodeInput("");
     } else {
-      alert(`Menu / Barcode "${barcodeInput}" tidak ditemukan`);
+      toast.error(`Menu / Barcode "${barcodeInput}" tidak ditemukan.`);
     }
   };
 
@@ -637,6 +644,11 @@ export default function POS() {
       const payload = {
         items: cart,
         payment_method: directPaid ? "card" : paymentMethod,
+        // HISTORY: this field was missing entirely, even though routes_orders.py's
+        // create_order has always required it for payment_method === "ewallet"
+        // ("ewallet_channel wajib untuk e-wallet") -- every e-wallet checkout attempt
+        // 400'd immediately, regardless of which channel button the cashier picked.
+        ewallet_channel: paymentMethod === "ewallet" ? ewallet : undefined,
         discount: parseFloat(discount) || 0,
         tax_percent: isDineIn ? 10.0 : parseFloat(taxPercent) || 0,
         cash_received: paymentMethod === "cash" && !directPaid ? parseFloat(cashReceived) : undefined,
@@ -670,7 +682,7 @@ export default function POS() {
       setReceipt(r.data);
       clearCart();
     } catch (e) {
-      alert(e?.response?.data?.detail || "Gagal memproses transaksi");
+      toast.error(e?.response?.data?.detail || "Gagal memproses transaksi");
     } finally {
       setSubmitting(false);
       setEdcSimulating(false);
@@ -707,7 +719,7 @@ export default function POS() {
       setViewMode("floor");
       await loadTables();
     } catch (e) {
-      alert(e?.response?.data?.detail || "Gagal menyelesaikan pembayaran meja");
+      toast.error(e?.response?.data?.detail || "Gagal menyelesaikan pembayaran meja");
     } finally {
       setSubmitting(false);
     }
@@ -740,12 +752,15 @@ export default function POS() {
       Object.keys(splitQuantities).forEach(pId => {
         const q = splitQuantities[pId];
         if (q > 0) {
-          splitItems.append({ product_id: pId, quantity: q });
+          // HISTORY: was splitItems.append(...) -- .append() doesn't exist on JS arrays
+          // (that's Python). Every call threw "splitItems.append is not a function" the
+          // instant any quantity was selected, so "split by item" always crashed.
+          splitItems.push({ product_id: pId, quantity: q });
         }
       });
       
       if (splitItems.length === 0) {
-        alert("Pilih item untuk dipisah");
+        toast.error("Pilih item untuk dipisah.");
         return;
       }
       
@@ -760,7 +775,7 @@ export default function POS() {
       // Load updated bill session
       loadActiveTableSession(selectedTable.id);
     } catch (e) {
-      alert("Gagal membagi tagihan");
+      toast.error("Gagal membagi tagihan.");
     }
   };
 
@@ -800,7 +815,7 @@ export default function POS() {
         loadTables();
       }
     } catch (e) {
-      alert("Gagal memproses pembayaran");
+      toast.error("Gagal memproses pembayaran.");
     } finally {
       setSubmitting(false);
     }

@@ -1,6 +1,7 @@
 import "@/index.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
+import { Toaster } from "@/components/ui/sonner";
 
 import DagangOS from "@/pages/DagangOS";
 import DapurOS from "@/pages/DapurOS";
@@ -179,6 +180,11 @@ export default function App() {
   const appRoutes = getAppSubRoutes();
   return (
     <AuthProvider>
+      {/* Global toast host (sonner) -- replaces the native window.alert() calls previously
+          used across the app for success/error feedback. A native alert() blocks the entire
+          browser tab until dismissed, and this repo's sonner scaffold was never actually
+          mounted anywhere before this. Mirrors GerainaOS's App.js. */}
+      <Toaster position="top-center" richColors closeButton />
       <BrowserRouter>
         <Routes>
           {/* Direct Auth Top-level & Full URL Mappings */}
