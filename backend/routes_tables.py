@@ -87,6 +87,8 @@ async def list_tables(floor_id: Optional[str] = None, user: dict = Depends(get_c
 @router.post("", response_model=Table)
 async def create_table(payload: TableCreate, user: dict = Depends(get_current_user)):
     db = get_db()
+    from plan_limits import check_capacity
+    await check_capacity(db, user["store_id"], user.get("plan"), "tables", "max_tables")
     existing = await db.tables.find_one({"store_id": user["store_id"], "floor_id": payload.floor_id, "label": payload.label})
     if existing:
         raise HTTPException(status_code=400, detail="Meja dengan label tersebut sudah ada di lantai ini")

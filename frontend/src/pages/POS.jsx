@@ -283,17 +283,17 @@ export default function POS() {
         if (selectedTable?.id === editingTable.id) setSelectedTable(prev => ({ ...prev, ...payload }));
       } else {
         const res = await api.post("/tables", payload);
-        const newT = res.data && res.data.id ? res.data : { id: `tbl-${Date.now()}`, ...payload, status: "Vacant" };
-        setTables(prev => [...prev, newT]);
+        setTables(prev => [...prev, res.data]);
       }
     } catch (err) {
-      if (editingTable) {
-        setTables(prev => prev.map(t => t.id === editingTable.id ? { ...t, ...payload } : t));
-        if (selectedTable?.id === editingTable.id) setSelectedTable(prev => ({ ...prev, ...payload }));
-      } else {
-        const newT = { id: `tbl-${Date.now()}`, ...payload, status: "Vacant" };
-        setTables(prev => [...prev, newT]);
-      }
+      // Previously faked success on failure here -- synthesized a local tbl-<timestamp>
+      // record and added/updated it in UI state even though nothing was saved server-side,
+      // so a rejected save (e.g. the table-capacity cap from plan_limits.py) looked
+      // identical to a real one until the next refetch silently dropped the phantom row.
+      // Same fake-success anti-pattern already fixed in Pricing.jsx/Settings.jsx this
+      // session -- show the real error instead of pretending it worked.
+      toast.error(err?.response?.data?.detail || "Gagal menyimpan meja.");
+      return;
     } finally {
       setTableModalOpen(false);
     }
@@ -320,13 +320,14 @@ export default function POS() {
     const payload = { name: floorForm.name, level: parseInt(floorForm.level) || 1 };
     try {
       const res = await api.post("/floors", payload);
-      const newFl = res.data && res.data.id ? res.data : { id: `fl-${Date.now()}`, ...payload };
-      setFloors(prev => [...prev, newFl]);
-      setSelectedFloorId(newFl.id);
+      setFloors(prev => [...prev, res.data]);
+      setSelectedFloorId(res.data.id);
     } catch (err) {
-      const newFl = { id: `fl-${Date.now()}`, ...payload };
-      setFloors(prev => [...prev, newFl]);
-      setSelectedFloorId(newFl.id);
+      // Same fake-success anti-pattern as handleSaveTable/handleSaveProduct in this file --
+      // was synthesizing a local fl-<timestamp> floor and selecting it even on a failed
+      // save. Show the real error instead.
+      toast.error(err?.response?.data?.detail || "Gagal menyimpan lantai.");
+      return;
     } finally {
       setFloorModalOpen(false);
     }
@@ -355,16 +356,15 @@ export default function POS() {
         setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...payload } : p));
       } else {
         const res = await api.post("/products", payload);
-        const newP = res.data && res.data.id ? res.data : { id: `prod-${Date.now()}`, ...payload };
-        setProducts(prev => [...prev, newP]);
+        setProducts(prev => [...prev, res.data]);
       }
     } catch (err) {
-      if (editingProduct) {
-        setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...payload } : p));
-      } else {
-        const newP = { id: `prod-${Date.now()}`, ...payload };
-        setProducts(prev => [...prev, newP]);
-      }
+      // Previously faked success here too -- injected a local prod-<timestamp> record (or
+      // pretended an edit saved) on failure, which is exactly what would have masked the
+      // new product-capacity cap from plan_limits.py: the item would appear added, then
+      // vanish on the next product list refetch with no explanation. Show the real error.
+      toast.error(err?.response?.data?.detail || "Gagal menyimpan produk.");
+      return;
     } finally {
       setProductModalOpen(false);
     }

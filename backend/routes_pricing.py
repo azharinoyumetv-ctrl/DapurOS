@@ -17,6 +17,10 @@ TIERS = [
         "period_monthly": "14 hari",
         "period_yearly": "14 hari",
         "tagline": "14 hari, akses penuh fitur Business",
+        "max_outlets": 3,
+        "max_employees": 75,
+        "max_products": None,
+        "max_tables": None,
         "features": [
             "Semua fitur paket Business",
             "3 outlet, device & akun setara Business",
@@ -34,6 +38,10 @@ TIERS = [
         "period_monthly": "/bulan",
         "period_yearly": "/tahun",
         "tagline": "Operasional dasar restoran",
+        "max_outlets": 1,
+        "max_employees": 5,
+        "max_products": 150,
+        "max_tables": 25,
         "features": [
             "1 outlet, 2 device, 5 akun karyawan",
             "Maks 150 menu, 25 meja, transaksi unlimited",
@@ -55,6 +63,10 @@ TIERS = [
         "period_monthly": "/bulan",
         "period_yearly": "/tahun",
         "tagline": "Restoran lengkap 1 outlet",
+        "max_outlets": 1,
+        "max_employees": 25,
+        "max_products": None,
+        "max_tables": None,
         "features": [
             "1 outlet, 8 device, 25 akun karyawan",
             "Menu & meja unlimited",
@@ -78,6 +90,10 @@ TIERS = [
         "period_yearly": "/tahun",
         "tagline": "Kontrol penuh, siap multi-outlet",
         "highlight_note": "Semua fitur operasional, otomatisasi, dan multi-outlet dalam satu paket.",
+        "max_outlets": 3,
+        "max_employees": 75,
+        "max_products": None,
+        "max_tables": None,
         "features": [
             "3 outlet, 24 device, 75 akun karyawan",
             "Manajemen menu & resep terpusat",
