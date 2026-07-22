@@ -1,11 +1,12 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
+import { toast } from "@/components/ui/sonner";
 import {
   LayoutDashboard, ShoppingCart, Package, Warehouse, ClipboardList,
   Truck, Users, Landmark, CreditCard, BarChart3, UserCheck,
   GitBranch, Cpu, Settings, Info, ChevronDown, ChevronRight,
-  LogOut, Sparkles, Crown, Shield, Leaf, Utensils, ChefHat, QrCode
+  LogOut, Sparkles, Crown, Shield, Leaf, Utensils, ChefHat, QrCode, Lock
 } from "lucide-react";
 
 const ROLE_PERMISSIONS = {
@@ -21,6 +22,28 @@ const ROLE_PERMISSIONS = {
     "products", "inventory", "purchase", "suppliers", "about"
   ]
 };
+
+// Plan-gated nav (cosmetic only -- there is no backend enforcement behind this yet; every
+// endpoint is still reachable regardless of plan). This just shows what each tier unlocks and
+// nudges upgrades, per the Starter/Pro/Business repackaging. "trial" ranks as Business since
+// the 14-day trial now grants full Business-level access.
+const PLAN_RANK = { starter: 0, pro: 1, business: 2, trial: 2 };
+const PLAN_LABEL = { starter: "Starter", pro: "Pro", business: "Business" };
+
+function planRank(plan) {
+  return PLAN_RANK[plan] ?? 0;
+}
+
+function isLocked(minPlan, userPlan) {
+  if (!minPlan || minPlan === "starter") return false;
+  return planRank(userPlan) < planRank(minPlan);
+}
+
+function notifyLocked(minPlan) {
+  toast.error(`Fitur ini tersedia dalam paket ${PLAN_LABEL[minPlan] || "Pro"}.`, {
+    action: { label: "Lihat Paket", onClick: () => { window.location.href = "/dapuros/pricing"; } },
+  });
+}
 
 function trialDaysLeft(iso) {
   if (!iso) return null;
@@ -53,19 +76,19 @@ export default function AppLayout() {
     { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: "Dasbor", key: "dashboard" },
     { to: `${prefix}/pos`, icon: ShoppingCart, label: "Kasir", key: "pos" },
     { to: `${prefix}/kds`, icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
-    { to: `${prefix}/qr-menu`, icon: QrCode, label: "Menu QR Code", key: "qr-menu" },
+    { to: `${prefix}/qr-menu`, icon: QrCode, label: "Menu QR Code", key: "qr-menu", minPlan: "pro" },
     {
       label: "Produk",
       icon: Package,
       key: "products",
       sub: [
         { to: `${prefix}/products`, label: "Daftar Produk" },
-        ...(isDapurOS ? [{ to: `${prefix}/products/ingredients`, label: "Bahan Baku (BOM)" }] : []),
+        ...(isDapurOS ? [{ to: `${prefix}/products/ingredients`, label: "Bahan Baku (BOM)", minPlan: "pro" }] : []),
         { to: `${prefix}/products/categories`, label: "Kategori" },
         { to: `${prefix}/products/brands`, label: "Merek" },
         { to: `${prefix}/products/units`, label: "Satuan" },
         { to: `${prefix}/products/stock-adjustment`, label: "Penyesuaian Stok" },
-        { to: `${prefix}/products/stock-transfer`, label: "Transfer Stok" }
+        { to: `${prefix}/products/stock-transfer`, label: "Transfer Stok", minPlan: "business" }
       ]
     },
     {
@@ -74,37 +97,40 @@ export default function AppLayout() {
       key: "inventory",
       sub: [
         { to: `${prefix}/inventory/overview`, label: "Ringkasan Stok" },
-        { to: `${prefix}/inventory/movement`, label: "Mutasi Stok" },
-        { to: `${prefix}/inventory/valuation`, label: "Penilaian Inventaris" },
+        { to: `${prefix}/inventory/movement`, label: "Mutasi Stok", minPlan: "pro" },
+        { to: `${prefix}/inventory/valuation`, label: "Penilaian Inventaris", minPlan: "pro" },
         { to: `${prefix}/inventory/low-stock`, label: "Stok Menipis" },
-        { to: `${prefix}/inventory/dead-stock`, label: "Stok Mati" }
+        { to: `${prefix}/inventory/dead-stock`, label: "Stok Mati", minPlan: "pro" }
       ]
     },
     {
       label: "Pembelian",
       icon: ClipboardList,
       key: "purchase",
+      minPlan: "pro",
       sub: [
         { to: `${prefix}/purchase/orders`, label: "Order Pembelian (PO)" },
         { to: `${prefix}/purchase/receiving`, label: "Penerimaan Barang" },
         { to: `${prefix}/purchase/invoices`, label: "Faktur Pemasok" }
       ]
     },
-    { to: `${prefix}/suppliers`, icon: Truck, label: "Pemasok", key: "suppliers" },
+    { to: `${prefix}/suppliers`, icon: Truck, label: "Pemasok", key: "suppliers", minPlan: "pro" },
     {
       label: "Pelanggan",
       icon: Users,
       key: "customers",
+      minPlan: "pro",
       sub: [
         { to: `${prefix}/customers`, label: "Daftar Pelanggan" },
-        { to: `${prefix}/customers/membership`, label: "Keanggotaan" },
-        { to: `${prefix}/customers/loyalty`, label: "Poin Loyalitas" }
+        { to: `${prefix}/customers/membership`, label: "Keanggotaan", minPlan: "business" },
+        { to: `${prefix}/customers/loyalty`, label: "Poin Loyalitas", minPlan: "business" }
       ]
     },
     {
       label: "Hutang Piutang",
       icon: Landmark,
       key: "debt",
+      minPlan: "pro",
       sub: [
         { to: `${prefix}/debt/receivable`, label: "Piutang Usaha" },
         { to: `${prefix}/debt/payable`, label: "Utang Usaha" }
@@ -127,6 +153,7 @@ export default function AppLayout() {
       label: "Laporan",
       icon: BarChart3,
       key: "reports",
+      minPlan: "pro",
       sub: [
         { to: `${prefix}/reports/sales`, label: "Penjualan" },
         { to: `${prefix}/reports/product`, label: "Produk" },
@@ -142,23 +169,24 @@ export default function AppLayout() {
       key: "staff",
       sub: [
         { to: `${prefix}/staff/management`, label: "Manajemen Staf" },
-        { to: `${prefix}/staff/roles`, label: "Peran" },
-        { to: `${prefix}/staff/permissions`, label: "Izin Akses" },
-        { to: `${prefix}/staff/attendance`, label: "Absensi" }
+        { to: `${prefix}/staff/roles`, label: "Peran", minPlan: "business" },
+        { to: `${prefix}/staff/permissions`, label: "Izin Akses", minPlan: "business" },
+        { to: `${prefix}/staff/attendance`, label: "Absensi", minPlan: "business" }
       ]
     },
-    { to: `${prefix}/branches`, icon: GitBranch, label: "Cabang", key: "branches" },
+    { to: `${prefix}/branches`, icon: GitBranch, label: "Cabang", key: "branches", minPlan: "business" },
     {
       label: "Integrasi",
       icon: Cpu,
       key: "integrations",
+      minPlan: "pro",
       sub: [
         { to: `${prefix}/integrations/xendit`, label: "Xendit" },
         { to: `${prefix}/integrations/midtrans`, label: "Midtrans" },
         { to: `${prefix}/integrations/stripe`, label: "Stripe" },
-        { to: `${prefix}/integrations/whatsapp`, label: "WhatsApp" },
-        { to: `${prefix}/integrations/telegram`, label: "Telegram" },
-        { to: `${prefix}/integrations/email`, label: "Email" }
+        { to: `${prefix}/integrations/whatsapp`, label: "WhatsApp", minPlan: "business" },
+        { to: `${prefix}/integrations/telegram`, label: "Telegram", minPlan: "business" },
+        { to: `${prefix}/integrations/email`, label: "Email", minPlan: "business" }
       ]
     },
     {
@@ -265,6 +293,26 @@ export default function AppLayout() {
             const Icon = item.icon;
             if (item.sub) {
               const isOpen = openMenus[item.key];
+              const subsWithLock = item.sub.map((s) => ({ ...s, _minPlan: s.minPlan || item.minPlan || "starter" }));
+              const allLocked = subsWithLock.every((s) => isLocked(s._minPlan, user?.plan));
+
+              if (allLocked) {
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => notifyLocked(item.minPlan || subsWithLock[0]._minPlan)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium text-[hsl(var(--muted))] hover:bg-[hsl(var(--secondary))]/50 transition-colors text-left"
+                    data-testid={`menu-locked-${item.key}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon size={18} className="opacity-50" />
+                      <span>{item.label}</span>
+                    </div>
+                    <Lock size={13} className="opacity-60" />
+                  </button>
+                );
+              }
+
               return (
                 <div key={item.key} className="space-y-0.5">
                   <button
@@ -283,25 +331,55 @@ export default function AppLayout() {
                   </button>
                   {isOpen && (
                     <div className="pl-9 space-y-0.5 border-l border-[hsl(var(--border))]/50 ml-5">
-                      {item.sub.map((subItem) => (
-                        <NavLink
-                          key={subItem.to}
-                          to={subItem.to}
-                          end
-                          className={({ isActive }) =>
-                            `block px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                              isActive
-                                ? "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
-                                : "text-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"
-                            }`
-                          }
-                        >
-                          {subItem.label}
-                        </NavLink>
-                      ))}
+                      {subsWithLock.map((subItem) => {
+                        const locked = isLocked(subItem._minPlan, user?.plan);
+                        if (locked) {
+                          return (
+                            <button
+                              key={subItem.to}
+                              onClick={() => notifyLocked(subItem._minPlan)}
+                              className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-md text-[hsl(var(--muted))]/70 hover:bg-[hsl(var(--secondary))]/50 transition-colors text-left"
+                              data-testid={`submenu-locked-${subItem.to.split("/").pop()}`}
+                            >
+                              <span>{subItem.label}</span>
+                              <Lock size={11} className="opacity-60 shrink-0" />
+                            </button>
+                          );
+                        }
+                        return (
+                          <NavLink
+                            key={subItem.to}
+                            to={subItem.to}
+                            end
+                            className={({ isActive }) =>
+                              `block px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                isActive
+                                  ? "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
+                                  : "text-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"
+                              }`
+                            }
+                          >
+                            {subItem.label}
+                          </NavLink>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
+              );
+            }
+
+            const leafLocked = isLocked(item.minPlan, user?.plan);
+            if (leafLocked) {
+              return (
+                <button
+                  key={item.to}
+                  onClick={() => notifyLocked(item.minPlan)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-[hsl(var(--muted))] hover:bg-[hsl(var(--secondary))]/50 transition-colors text-left"
+                  data-testid={`menu-locked-${item.key}`}
+                >
+                  <Icon size={18} className="opacity-50" /> <span className="flex-1">{item.label}</span> <Lock size={13} className="opacity-60" />
+                </button>
               );
             }
 
