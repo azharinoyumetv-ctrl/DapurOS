@@ -21,6 +21,7 @@ TIERS = [
         "max_employees": 75,
         "max_products": None,
         "max_tables": None,
+        "max_devices": 24,
         "features": [
             "Semua fitur paket Business",
             "3 outlet, device & akun setara Business",
@@ -42,6 +43,7 @@ TIERS = [
         "max_employees": 5,
         "max_products": 150,
         "max_tables": 25,
+        "max_devices": 2,
         "features": [
             "1 outlet, 2 device, 5 akun karyawan",
             "Maks 150 menu, 25 meja, transaksi unlimited",
@@ -67,6 +69,7 @@ TIERS = [
         "max_employees": 25,
         "max_products": None,
         "max_tables": None,
+        "max_devices": 8,
         "features": [
             "1 outlet, 8 device, 25 akun karyawan",
             "Menu & meja unlimited",
@@ -94,6 +97,7 @@ TIERS = [
         "max_employees": 75,
         "max_products": None,
         "max_tables": None,
+        "max_devices": 24,
         "features": [
             "3 outlet, 24 device, 75 akun karyawan",
             "Manajemen menu & resep terpusat",
