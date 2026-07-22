@@ -17,9 +17,9 @@ const TINT = "#fdf1e8";
 const FAQS = [
   { q: "Apakah trial benar-benar gratis?", a: "Ya. 14 hari pemakaian fitur Pro, tanpa kartu kredit, dan Anda bisa berhenti kapan saja." },
   { q: "Bisa pakai untuk multi-cabang?", a: "Bisa. Paket Multi-Branch mendukung outlet tanpa batas dengan konsolidasi laporan antar cabang." },
-  { q: "Metode pembayaran apa saja yang didukung?", a: "Tunai, QRIS dinamis, dan e-wallet OVO/DANA/ShopeePay/LinkAja via Xendit." },
-  { q: "Bisa impor produk lama dari Excel?", a: "Bisa. Halaman Produk menyediakan importer Excel/CSV dengan deteksi SKU duplikat." },
-  { q: "Apa beda Starter dan Pro?", a: "Pro membuka produk tanpa batas, impor Excel/CSV, dan invoice A4 — cocok untuk usaha yang mulai berkembang." },
+  { q: "Metode pembayaran apa saja yang didukung?", a: "Tunai, QRIS dinamis, e-wallet OVO/DANA/ShopeePay/LinkAja (Xendit), kartu debit/kredit via EDC, dan DOKU." },
+  { q: "Bisa impor menu lama dari Excel?", a: "Bisa. Halaman Produk menyediakan importer Excel/CSV dengan deteksi SKU duplikat." },
+  { q: "Apa beda Starter dan Pro?", a: "Pro membuka Kitchen Display System (KDS), QR menu untuk dine-in, kasir hingga 3 unit, dan pembayaran EDC/DOKU — cocok untuk restoran/kafe yang mulai berkembang." },
 ];
 
 function fmtMonthlyEq(yearly) {
