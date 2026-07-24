@@ -4,7 +4,7 @@ DO NOT modify prices without explicit client approval.
 """
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from auth import get_current_user, require_admin
+from auth import get_billing_user, require_billing_admin
 from database import get_db, utcnow
 
 router = APIRouter(prefix="/api/pricing", tags=["pricing"])
@@ -137,7 +137,7 @@ FREE_SELF_SERVE_TIERS = {"trial"}
 
 
 @router.post("/upgrade")
-async def upgrade_plan(payload: dict, user: dict = Depends(require_admin)):
+async def upgrade_plan(payload: dict, user: dict = Depends(require_billing_admin)):
     tier_id = payload.get("tier_id")
     if not tier_id or tier_id not in [t["id"] for t in TIERS]:
         raise HTTPException(status_code=400, detail="Paket tidak valid")
@@ -160,15 +160,17 @@ async def upgrade_plan(payload: dict, user: dict = Depends(require_admin)):
 
 
 @router.get("/addons/my")
-async def list_my_addons(user: dict = Depends(get_current_user)):
-    """This store's addon purchase requests (pending/active/rejected), newest first."""
+async def list_my_addons(user: dict = Depends(get_billing_user)):
+    """This store's addon purchase requests (pending/active/rejected), newest first. Uses
+    get_billing_user (not get_current_user) so this stays reachable on an expired trial --
+    see require_billing_admin below for why."""
     db = get_db()
     cursor = db.addon_purchases.find({"store_id": user["store_id"]}, {"_id": 0}).sort("created_at", -1)
     return await cursor.to_list(length=100)
 
 
 @router.post("/addons/purchase")
-async def purchase_addon(payload: dict, user: dict = Depends(require_admin)):
+async def purchase_addon(payload: dict, user: dict = Depends(require_billing_admin)):
     """No subscription payment gateway is wired to this app's own billing (only to in-store
     POS transactions via Xendit/DOKU/EDC), so this records a pending request for manual
     activation by DagangOS staff after payment is confirmed offline -- same reasoning as
@@ -179,7 +181,11 @@ async def purchase_addon(payload: dict, user: dict = Depends(require_admin)):
     Once a request is flipped to status="active" (manually, in the DB, by staff), it takes
     effect automatically -- plan_limits.py's check_capacity()/check_outlet_capacity() read
     active addon_purchases and add the bonus capacity on top of the plan's base caps. See
-    _active_addon_counts()/_addon_bonus() there. No separate "apply the addon" step needed."""
+    _active_addon_counts()/_addon_bonus() there. No separate "apply the addon" step needed.
+
+    Uses require_billing_admin (not require_admin) so this stays reachable on an expired
+    trial -- though in practice plan != "pro"/"business" below already rejects an expired
+    account from buying an addon anyway; they have to /upgrade first regardless."""
     addon_id = payload.get("addon_id")
     addon = next((a for a in ADDONS if a["id"] == addon_id), None)
     if not addon:

@@ -9,7 +9,7 @@ import { ShieldAlert, Lock } from "lucide-react";
 // carries a few entries GerainaOS doesn't (qr-menu, products/ingredients + its path aliases,
 // and a parent-level /customers gate -- DapurOS's "Pelanggan" nav item is Pro at the parent,
 // unlike GerainaOS where only the membership/loyalty sub-items are locked).
-const PLAN_RANK = { starter: 0, pro: 1, business: 2, trial: 2 };
+const PLAN_RANK = { expired: -1, starter: 0, pro: 1, business: 2, trial: 2 };
 const PLAN_LABEL = { starter: "Starter", pro: "Pro", business: "Business" };
 const PLAN_ROUTES = [
   ["/qr-menu", "pro"],
@@ -103,6 +103,26 @@ export default function RoleGuard({ children }) {
   if (!user) {
     console.log('[RoleGuard] No user, redirecting to /login');
     return <Navigate to="/login" replace />;
+  }
+
+  // Expired trial blocks the ENTIRE app, not just plan-locked modules -- "starter" is itself
+  // a paid plan, so an account that never subscribed gets no app access at all until it does.
+  // Runs before the per-module PLAN_ROUTES gate below, applies to every role including Owner.
+  // The Pricing page lives outside this /app/* + RoleGuard tree (mounted at /dapuros/pricing),
+  // so it stays reachable from here -- that's the only way out of this screen.
+  if (user.plan === "expired") {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center space-y-4" data-testid="trial-expired-page">
+        <div className="w-16 h-16 rounded-full bg-[hsl(9,65%,55%,0.12)] text-[hsl(9,65%,55%)] grid place-items-center">
+          <Lock size={32} />
+        </div>
+        <h1 className="font-display text-2xl font-bold">Masa Trial Berakhir</h1>
+        <p className="text-[hsl(var(--muted))] max-w-md text-sm">
+          Trial 14 hari Anda sudah berakhir dan belum ada langganan aktif. Pilih paket untuk mengaktifkan kembali akses ke seluruh fitur.
+        </p>
+        <a href="/dapuros/pricing" className="btn-primary text-xs px-4 py-2 rounded-lg">Pilih Paket</a>
+      </div>
+    );
   }
 
   // Plan gate runs for every role, including Owner -- direct-URL access to a plan-locked page
