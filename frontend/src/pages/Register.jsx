@@ -78,6 +78,8 @@ export default function Register() {
               <label className="label-tiny block mb-2" data-testid="register-store-label">Nama Restoran / Cafe</label>
               <input
                 type="text"
+                name="organization"
+                autoComplete="organization"
                 required
                 className="input-field"
                 data-testid="register-store-input"
@@ -90,6 +92,8 @@ export default function Register() {
               <label className="label-tiny block mb-2" data-testid="register-email-label">Alamat Email</label>
               <input
                 type="email"
+                name="email"
+                autoComplete="email"
                 required
                 className="input-field"
                 data-testid="register-email-input"
@@ -102,6 +106,8 @@ export default function Register() {
               <label className="label-tiny block mb-2" data-testid="register-password-label">Kata Sandi</label>
               <input
                 type="password"
+                name="new-password"
+                autoComplete="new-password"
                 required
                 className="input-field"
                 minLength={6}
