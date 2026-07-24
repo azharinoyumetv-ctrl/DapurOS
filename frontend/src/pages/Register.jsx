@@ -43,12 +43,29 @@ export default function Register() {
 
   return (
     <div className={`min-h-screen flex ${isDapurOS ? "theme-dapuros" : ""}`}>
-      <div className="hidden lg:flex flex-col justify-between w-1/2 p-12 relative bg-grain"
+      <div className="hidden lg:flex flex-col justify-between w-1/2 p-12 relative overflow-hidden bg-grain"
            style={{ background: isDapurOS ? "linear-gradient(135deg, hsl(35,84%,18%), hsl(35,84%,12%))" : "linear-gradient(135deg, hsl(151,39%,17%), hsl(151,39%,12%))" }}>
-        <Link to="/" className="text-white font-display font-bold text-xl flex items-center gap-2">
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
+          <defs>
+            <pattern id="circuitBrandReg" width="140" height="140" patternUnits="userSpaceOnUse">
+              <g fill="none" stroke="#ffffff" strokeOpacity=".07" strokeWidth="1.5">
+                <path d="M18 18 L18 55 L70 55 L70 100" />
+                <path d="M120 10 L120 45 L95 45 L95 130" />
+                <path d="M40 130 L40 95 L10 95" />
+              </g>
+              <g fill="#ffffff" fillOpacity=".1">
+                <circle cx="18" cy="18" r="3" /><circle cx="70" cy="100" r="3" />
+                <circle cx="120" cy="10" r="2.4" /><circle cx="95" cy="130" r="2.4" />
+                <circle cx="40" cy="130" r="2.4" /><circle cx="10" cy="95" r="2.4" />
+              </g>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#circuitBrandReg)" />
+        </svg>
+        <Link to="/" className="relative text-white font-display font-bold text-xl flex items-center gap-2">
           <img src={brandIconSrc} alt="" className="w-[22px] h-[22px] object-contain" /> {brandName} <span className="text-xs text-white/60 font-medium">by DagangOS</span>
         </Link>
-        <div className="text-white space-y-5 max-w-md">
+        <div className="relative text-white space-y-5 max-w-md">
           <p className="label-tiny" style={{ color: "hsl(9,65%,75%)" }}>{brandName} by DagangOS</p>
           <h2 className="font-display text-4xl font-bold leading-tight">
             {titleText}<br /> dalam 60 detik.
@@ -61,7 +78,7 @@ export default function Register() {
             ))}
           </ul>
         </div>
-        <p className="text-white/50 text-xs">© {brandName} by DagangOS</p>
+        <p className="relative text-white/50 text-xs">© {brandName} by DagangOS</p>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-8">
