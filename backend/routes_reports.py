@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from database import get_db
 from models import Expense, ExpenseCreate
 from auth import get_current_user
+from plan_limits import require_plan
 
 router = APIRouter(prefix="/api", tags=["reports"])
 
@@ -47,10 +48,10 @@ def _parse_iso(s: Optional[str]) -> Optional[datetime]:
         return None
 
 
-# ---------- Expenses ----------
+# ---------- Expenses (part of the Pro-tier Laporan module -- see AppLayout.jsx minPlan) ----------
 @router.get("/expenses")
 async def list_expenses(
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_plan("pro")),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
@@ -68,7 +69,7 @@ async def list_expenses(
 
 
 @router.post("/expenses")
-async def create_expense(payload: ExpenseCreate, user: dict = Depends(get_current_user)):
+async def create_expense(payload: ExpenseCreate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     expense = Expense(**payload.model_dump(), store_id=user["store_id"], created_by=user.get("email"))
     doc = expense.model_dump()
@@ -78,7 +79,7 @@ async def create_expense(payload: ExpenseCreate, user: dict = Depends(get_curren
 
 
 @router.delete("/expenses/{expense_id}")
-async def delete_expense(expense_id: str, user: dict = Depends(get_current_user)):
+async def delete_expense(expense_id: str, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     res = await db.expenses.delete_one({"id": expense_id, "store_id": user["store_id"]})
     if res.deleted_count == 0:
@@ -88,7 +89,7 @@ async def delete_expense(expense_id: str, user: dict = Depends(get_current_user)
 
 # ---------- Profit (Laba Rugi) ----------
 @router.get("/reports/profit")
-async def report_profit(user: dict = Depends(get_current_user), months: int = Query(6, ge=1, le=24)):
+async def report_profit(user: dict = Depends(require_plan("pro")), months: int = Query(6, ge=1, le=24)):
     db = get_db()
     store_id = user["store_id"]
     now = datetime.now(timezone.utc)
@@ -168,7 +169,7 @@ async def report_profit(user: dict = Depends(get_current_user), months: int = Qu
 
 # ---------- Cashflow (Arus Kas) ----------
 @router.get("/reports/cashflow")
-async def report_cashflow(user: dict = Depends(get_current_user), weeks: int = Query(4, ge=1, le=12)):
+async def report_cashflow(user: dict = Depends(require_plan("pro")), weeks: int = Query(4, ge=1, le=12)):
     db = get_db()
     store_id = user["store_id"]
     now = datetime.now(timezone.utc)
@@ -225,7 +226,7 @@ async def report_cashflow(user: dict = Depends(get_current_user), weeks: int = Q
 
 # ---------- Inventory turnover ----------
 @router.get("/reports/inventory/turnover")
-async def report_inventory_turnover(user: dict = Depends(get_current_user), days: int = Query(30, ge=1, le=365)):
+async def report_inventory_turnover(user: dict = Depends(require_plan("pro")), days: int = Query(30, ge=1, le=365)):
     db = get_db()
     store_id = user["store_id"]
     now = datetime.now(timezone.utc)

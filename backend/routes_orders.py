@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from database import get_db, utcnow, next_order_no
 from models import OrderCreate, Order, OrderLineItem
 from auth import get_current_user, require_admin
+from plan_limits import require_plan
 from xendit_client import create_qris, create_ewallet_charge
 from doku_client import create_doku_checkout, DokuNotConfiguredError
 
@@ -350,8 +351,10 @@ async def stats(user: dict = Depends(get_current_user)):
 
 
 @router.get("/product-sales")
-async def product_sales(user: dict = Depends(get_current_user), days: int = 30, limit: int = 10):
-    """Laporan produk terjual REAL: agregasi qty + revenue per produk dari order LUNAS."""
+async def product_sales(user: dict = Depends(require_plan("pro")), days: int = 30, limit: int = 10):
+    """Laporan produk terjual REAL: agregasi qty + revenue per produk dari order LUNAS.
+
+    Pro-tier feature (part of the Laporan module) -- see AppLayout.jsx minPlan."""
     db = get_db()
     from datetime import datetime, timezone, timedelta
     after = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
@@ -379,11 +382,12 @@ async def product_sales(user: dict = Depends(get_current_user), days: int = 30, 
 
 
 @router.get("/sales-trend")
-async def sales_trend(user: dict = Depends(get_current_user), days: int = 7):
+async def sales_trend(user: dict = Depends(require_plan("pro")), days: int = 7):
     """Real daily sales aggregation (paid orders only) for the last N days.
 
     Replaces the previous frontend pattern of inventing a daily breakdown by
-    multiplying a weekly total by fixed percentages.
+    multiplying a weekly total by fixed percentages. Pro-tier feature (part of the
+    Laporan module) -- see AppLayout.jsx minPlan.
     """
     db = get_db()
     from datetime import datetime, timezone, timedelta
@@ -416,8 +420,9 @@ async def sales_trend(user: dict = Depends(get_current_user), days: int = 7):
 
 
 @router.get("/payment-methods")
-async def payment_methods(user: dict = Depends(get_current_user), days: int = 7):
-    """Real payment-method breakdown (paid orders only) for the last N days.
+async def payment_methods(user: dict = Depends(require_plan("pro")), days: int = 7):
+    """Real payment-method breakdown (paid orders only) for the last N days. Pro-tier feature
+    (part of the Laporan module) -- see AppLayout.jsx minPlan.
 
     Replaces the previous frontend pattern of a flat, never-updated payment-method split.
     """

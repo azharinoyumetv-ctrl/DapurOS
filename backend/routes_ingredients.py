@@ -9,6 +9,7 @@ from models import (
     SpoilageCreate, SpoilageLog, SPOILAGE_REASONS, SPOILAGE_REASON_ALIASES,
 )
 from auth import get_current_user
+from plan_limits import require_plan
 
 router = APIRouter(prefix="/api/ingredients", tags=["ingredients"])
 
@@ -28,7 +29,7 @@ def _strip_id(d: dict) -> dict:
 
 
 @router.get("", response_model=List[Ingredient])
-async def list_ingredients(user: dict = Depends(get_current_user)):
+async def list_ingredients(user: dict = Depends(require_plan("pro"))):
     db = get_db()
     flt = {"store_id": user["store_id"]}
     count = await db.ingredients.count_documents(flt)
@@ -61,7 +62,7 @@ async def list_ingredients(user: dict = Depends(get_current_user)):
 
 
 @router.post("", response_model=Ingredient)
-async def create_ingredient(payload: IngredientCreate, user: dict = Depends(get_current_user)):
+async def create_ingredient(payload: IngredientCreate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     existing = await db.ingredients.find_one({"store_id": user["store_id"], "name": payload.name})
     if existing:
@@ -79,7 +80,7 @@ async def create_ingredient(payload: IngredientCreate, user: dict = Depends(get_
 
 
 @router.put("/{ingredient_id}", response_model=Ingredient)
-async def update_ingredient(ingredient_id: str, payload: IngredientUpdate, user: dict = Depends(get_current_user)):
+async def update_ingredient(ingredient_id: str, payload: IngredientUpdate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
     if not update:
@@ -98,7 +99,7 @@ async def update_ingredient(ingredient_id: str, payload: IngredientUpdate, user:
 
 
 @router.get("/spoilage/logs", response_model=List[SpoilageLog])
-async def list_spoilage_logs(user: dict = Depends(get_current_user)):
+async def list_spoilage_logs(user: dict = Depends(require_plan("pro"))):
     """Riwayat pencatatan bahan terbuang / rusak (Spoilage Log)."""
     db = get_db()
     cursor = db.spoilage_logs.find(
@@ -108,13 +109,17 @@ async def list_spoilage_logs(user: dict = Depends(get_current_user)):
 
 
 @router.get("/spoilage/reasons")
-async def list_spoilage_reasons():
-    """Daftar alasan resmi pembuangan bahan baku."""
+async def list_spoilage_reasons(user: dict = Depends(require_plan("pro"))):
+    """Daftar alasan resmi pembuangan bahan baku.
+
+    NOTE: this endpoint had no auth dependency at all before this -- anyone could hit it
+    unauthenticated. It's static reference data, low risk, but gating it to match its sibling
+    ingredients endpoints closes an unintentional gap rather than leaving one open by oversight."""
     return {"reasons": SPOILAGE_REASONS}
 
 
 @router.post("/{ingredient_id}/spoilage", response_model=SpoilageLog)
-async def log_spoilage(ingredient_id: str, payload: SpoilageCreate, user: dict = Depends(get_current_user)):
+async def log_spoilage(ingredient_id: str, payload: SpoilageCreate, user: dict = Depends(require_plan("pro"))):
     """Catat bahan terbuang: potong stok secara atomik + simpan log audit."""
     db = get_db()
 
@@ -164,7 +169,7 @@ async def log_spoilage(ingredient_id: str, payload: SpoilageCreate, user: dict =
 
 
 @router.delete("/{ingredient_id}")
-async def delete_ingredient(ingredient_id: str, user: dict = Depends(get_current_user)):
+async def delete_ingredient(ingredient_id: str, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     res = await db.ingredients.delete_one({"id": ingredient_id, "store_id": user["store_id"]})
     if res.deleted_count == 0:
