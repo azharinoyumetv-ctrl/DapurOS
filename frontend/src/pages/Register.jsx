@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
-import { Leaf, ArrowRight, Check, Utensils } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 
 export default function Register() {
   const [storeName, setStoreName] = useState("");
@@ -13,7 +13,7 @@ export default function Register() {
   const { register } = useAuth();
 
   const isDapurOS = true;
-  const BrandIcon = isDapurOS ? Utensils : Leaf;
+  const brandIconSrc = isDapurOS ? "/assets/brand/dapuros-icon.png" : "/assets/brand/geraina-icon.png";
   const brandName = isDapurOS ? "DapurOS" : "Geraina POS";
   const tagline = isDapurOS
     ? "Sistem Kasir Meja & KDS khusus Kafe & Restoran"
@@ -46,7 +46,7 @@ export default function Register() {
       <div className="hidden lg:flex flex-col justify-between w-1/2 p-12 relative bg-grain"
            style={{ background: isDapurOS ? "linear-gradient(135deg, hsl(35,84%,18%), hsl(35,84%,12%))" : "linear-gradient(135deg, hsl(151,39%,17%), hsl(151,39%,12%))" }}>
         <Link to="/" className="text-white font-display font-bold text-xl flex items-center gap-2">
-          <BrandIcon size={22} className="text-[hsl(9,65%,62%)]" /> {brandName} <span className="text-xs text-white/60 font-medium">by DagangOS</span>
+          <img src={brandIconSrc} alt="" className="w-[22px] h-[22px] object-contain" /> {brandName} <span className="text-xs text-white/60 font-medium">by DagangOS</span>
         </Link>
         <div className="text-white space-y-5 max-w-md">
           <p className="label-tiny" style={{ color: "hsl(9,65%,75%)" }}>{brandName} by DagangOS</p>

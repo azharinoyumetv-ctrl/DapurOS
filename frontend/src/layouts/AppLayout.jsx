@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, Warehouse, ClipboardList,
   Truck, Users, Landmark, CreditCard, BarChart3, UserCheck,
   GitBranch, Cpu, Settings, Info, ChevronDown, ChevronRight,
-  LogOut, Sparkles, Crown, Shield, Leaf, Utensils, ChefHat, QrCode, Lock
+  LogOut, Sparkles, Crown, Shield, ChefHat, QrCode, Lock
 } from "lucide-react";
 
 const ROLE_PERMISSIONS = {
@@ -69,7 +69,7 @@ export default function AppLayout() {
 
   const isDapurOS = true;
   const prefix = "/dapuros/app";
-  const BrandIcon = Utensils;
+  const brandIconSrc = "/assets/brand/dapuros-icon.png";
   const brandName = "DapurOS";
 
   const dynamicMenu = [
@@ -218,7 +218,7 @@ export default function AppLayout() {
         <div className="p-4 border-b border-[hsl(var(--border))] relative bg-[hsl(var(--surface))]">
           <div className="flex items-center justify-between">
             <Link to={`${prefix}/dashboard`} className="font-display text-lg font-extrabold flex items-center gap-2" data-testid="app-logo">
-              <BrandIcon className="text-[hsl(var(--accent))]" size={20} /> {brandName}
+              <img src={brandIconSrc} alt="" className="w-5 h-5 object-contain" /> {brandName}
             </Link>
             
             <button
@@ -244,12 +244,12 @@ export default function AppLayout() {
               {(() => {
                 const activated = new Set((user?.stores || []).map((s) => s.module));
                 const tiles = [
-                  { mod: "dapuros", label: "DapurOS", desc: "F&B & Restoran OS", Icon: Utensils, tone: "orange", home: "/dapuros/app/dashboard", activate: "/dapuros/activate" },
-                  { mod: "geraina", label: "Geraina POS", desc: "Retail & Toko OS", Icon: Leaf, tone: "blue", home: "/geraina/app/dashboard", activate: "/geraina/activate" },
+                  { mod: "dapuros", label: "DapurOS", desc: "F&B & Restoran OS", img: "/assets/brand/dapuros-icon.png", tone: "orange", home: "/dapuros/app/dashboard", activate: "/dapuros/activate" },
+                  { mod: "geraina", label: "Geraina POS", desc: "Retail & Toko OS", img: "/assets/brand/geraina-icon.png", tone: "blue", home: "/geraina/app/dashboard", activate: "/geraina/activate" },
                 ];
                 return (
                   <div className="grid grid-cols-2 gap-2 pt-1">
-                    {tiles.map(({ mod, label, desc, Icon, tone, home, activate }) => {
+                    {tiles.map(({ mod, label, desc, img, tone, home, activate }) => {
                       const isOn = activated.has(mod);
                       const box = tone === "orange"
                         ? "bg-orange-500/20 border-orange-500/40 hover:bg-orange-500/30"
@@ -264,7 +264,7 @@ export default function AppLayout() {
                           data-testid={`suite-tile-${mod}`}
                         >
                           <div className="flex items-center gap-1.5 mb-1">
-                            <Icon size={14} className={ic} />
+                            <img src={img} alt="" className="w-4 h-4 object-contain" />
                             <span className={`text-xs font-extrabold ${tx}`}>{label}</span>
                           </div>
                           <p className="text-[10px] text-slate-300 leading-tight">{desc}</p>
