@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { ArrowRight, LayoutGrid, ChefHat, QrCode, CreditCard, Package, LineChart, Check } from "lucide-react";
@@ -47,6 +47,26 @@ function Nav({ user }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function TiltWrap({ children }) {
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
+  const onMove = (e) => {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+    setTilt({ ry: (px - 0.5) * 10, rx: (0.5 - py) * 8 });
+  };
+  const onLeave = () => setTilt({ rx: 0, ry: 0 });
+  return (
+    <div
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+      style={{ transform: `perspective(1000px) rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`, transition: "transform .4s cubic-bezier(.16,1,.3,1)", transformStyle: "preserve-3d" }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -130,9 +150,9 @@ export default function DapurOS() {
             <span className="flex items-center gap-1.5"><Check size={15} style={{ color: ORANGE }} /> Siap dalam 5 menit</span>
           </div>
         </div>
-        <div className="transition-transform duration-500 ease-out hover:-translate-y-1.5">
+        <TiltWrap>
           <KdsMockup />
-        </div>
+        </TiltWrap>
       </section>
 
       {/* Features */}
