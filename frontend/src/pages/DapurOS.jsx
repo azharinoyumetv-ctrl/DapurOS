@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
-import { ArrowRight, Utensils, LayoutGrid, ChefHat, QrCode, CreditCard, Package, LineChart, Check } from "lucide-react";
+import { ArrowRight, LayoutGrid, ChefHat, QrCode, CreditCard, Package, LineChart, Check } from "lucide-react";
 
 const JK = "'Plus Jakarta Sans', 'Figtree', sans-serif";
 const ORANGE = "#e8630a";
@@ -10,7 +10,6 @@ const INK = "#241a12";
 const BODY = "#5a4a3d";
 const MUTED = "#948577";
 const LINE = "#eee6dd";
-const TINT = "#fdf1e8";
 const READY = "#0d9488";
 
 const FEATURES = [
@@ -27,7 +26,7 @@ function Nav({ user }) {
     <header className="sticky top-0 z-50 backdrop-blur border-b" style={{ background: "rgba(255,250,246,.85)", borderColor: LINE }} data-testid="landing-nav">
       <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
         <Link to="/dapuros" className="flex items-center gap-2.5" data-testid="landing-logo">
-          <span className="w-8 h-8 rounded-xl flex items-center justify-center text-white" style={{ background: ORANGE }}><Utensils size={17} /></span>
+          <img src="/assets/brand/dapuros-icon.png" alt="" className="w-8 h-8 object-contain" />
           <span className="font-bold text-lg" style={{ fontFamily: JK, color: INK }}>DapurOS</span>
           <span className="text-xs font-medium" style={{ color: MUTED }}>by DagangOS</span>
         </Link>
@@ -94,7 +93,24 @@ export default function DapurOS() {
       <Nav user={user} />
 
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-5 sm:px-8 pt-16 sm:pt-20 pb-14 grid lg:grid-cols-2 gap-12 items-center">
+      <section className="relative overflow-hidden max-w-7xl mx-auto px-5 sm:px-8 pt-16 sm:pt-20 pb-14 grid lg:grid-cols-2 gap-12 items-center">
+        <svg className="absolute inset-0 w-full h-full pointer-events-none -z-10" aria-hidden="true">
+          <defs>
+            <pattern id="circuitDapurHero" width="140" height="140" patternUnits="userSpaceOnUse">
+              <g fill="none" stroke={ORANGE} strokeOpacity=".08" strokeWidth="1.5">
+                <path d="M18 18 L18 55 L70 55 L70 100" />
+                <path d="M120 10 L120 45 L95 45 L95 130" />
+                <path d="M40 130 L40 95 L10 95" />
+              </g>
+              <g fill={ORANGE} fillOpacity=".12">
+                <circle cx="18" cy="18" r="3" /><circle cx="70" cy="100" r="3" />
+                <circle cx="120" cy="10" r="2.4" /><circle cx="95" cy="130" r="2.4" />
+                <circle cx="40" cy="130" r="2.4" /><circle cx="10" cy="95" r="2.4" />
+              </g>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#circuitDapurHero)" />
+        </svg>
         <div className="text-center lg:text-left">
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs sm:text-sm font-medium mb-6" style={{ borderColor: LINE, color: BODY }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: ORANGE }} /> F&amp;B & Restoran OS · bagian dari DagangOS
@@ -114,7 +130,9 @@ export default function DapurOS() {
             <span className="flex items-center gap-1.5"><Check size={15} style={{ color: ORANGE }} /> Siap dalam 5 menit</span>
           </div>
         </div>
-        <KdsMockup />
+        <div className="transition-transform duration-500 ease-out hover:-translate-y-1.5">
+          <KdsMockup />
+        </div>
       </section>
 
       {/* Features */}
@@ -126,9 +144,10 @@ export default function DapurOS() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {FEATURES.map((f) => (
-              <div key={f.t} className="rounded-2xl border p-6 bg-white" style={{ borderColor: LINE }}>
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style={{ background: TINT, color: ORANGE }}><f.icon size={20} /></div>
-                <h3 className="font-bold text-lg" style={{ fontFamily: JK, color: INK }}>{f.t}</h3>
+              <div key={f.t} className="group relative rounded-2xl p-6 bg-white overflow-hidden transition-all duration-300 hover:-translate-y-1" style={{ border: `1px solid ${LINE}`, boxShadow: "0 1px 2px rgba(36,26,18,.04)" }}>
+                <div className="absolute top-0 left-0 right-0 h-[3px] scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-300" style={{ background: ORANGE }} />
+                <f.icon size={26} strokeWidth={1.75} style={{ color: ORANGE }} />
+                <h3 className="font-bold text-lg mt-4" style={{ fontFamily: JK, color: INK }}>{f.t}</h3>
                 <p className="text-sm mt-2 leading-relaxed" style={{ color: BODY }}>{f.d}</p>
               </div>
             ))}
@@ -154,7 +173,7 @@ export default function DapurOS() {
       <footer className="border-t" style={{ borderColor: LINE, background: "#fdf6f0" }}>
         <div className="max-w-7xl mx-auto px-5 sm:px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm" style={{ color: MUTED }}>
           <div className="flex items-center gap-2.5">
-            <span className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: ORANGE }}><Utensils size={15} /></span>
+            <img src="/assets/brand/dapuros-icon.png" alt="" className="w-6 h-6 object-contain" />
             <span>© 2026 DapurOS · DagangOS Digital Indonesia</span>
           </div>
           <div className="flex gap-6">
