@@ -206,6 +206,7 @@ async def get_subscription(user: dict = Depends(get_current_user)):
         "tier": plan,
         "status": "trial" if plan == "trial" else "active",
         "trial_ends_at": user.get("trial_ends_at"),
+        "trial_expired_at": user.get("trial_expired_at"),
         "auto_debit": False,
     }
 
