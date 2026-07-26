@@ -125,6 +125,51 @@ function KitchenVisual() {
   );
 }
 
+function RestaurantFeatureScene({ index }) {
+  if (index === 0) {
+    return <div className="feature-sim kitchen-pos-sim" aria-label="Simulasi POS restoran">
+      <div className="menu-grid">{["Ayam bakar", "Nasi goreng", "Kopi susu", "Es teh"].map((item, itemIndex) => <span key={item} style={{ "--delay": `${itemIndex * 0.18}s` }}><i>{itemIndex % 2 ? "●" : "◆"}</i><b>{item}</b><small>Tambah +</small></span>)}</div>
+      <div className="order-bill"><small>MEJA 04</small><b>3 pesanan</b><div><span>Total</span><strong>Rp 93.000</strong></div><button type="button">Kirim &amp; Bayar</button></div>
+      <i className="order-sweep" />
+    </div>;
+  }
+  if (index === 1) {
+    return <div className="feature-sim kds-sim" aria-label="Simulasi kitchen display">
+      {[
+        ["BARU", "#1024", "Ayam bakar", "00:18"],
+        ["PROSES", "#1025", "Nasi goreng", "04:32"],
+        ["SIAP", "#1026", "Soto ayam", "07:10"],
+      ].map((ticket, itemIndex) => <div className={`kds-sim-ticket ticket-${itemIndex}`} key={ticket[1]}><small>{ticket[0]}</small><strong>{ticket[1]}</strong><b>{ticket[2]}</b><span>{ticket[3]}</span><i /></div>)}
+      <span className="ticket-runner" />
+    </div>;
+  }
+  if (index === 2) {
+    return <div className="feature-sim qr-sim" aria-label="Simulasi QR self ordering">
+      <div className="qr-phone"><i className="qr-code">{[0,1,2,3,4,5,6,7,8].map((cell) => <span key={cell} />)}</i><b>Scan menu meja</b><small>Meja 08</small></div>
+      <div className="qr-flow"><span><i>1</i><b>Pilih menu</b></span><span><i>2</i><b>Kirim pesanan</b></span><span><i>3</i><b>Dapur menerima</b></span><em /></div>
+    </div>;
+  }
+  if (index === 3) {
+    return <div className="feature-sim table-sim" aria-label="Simulasi manajemen meja">
+      <div className="floor-label"><b>Denah ruang utama</b><span><i />Kosong</span><span><i />Terisi</span></div>
+      <div className="floor-plan">{["01", "02", "03", "04", "05", "06", "07", "08"].map((table, itemIndex) => <button type="button" key={table} className={itemIndex % 3 === 1 || itemIndex === 6 ? "occupied" : ""} style={{ "--delay": `${itemIndex * .1}s` }}><i /><b>{table}</b><small>{itemIndex % 3 === 1 || itemIndex === 6 ? "Terisi" : "Kosong"}</small></button>)}</div>
+      <span className="floor-pulse" />
+    </div>;
+  }
+  if (index === 4) {
+    return <div className="feature-sim recipe-sim" aria-label="Simulasi resep dan bahan">
+      <div className="dish-core"><CookingPot size={28} /><b>Nasi goreng</b><small>1 porsi</small></div>
+      {["Nasi", "Telur", "Bumbu", "Minyak"].map((ingredient, itemIndex) => <div className={`ingredient ingredient-${itemIndex}`} key={ingredient}><i /><b>{ingredient}</b><small>{[150, 1, 12, 8][itemIndex]} {itemIndex === 1 ? "butir" : "gr"}</small></div>)}
+      <span className="recipe-orbit" /><span className="recipe-packet" />
+    </div>;
+  }
+  return <div className="feature-sim ops-report-sim" aria-label="Simulasi laporan operasional">
+    <div className="ops-summary"><small>OPERASIONAL</small><b>Ringkasan aktivitas</b><span>Transaksi, menu, dapur, dan bahan</span></div>
+    <div className="ops-radar"><i /><i /><i /><i /><span /></div>
+    <div className="ops-stream">{["Kasir", "KDS", "Bahan", "Laporan"].map((label, itemIndex) => <span key={label} style={{ "--delay": `${itemIndex * .2}s` }}><i />{label}<b>{itemIndex + 1}</b></span>)}</div>
+  </div>;
+}
+
 export default function DapurOS() {
   const { user } = useAuth();
   const [activeFeature, setActiveFeature] = useState(0);
@@ -169,6 +214,26 @@ export default function DapurOS() {
         @media(max-width:1050px){.neo-workbench{grid-template-columns:270px 1fr}}
         @media(max-width:720px){.neo-workbench{display:block}.neo-feature-rail{border-right:0;display:grid;grid-template-columns:1fr 1fr}.neo-feature-tab{padding:15px 8px;grid-template-columns:28px 1fr}.neo-feature-tab span{display:none}.neo-feature-tab:hover,.neo-feature-tab.is-active{padding-left:12px}.neo-feature-stage{min-height:420px;padding:34px 22px}.neo-stage-icon{width:54px;height:54px}}
       `}</style>
+      <style>{`
+        .neo-page{background:#fff8f1;color:#32180a}.neo-page:before{background:radial-gradient(circle at 76% 7%,rgba(255,117,24,.22),transparent 34rem),radial-gradient(circle at 14% 44%,rgba(255,196,83,.15),transparent 30rem),linear-gradient(rgba(114,55,18,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(114,55,18,.035) 1px,transparent 1px);background-size:auto,auto,46px 46px,46px 46px}
+        .neo-nav{background:rgba(255,252,248,.84);border-color:rgba(108,51,17,.12);box-shadow:0 12px 42px rgba(110,52,17,.08)}.neo-links,.neo-mobile a{color:#715542}.neo-links a:hover{color:#32180a}.neo-button{color:#4a250f;background:rgba(255,255,255,.76);border-color:rgba(114,55,18,.15)}.neo-primary{color:#331300}.neo-menu{color:#4a250f;background:white}
+        .neo-kicker{background:#fff0e3;color:#8b3c0c;border-color:rgba(224,91,8,.24)}.neo-lead,.neo-section-head p,.neo-stage-copy p,.neo-solution-copy p{color:#7c6556}.neo-check{color:#8a7161}.neo-check b{color:#4b2915}.kitchen-stage{filter:drop-shadow(0 30px 45px rgba(132,62,15,.12))}.kitchen-glow{background:radial-gradient(circle,rgba(255,117,24,.28),transparent 62%)}
+        .neo-strip{background:rgba(255,255,255,.7);border-color:rgba(108,51,17,.12)}.neo-strip-item{color:#755a48;border-color:rgba(108,51,17,.12)}
+        .neo-workbench{min-height:560px;border:1px solid rgba(108,51,17,.12);border-radius:30px;overflow:hidden;background:rgba(255,255,255,.75);box-shadow:0 30px 80px rgba(112,51,14,.1)}
+        .neo-feature-rail{background:rgba(255,241,230,.66);border-color:rgba(108,51,17,.12)}.neo-feature-tab{color:#80634f;border-color:rgba(108,51,17,.1);padding-left:22px}.neo-feature-tab svg{color:#896047}.neo-feature-tab span{color:#98745e}.neo-feature-tab:hover,.neo-feature-tab.is-active{padding-left:29px;color:#431d08;background:linear-gradient(90deg,rgba(255,117,24,.17),rgba(255,255,255,.2))}.neo-feature-tab.is-active{box-shadow:inset 3px 0 ${ACCENT}}
+        .neo-feature-stage{padding:42px 48px;background:radial-gradient(circle at 84% 16%,rgba(255,117,24,.17),transparent 25rem),linear-gradient(145deg,rgba(255,255,255,.75),rgba(255,244,235,.75))}.neo-feature-stage:before{display:none}.neo-stage-icon{background:#fff0e3;box-shadow:0 15px 35px rgba(210,84,7,.13)}.neo-stage-copy h3{color:#3b1b09}
+        .neo-solution{border-color:rgba(108,51,17,.12)}.neo-flow>div{border-color:rgba(108,51,17,.12)}.neo-flow b{color:#4b2915}.neo-flow span{color:#826b5c}
+        .feature-sim{position:relative;height:245px;margin-top:28px;overflow:hidden;border:1px solid rgba(125,58,16,.12);border-radius:24px;background:linear-gradient(145deg,#fff,#fff2e8);box-shadow:inset 0 1px #fff}
+        .kitchen-pos-sim{display:grid;grid-template-columns:1.25fr .75fr;gap:12px;padding:20px}.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.menu-grid span{display:grid;grid-template-columns:30px 1fr;align-items:center;padding:9px;border:1px solid rgba(123,56,14,.1);border-radius:12px;background:#fff;animation:kitchen-rise .6s both;animation-delay:var(--delay)}.menu-grid i{grid-row:1/3;width:24px;height:24px;border-radius:8px;background:#ffe0c9;color:${ACCENT};font-style:normal;display:grid;place-items:center}.menu-grid b{font-size:9px}.menu-grid small{font-size:7px;color:${ACCENT_2}}.order-bill{padding:17px;border-radius:16px;color:#fff;background:#4b210b;display:flex;flex-direction:column}.order-bill small{font-size:8px;color:#d6b9a5}.order-bill>b{font:700 22px ${JK};margin:8px 0 auto}.order-bill>div{display:flex;justify-content:space-between;align-items:end;padding-top:12px;border-top:1px solid rgba(255,255,255,.13)}.order-bill>div span{font-size:9px}.order-bill strong{color:#ff9a4c}.order-bill button{border:0;border-radius:9px;background:${ACCENT};font-weight:800;padding:9px;margin-top:11px}.order-sweep{position:absolute;left:18px;right:41%;height:2px;background:${ACCENT};box-shadow:0 0 16px ${ACCENT};animation:kitchen-scan 3s ease-in-out infinite}
+        .kds-sim{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:22px}.kds-sim-ticket{position:relative;padding:19px;border-radius:17px;background:#fff;border:1px solid rgba(123,56,14,.11);box-shadow:0 15px 28px rgba(117,53,14,.08);animation:ticket-shift 5s ease-in-out infinite}.kds-sim-ticket small,.kds-sim-ticket strong,.kds-sim-ticket b,.kds-sim-ticket span{display:block}.kds-sim-ticket small{font-size:8px;color:${ACCENT};font-weight:800}.kds-sim-ticket strong{font:800 24px ${JK};margin:18px 0 8px}.kds-sim-ticket b{font-size:11px}.kds-sim-ticket span{position:absolute;bottom:17px;font-size:9px;color:#856c5c}.kds-sim-ticket i{position:absolute;left:18px;right:18px;bottom:8px;height:3px;background:${ACCENT};border-radius:4px}.ticket-1{animation-delay:-1.7s}.ticket-2{animation-delay:-3.4s}.ticket-2 small,.ticket-2 i{color:${READY};background:${READY}}.ticket-runner{position:absolute;top:16px;width:9px;height:9px;border-radius:50%;background:${ACCENT};box-shadow:0 0 15px ${ACCENT};animation:ticket-run 4s linear infinite}
+        .qr-sim{display:grid;grid-template-columns:.7fr 1.3fr;gap:36px;align-items:center;padding:24px 38px}.qr-phone{height:202px;border:1px solid rgba(123,56,14,.14);border-radius:28px;background:#fff;box-shadow:0 18px 36px rgba(117,53,14,.11);display:flex;flex-direction:column;align-items:center;justify-content:center;animation:phone-float 4s ease-in-out infinite}.qr-code{width:72px;height:72px;padding:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;border:2px solid #4b210b;border-radius:11px}.qr-code span{background:#4b210b}.qr-phone b{font-size:11px;margin-top:13px}.qr-phone small{font-size:8px;color:#8a7161}.qr-flow{position:relative;display:grid;gap:20px}.qr-flow>span{display:flex;align-items:center;gap:12px;font-size:11px;position:relative;z-index:2}.qr-flow i{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#fff0e4;color:${ACCENT_2};font-style:normal;font-weight:800}.qr-flow em{position:absolute;left:16px;top:10px;bottom:10px;width:2px;background:#f7c5a5}.qr-flow em:after{content:"";position:absolute;width:8px;height:8px;left:-3px;border-radius:50%;background:${ACCENT};box-shadow:0 0 12px ${ACCENT};animation:qr-path 3s linear infinite}
+        .table-sim{padding:21px 26px}.floor-label{display:flex;align-items:center;gap:14px;margin-bottom:15px}.floor-label>b{margin-right:auto;font-size:11px}.floor-label span{font-size:8px;color:#7f6758}.floor-label i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#6ee2a0;margin-right:5px}.floor-label span:last-child i{background:${ACCENT}}.floor-plan{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.floor-plan button{height:76px;border:1px solid rgba(123,56,14,.12);border-radius:15px;background:#fff;color:#4c2a16;position:relative;animation:kitchen-rise .5s both;animation-delay:var(--delay)}.floor-plan button>i{position:absolute;inset:8px;border:1px dashed #cbdacb;border-radius:10px}.floor-plan b,.floor-plan small{display:block;position:relative}.floor-plan b{font:800 17px ${JK}}.floor-plan small{font-size:7px;color:#7a8b7f}.floor-plan button.occupied{background:#fff2e6;border-color:rgba(255,117,24,.35)}.floor-plan button.occupied i{border-color:${ACCENT}}.floor-plan button.occupied small{color:${ACCENT_2}}.floor-pulse{position:absolute;width:70px;height:70px;left:39%;top:51%;border-radius:50%;border:1px solid ${ACCENT};animation:floor-pulse 2.8s ease-out infinite}
+        .recipe-sim{display:grid;place-items:center}.dish-core,.ingredient{position:absolute;display:grid;place-items:center;text-align:center;border-radius:18px;background:#fff;box-shadow:0 15px 35px rgba(117,53,14,.11);z-index:2}.dish-core{width:112px;height:112px;color:${ACCENT}}.dish-core b,.dish-core small,.ingredient b,.ingredient small{display:block}.dish-core b{font-size:10px;color:#482512}.dish-core small,.ingredient small{font-size:7px;color:#826c5e}.ingredient{width:100px;height:64px}.ingredient i{position:absolute;top:-4px;width:8px;height:8px;border-radius:50%;background:${ACCENT};box-shadow:0 0 11px ${ACCENT}}.ingredient b{font-size:9px}.ingredient-0{left:5%;top:18%}.ingredient-1{right:6%;top:14%}.ingredient-2{right:12%;bottom:9%}.ingredient-3{left:13%;bottom:8%}.recipe-orbit{position:absolute;width:63%;height:75%;border:1px solid rgba(255,117,24,.25);border-radius:50%;animation:recipe-spin 11s linear infinite}.recipe-packet{position:absolute;width:12px;height:12px;border-radius:50%;background:${ACCENT};box-shadow:0 0 16px ${ACCENT};animation:recipe-packet 5s ease-in-out infinite}
+        .ops-report-sim{display:grid;grid-template-columns:.75fr .7fr 1fr;gap:25px;align-items:center;padding:25px}.ops-summary small,.ops-summary b,.ops-summary span{display:block}.ops-summary small{font-size:8px;color:${ACCENT_2};font-weight:800}.ops-summary b{font:700 20px/1.2 ${JK};margin:10px 0}.ops-summary span{font-size:8px;color:#816b5d}.ops-radar{width:145px;height:145px;border:1px solid #e5cdbd;border-radius:50%;position:relative;background:repeating-radial-gradient(circle,transparent 0 22px,rgba(151,75,27,.08) 23px 24px)}.ops-radar:before,.ops-radar:after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px solid #e5cdbd}.ops-radar:after{transform:rotate(90deg)}.ops-radar i{position:absolute;width:9px;height:9px;border-radius:50%;background:${ACCENT};box-shadow:0 0 12px ${ACCENT}}.ops-radar i:nth-child(1){left:22%;top:32%}.ops-radar i:nth-child(2){left:65%;top:19%}.ops-radar i:nth-child(3){left:74%;top:70%}.ops-radar i:nth-child(4){left:35%;top:75%}.ops-radar span{position:absolute;left:50%;top:50%;width:50%;height:2px;background:linear-gradient(90deg,${ACCENT},transparent);transform-origin:left;animation:radar 3s linear infinite}.ops-stream{display:grid;gap:9px}.ops-stream span{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:7px;padding:9px;border-radius:10px;background:#fff;font-size:9px;animation:kitchen-rise .5s both;animation-delay:var(--delay)}.ops-stream i{width:7px;height:7px;border-radius:50%;background:${ACCENT}}.ops-stream b{color:${ACCENT_2}}
+        .neo-cta-panel{color:white}.neo-footer{background:#fff0e5;border-color:rgba(108,51,17,.12)}.neo-footer-inner{color:#755b49}.neo-footer a:hover{color:#4b2915}
+        @keyframes kitchen-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes kitchen-scan{0%,100%{top:14%}50%{top:85%}}@keyframes ticket-shift{0%,100%{transform:none}50%{transform:translateY(-8px)}}@keyframes ticket-run{from{left:3%}to{left:96%}}@keyframes phone-float{50%{transform:translateY(-10px) rotate(2deg)}}@keyframes qr-path{from{top:0}to{top:100%}}@keyframes floor-pulse{from{transform:scale(.3);opacity:.8}to{transform:scale(3);opacity:0}}@keyframes recipe-spin{to{transform:rotate(360deg)}}@keyframes recipe-packet{0%,100%{transform:translate(-185px,-70px)}25%{transform:translate(175px,-70px)}50%{transform:translate(175px,70px)}75%{transform:translate(-185px,70px)}}@keyframes radar{to{transform:rotate(360deg)}}
+        @media(max-width:720px){.neo-workbench{border-radius:22px}.neo-feature-stage{padding:28px 20px}.feature-sim{height:275px}.kds-sim{padding:14px;gap:7px}.kds-sim-ticket{padding:11px}.qr-sim{padding:20px;grid-template-columns:.9fr 1.1fr;gap:15px}.floor-plan{grid-template-columns:repeat(4,1fr);gap:5px}.floor-plan button{height:72px}.ops-report-sim{grid-template-columns:1fr 1fr}.ops-summary{display:none}}
+      `}</style>
       <Nav user={user} />
       <main>
         <section className="neo-hero">
@@ -199,7 +264,7 @@ export default function DapurOS() {
             </div>
             <div className="neo-feature-stage" key={selectedFeature.title}>
               <div className="neo-stage-head"><div className="neo-stage-icon"><SelectedFeatureIcon size={32} /></div><div className="neo-stage-copy"><small>Modul aktif · 0{activeFeature + 1}</small><h3>{selectedFeature.title}</h3><p>{selectedFeature.text}</p></div></div>
-              <div className="neo-stage-visual" aria-hidden="true"><span className="neo-stage-line" />{[2, 5, 3, 6, 4, 7, 5, 8, 4, 6, 3, 7].map((height, index) => <i className="neo-stage-bar" key={index} style={{ "--bar": (height + activeFeature) % 8 }} />)}</div>
+              <RestaurantFeatureScene index={activeFeature} />
             </div>
           </div>
         </section>
