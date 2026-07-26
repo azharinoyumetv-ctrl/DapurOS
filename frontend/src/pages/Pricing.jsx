@@ -123,7 +123,7 @@ export default function Pricing() {
   };
 
   return (
-    <div className="ecosystem-pricing" data-testid="pricing-page" style={{ fontFamily: JK, background: "#fffaf6", color: BODY, minHeight: "100vh" }}>
+    <div className="ecosystem-pricing product-public public-dapuros" data-testid="pricing-page" style={{ fontFamily: JK, minHeight: "100vh" }}>
       {/* Nav */}
       <header className="sticky top-0 z-50 backdrop-blur border-b" style={{ background: "rgba(255,250,246,.85)", borderColor: LINE }}>
         <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
@@ -189,7 +189,7 @@ export default function Pricing() {
                 ))}
               </ul>
               {t.id !== "trial" ? (
-                <a href="mailto:sales@dagangos.com" className="mt-auto w-full text-center py-2.5 rounded-xl border font-semibold text-sm" style={{ borderColor: LINE, color: INK }} data-testid={`pricing-cta-${t.id}`}>Hubungi Sales →</a>
+                <a href="mailto:contact@dagangos.com" className="mt-auto w-full text-center py-2.5 rounded-xl border font-semibold text-sm" style={{ borderColor: LINE, color: INK }} data-testid={`pricing-cta-${t.id}`}>Hubungi DagangOS →</a>
               ) : user ? (
                 user.plan === t.id ? (
                   <button disabled className="mt-auto w-full py-2.5 rounded-xl font-semibold text-sm cursor-not-allowed" style={{ background: "#f3efe9", color: MUTED }} data-testid={`pricing-cta-${t.id}`}>Paket Aktif</button>
@@ -269,8 +269,13 @@ export default function Pricing() {
         </div>
       </section>
 
-      <footer className="border-t" style={{ borderColor: LINE }}>
-        <div className="max-w-7xl mx-auto px-5 sm:px-8 py-10 text-sm text-center" style={{ color: MUTED }}>© 2026 DapurOS · DagangOS Digital Indonesia</div>
+      <footer className="public-contact-footer">
+        <span>© 2026 DapurOS · PT DagangOS Digital Indonesia</span>
+        <nav aria-label="Kontak DagangOS">
+          <a href="mailto:contact@dagangos.com">contact@dagangos.com</a>
+          <a href="https://wa.me/628999155182">+62 899 9155 182</a>
+          <span>Subang, West Java, Indonesia</span>
+        </nav>
       </footer>
     </div>
   );

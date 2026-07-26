@@ -275,7 +275,7 @@ export default function DapurOS() {
 
         <section className="neo-cta-panel"><div><h2>Mulai kelola operasional restoran Anda.</h2><p>Buat akun DapurOS atau tinjau paket yang tersedia.</p></div><div className="neo-cta"><Link to="/dapuros/register" className="neo-button neo-primary">Mulai Gratis</Link><Link to="/dapuros/pricing" className="neo-button">Lihat Harga</Link></div></section>
       </main>
-      <footer id="footer" className="neo-footer"><div className="neo-footer-inner"><div className="neo-footer-brand"><img src="/assets/brand/dapuros-icon.png" alt="" /><span>© 2026 DapurOS · PT DagangOS Digital Indonesia</span></div><div className="neo-footer-links"><Link to="/dapuros/pricing">Harga</Link><Link to="/dapuros/login">Masuk</Link><a href="/">DagangOS</a></div></div></footer>
+      <footer id="footer" className="neo-footer"><div className="neo-footer-inner"><div className="neo-footer-brand"><img src="/assets/brand/dapuros-icon.png" alt="" /><span>© 2026 DapurOS · PT DagangOS Digital Indonesia</span></div><div className="neo-footer-links"><Link to="/dapuros/pricing">Harga</Link><a href="mailto:contact@dagangos.com">contact@dagangos.com</a><a href="https://wa.me/628999155182">+62 899 9155 182</a><span>Subang, West Java, Indonesia</span><a href="/">DagangOS</a></div></div></footer>
     </div>
   );
 }

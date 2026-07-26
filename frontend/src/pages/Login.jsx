@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
-import { ArrowRight, ChefHat, LayoutGrid } from "lucide-react";
-
-const JAKARTA = "'Plus Jakarta Sans', 'Figtree', sans-serif";
-const ACCENT = "#e8630a";
-const ACCENT_DARK = "#c0530b";
-const TINT = "#fdf1e8";
+import { ArrowRight } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -18,131 +13,84 @@ export default function Login() {
 
   if (user) return <Navigate to="/dapuros/app/dashboard" replace />;
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const submit = async (event) => {
+    event.preventDefault();
     setError("");
     setLoading(true);
     try {
       await login(email, password);
       nav("/dapuros/app/dashboard");
-    } catch (err) {
-      setError(err?.response?.data?.detail || "Email atau kata sandi tidak valid.");
+    } catch (requestError) {
+      setError(requestError?.response?.data?.detail || "Email atau kata sandi tidak valid.");
     } finally {
       setLoading(false);
     }
   };
 
-  const inputBase = {
-    width: "100%",
-    borderRadius: "0.75rem",
-    border: "1px solid #e6e2dc",
-    padding: "0.7rem 1rem",
-    fontSize: "0.9rem",
-    color: "#241a12",
-    outline: "none",
-    transition: "border-color .15s, box-shadow .15s",
-  };
-  const focusOn = (e) => { e.target.style.borderColor = ACCENT; e.target.style.boxShadow = `0 0 0 3px ${TINT}`; };
-  const focusOff = (e) => { e.target.style.borderColor = "#e6e2dc"; e.target.style.boxShadow = "none"; };
-
   return (
-    <div className="brand-auth-shell min-h-screen flex" style={{ fontFamily: JAKARTA, background: "#fffaf6" }}>
-      {/* Brand panel */}
-      <div
-        className="hidden lg:flex flex-col justify-between w-1/2 p-12 relative overflow-hidden"
-        style={{ background: `linear-gradient(155deg, #a8480f 0%, #7c3610 100%)` }}
-        data-testid="login-side"
-      >
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-          <defs>
-            <pattern id="circuitDapur" width="140" height="140" patternUnits="userSpaceOnUse">
-              <g fill="none" stroke="#ffffff" strokeOpacity=".07" strokeWidth="1.5">
-                <path d="M18 18 L18 55 L70 55 L70 100" />
-                <path d="M120 10 L120 45 L95 45 L95 130" />
-                <path d="M40 130 L40 95 L10 95" />
-              </g>
-              <g fill="#ffffff" fillOpacity=".1">
-                <circle cx="18" cy="18" r="3" /><circle cx="70" cy="100" r="3" />
-                <circle cx="120" cy="10" r="2.4" /><circle cx="95" cy="130" r="2.4" />
-                <circle cx="40" cy="130" r="2.4" /><circle cx="10" cy="95" r="2.4" />
-              </g>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#circuitDapur)" />
-        </svg>
-        <div className="absolute -right-24 -top-24 w-80 h-80 rounded-full" style={{ background: "rgba(255,255,255,.06)" }} />
-        <div className="absolute -left-20 -bottom-20 w-72 h-72 rounded-full" style={{ background: "rgba(255,255,255,.05)" }} />
-
-        <Link to="/" className="relative flex items-center gap-2.5 text-white">
-          <img src="/assets/brand/dapuros-icon.png" alt="" className="w-9 h-9 object-contain" />
-          <span className="font-bold text-lg" style={{ fontFamily: JAKARTA }}>DapurOS</span>
-          <span className="text-xs font-medium text-white/60">by DagangOS</span>
+    <div className="product-public public-dapuros auth-page">
+      <header className="auth-header">
+        <Link to="/dapuros" className="auth-brand">
+          <img src="/assets/brand/dapuros-icon.png" alt="" />
+          <b>DapurOS</b>
+          <small>by DagangOS</small>
         </Link>
+        <nav aria-label="Navigasi akun DapurOS">
+          <Link to="/dapuros/pricing">Lihat harga</Link>
+          <Link to="/dapuros/register">Mulai gratis</Link>
+        </nav>
+      </header>
 
-        <div className="relative text-white max-w-md">
-          <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/70 mb-4">
-            <span className="w-1.5 h-1.5 rounded-full bg-white/80" /> F&B & Restoran OS
-          </span>
-          <h2 className="text-4xl font-extrabold leading-tight" style={{ fontFamily: JAKARTA, letterSpacing: "-.02em" }}>
-            Operasi restoran &amp; kafe tanpa ribet.
-          </h2>
-          <p className="text-white/70 mt-4 leading-relaxed">
-            Denah meja, Layar Dapur (KDS) real-time, resep BOM, dan kasir — semua terhubung dalam satu sistem.
-          </p>
-          <ul className="mt-8 space-y-3 text-sm text-white/85">
-            <li className="flex items-center gap-3"><ChefHat size={18} className="text-white/70" /> Layar Dapur real-time & timer SLA</li>
-            <li className="flex items-center gap-3"><LayoutGrid size={18} className="text-white/70" /> Denah meja multi-lantai & split-bill</li>
-          </ul>
-        </div>
-
-        <p className="relative text-white/40 text-xs">© 2026 DapurOS · DagangOS Digital Indonesia</p>
-      </div>
-
-      {/* Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8">
-        <form onSubmit={submit} className="w-full max-w-sm" data-testid="login-form">
-          <div className="flex items-center gap-2.5 mb-8 lg:hidden">
-            <img src="/assets/brand/dapuros-icon.png" alt="" className="w-9 h-9 object-contain" />
-            <span className="font-bold text-lg" style={{ fontFamily: JAKARTA, color: "#241a12" }}>DapurOS</span>
-            <span className="text-xs font-medium" style={{ color: "#9a8a7d" }}>by DagangOS</span>
-          </div>
-
-          <h1 className="text-2xl font-extrabold" style={{ fontFamily: JAKARTA, color: "#241a12", letterSpacing: "-.02em" }}>
-            Masuk ke DapurOS
-          </h1>
-          <p className="text-sm mt-1.5 mb-7" style={{ color: "#8a7b6e" }}>
-            Sistem kasir meja &amp; KDS untuk kafe dan restoran.
-          </p>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold mb-1.5" style={{ color: "#3a2c20" }} data-testid="login-email-label">Alamat email</label>
-              <input type="email" name="email" autoComplete="email" required data-testid="login-email-input" value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="nama@toko.com"
-                style={inputBase} onFocus={focusOn} onBlur={focusOff} />
+      <main className="auth-main">
+        <section className="auth-story" aria-labelledby="dapuros-login-story">
+          <span className="auth-kicker">DapurOS · Restaurant operations</span>
+          <h2 id="dapuros-login-story">Kembali ke ritme layanan Anda.</h2>
+          <p>Pesanan, meja, layar dapur, resep, bahan, pembayaran, dan laporan bergerak dalam satu alur operasional.</p>
+          <div className="auth-scene" aria-hidden="true">
+            <div className="auth-device auth-device--kitchen">
+              <div className="auth-device__bar"><b>DapurOS · KDS</b><span>3 pesanan</span></div>
+              <div className="auth-device__tickets"><i><small>MEJA 04</small><b>00:08</b></i><i><small>TAKEAWAY</small><b>00:12</b></i><i><small>MEJA 11</small><b>00:17</b></i></div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1.5" style={{ color: "#3a2c20" }} data-testid="login-password-label">Kata sandi</label>
-              <input type="password" name="password" autoComplete="current-password" required data-testid="login-password-input" value={password}
-                onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
-                style={inputBase} onFocus={focusOn} onBlur={focusOff} />
-            </div>
+            <span className="auth-node">POS</span>
+            <span className="auth-node">KDS</span>
+            <span className="auth-node">BOM</span>
           </div>
+        </section>
 
-          {error && <p className="text-sm mt-4" style={{ color: "#c0392b" }} data-testid="login-error">{error}</p>}
+        <section className="auth-form-wrap">
+          <form onSubmit={submit} className="auth-form" data-testid="login-form">
+            <h1>Masuk ke DapurOS</h1>
+            <p>Gunakan akun DagangOS yang terhubung dengan restoran Anda.</p>
 
-          <button type="submit" disabled={loading} data-testid="login-submit-btn"
-            className="w-full mt-6 py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-opacity"
-            style={{ background: loading ? ACCENT_DARK : ACCENT, opacity: loading ? 0.8 : 1 }}>
-            {loading ? "Memproses…" : "Masuk"} {!loading && <ArrowRight size={16} />}
-          </button>
+            <div className="auth-field">
+              <label htmlFor="dapuros-login-email" data-testid="login-email-label">Alamat email</label>
+              <input id="dapuros-login-email" type="email" name="email" autoComplete="email" required data-testid="login-email-input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nama@restoran.com" />
+            </div>
 
-          <p className="text-sm text-center mt-6" style={{ color: "#8a7b6e" }}>
-            Belum punya toko?{" "}
-            <Link to="/register" className="font-semibold" style={{ color: ACCENT }} data-testid="login-to-register-link">Daftar gratis</Link>
-          </p>
-        </form>
-      </div>
+            <div className="auth-field">
+              <label htmlFor="dapuros-login-password" data-testid="login-password-label">Kata sandi</label>
+              <input id="dapuros-login-password" type="password" name="password" autoComplete="current-password" required data-testid="login-password-input" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" />
+            </div>
+
+            {error && <p className="auth-error" role="alert" data-testid="login-error">{error}</p>}
+
+            <button type="submit" disabled={loading} data-testid="login-submit-btn" className="auth-submit">
+              {loading ? "Memproses…" : "Masuk"} {!loading && <ArrowRight size={17} />}
+            </button>
+
+            <p className="auth-switch">Belum punya restoran? <Link to="/dapuros/register" data-testid="login-to-register-link">Daftar gratis</Link></p>
+          </form>
+        </section>
+      </main>
+
+      <footer className="public-contact-footer">
+        <span>© 2026 DapurOS · PT DagangOS Digital Indonesia</span>
+        <nav aria-label="Kontak DagangOS">
+          <a href="mailto:contact@dagangos.com">contact@dagangos.com</a>
+          <a href="https://wa.me/628999155182">+62 899 9155 182</a>
+          <span>Subang, West Java, Indonesia</span>
+        </nav>
+      </footer>
     </div>
   );
 }
