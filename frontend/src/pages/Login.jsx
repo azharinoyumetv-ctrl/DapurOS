@@ -46,7 +46,7 @@ export default function Login() {
   const focusOff = (e) => { e.target.style.borderColor = "#e6e2dc"; e.target.style.boxShadow = "none"; };
 
   return (
-    <div className="min-h-screen flex" style={{ fontFamily: JAKARTA, background: "#fffaf6" }}>
+    <div className="brand-auth-shell min-h-screen flex" style={{ fontFamily: JAKARTA, background: "#fffaf6" }}>
       {/* Brand panel */}
       <div
         className="hidden lg:flex flex-col justify-between w-1/2 p-12 relative overflow-hidden"

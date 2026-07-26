@@ -1,12 +1,12 @@
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { toast } from "@/components/ui/sonner";
 import {
   LayoutDashboard, ShoppingCart, Package, Warehouse, ClipboardList,
   Truck, Users, Landmark, CreditCard, BarChart3, UserCheck,
   GitBranch, Cpu, Settings, Info, ChevronDown, ChevronRight,
-  LogOut, Sparkles, Crown, Shield, ChefHat, QrCode, Lock
+  LogOut, Sparkles, Crown, Shield, ChefHat, QrCode, Lock, Menu, X
 } from "lucide-react";
 
 const ROLE_PERMISSIONS = {
@@ -54,6 +54,7 @@ function trialDaysLeft(iso) {
 export default function AppLayout() {
   const { user, logout, changeRole } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
   const days = trialDaysLeft(user?.trial_ends_at);
   const isTrial = (user?.plan || "trial") === "trial";
   
@@ -62,6 +63,16 @@ export default function AppLayout() {
   
   const [openMenus, setOpenMenus] = useState({});
   const [showEcosystemSwitcher, setShowEcosystemSwitcher] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
 
   const toggleMenu = (key) => {
     setOpenMenus((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -213,24 +224,45 @@ export default function AppLayout() {
   });
 
   return (
-    <div className={`min-h-screen flex bg-[hsl(var(--background))] ${isDapurOS ? "theme-dapuros" : ""}`} data-testid="app-layout">
-      <aside className="w-64 border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] flex flex-col h-screen overflow-hidden" data-testid="app-sidebar">
+    <div className={`ecosystem-app-shell h-screen flex flex-col lg:flex-row overflow-hidden bg-[hsl(var(--background))] ${isDapurOS ? "theme-dapuros" : ""}`} data-testid="app-layout">
+      <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))]" data-testid="app-mobile-topbar">
+        <button onClick={() => setMobileOpen(true)} className="p-2 -ml-2 rounded-md" aria-label="Buka menu" data-testid="mobile-menu-open-btn">
+          <Menu size={22} />
+        </button>
+        <Link to={`${prefix}/dashboard`} className="font-display text-base font-extrabold flex items-center gap-2">
+          <img src={brandIconSrc} alt="" className="w-[18px] h-[18px] object-contain" /> {brandName}
+        </Link>
+        <div className="w-9" aria-hidden="true" />
+      </header>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 bg-black/45 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="mobile-sidebar-backdrop" />
+      )}
+
+      <aside className={`ecosystem-command-rail fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] flex flex-col h-screen overflow-hidden transition-transform duration-200 ease-out
+        ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+        lg:static lg:translate-x-0 lg:w-64 lg:max-w-none lg:z-auto`} data-testid="app-sidebar">
         <div className="p-4 border-b border-[hsl(var(--border))] relative bg-[hsl(var(--surface))]">
           <div className="flex items-center justify-between">
             <Link to={`${prefix}/dashboard`} className="font-display text-lg font-extrabold flex items-center gap-2" data-testid="app-logo">
               <img src={brandIconSrc} alt="" className="w-5 h-5 object-contain" /> {brandName}
             </Link>
             
-            <button
-              onClick={() => setShowEcosystemSwitcher(!showEcosystemSwitcher)}
-              className="p-1.5 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] transition-all flex items-center gap-1 text-xs font-bold"
-              title="Beralih Aplikasi Ekosistem (Gaya Odoo)"
-              data-testid="odoo-ecosystem-switcher-btn"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px]">Suite</span>
-              <ChevronDown size={12} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowEcosystemSwitcher(!showEcosystemSwitcher)}
+                className="p-1.5 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] transition-all flex items-center gap-1 text-xs font-bold"
+                title="Beralih aplikasi DagangOS"
+                data-testid="odoo-ecosystem-switcher-btn"
+              >
+                <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+                <span className="text-[10px]">Suite</span>
+                <ChevronDown size={12} />
+              </button>
+              <button onClick={() => setMobileOpen(false)} className="lg:hidden p-1.5 rounded-lg" aria-label="Tutup menu" data-testid="mobile-menu-close-btn">
+                <X size={18} />
+              </button>
+            </div>
           </div>
           <p className="text-[11px] text-[hsl(var(--muted))] mt-1 truncate">{user?.store_name || "DagangOS Enterprise"}</p>
 
@@ -248,7 +280,7 @@ export default function AppLayout() {
                   { mod: "geraina", label: "Geraina POS", desc: "Retail & Toko OS", img: "/assets/brand/geraina-icon.png", tone: "blue", home: "/geraina/app/dashboard", activate: "/geraina/activate" },
                 ];
                 return (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="suite-list pt-1">
                     {tiles.map(({ mod, label, desc, img, tone, home, activate }) => {
                       const isOn = activated.has(mod);
                       const box = tone === "orange"
@@ -260,7 +292,7 @@ export default function AppLayout() {
                         <a
                           key={mod}
                           href={isOn ? home : activate}
-                          className={`p-2.5 rounded-xl border transition-all block text-left ${box}`}
+                          className={`suite-row p-2.5 border transition-all block text-left ${box}`}
                           data-testid={`suite-tile-${mod}`}
                         >
                           <div className="flex items-center gap-1.5 mb-1">
@@ -454,8 +486,10 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto h-screen bg-[hsl(var(--background))]">
-        <Outlet />
+      <main className="ecosystem-workspace flex-1 min-w-0 overflow-y-auto bg-[hsl(var(--background))]">
+        <div key={location.pathname} className="route-stage">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

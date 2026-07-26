@@ -42,7 +42,7 @@ export default function Register() {
   ];
 
   return (
-    <div className={`min-h-screen flex ${isDapurOS ? "theme-dapuros" : ""}`}>
+    <div className={`brand-auth-shell min-h-screen flex ${isDapurOS ? "theme-dapuros" : ""}`}>
       <div className="hidden lg:flex flex-col justify-between w-1/2 p-12 relative overflow-hidden bg-grain"
            style={{ background: isDapurOS ? "linear-gradient(135deg, hsl(35,84%,18%), hsl(35,84%,12%))" : "linear-gradient(135deg, hsl(151,39%,17%), hsl(151,39%,12%))" }}>
         <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
