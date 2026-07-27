@@ -58,7 +58,7 @@ function Nav({ user }) {
           <a href="#solusi">Solusi</a>
           <Link to="/dapuros/pricing">Harga</Link>
           <a href="/">Ekosistem</a>
-          <a href="#footer">Sumber Daya</a>
+          <a href="/sumber-daya">Kontak</a>
         </nav>
         <div className="neo-actions">
           {user ? (
@@ -77,6 +77,7 @@ function Nav({ user }) {
         <a href="#solusi" onClick={() => setOpen(false)}>Solusi</a>
         <Link to="/dapuros/pricing" onClick={() => setOpen(false)}>Harga</Link>
         <a href="/">Ekosistem DagangOS</a>
+        <a href="/sumber-daya" onClick={() => setOpen(false)}>Kontak</a>
       </div>
     </header>
   );

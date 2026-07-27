@@ -448,4 +448,26 @@
 .product-public.ecosystem-pricing > header span:last-child { color: var(--muted) !important; }
 .product-public.ecosystem-pricing > header a:not([data-testid="pricing-nav-register"]):not([data-testid="pricing-nav-dashboard"]) { color: var(--ink) !important; }
 
+/* Keep the floating pricing header inside the product canvas. Without a new
+   block formatting context its top margin collapses through #root and exposes
+   the legacy light body background as a white strip. */
+.product-public.ecosystem-pricing {
+  display: flow-root;
+}
+
+html:has(.public-dapuros),
+body:has(.public-dapuros) {
+  background: #080706;
+  scrollbar-color: rgba(152, 96, 57, .72) #080706;
+}
+
+html:has(.public-dapuros)::-webkit-scrollbar-track {
+  background: #080706;
+}
+
+html:has(.public-dapuros)::-webkit-scrollbar-thumb {
+  border: 2px solid #080706;
+  background: rgba(152, 96, 57, .72);
+}
+
 
