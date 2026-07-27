@@ -236,9 +236,34 @@ export default function DapurOS() {
         @keyframes kitchen-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes kitchen-scan{0%,100%{top:14%}50%{top:85%}}@keyframes ticket-shift{0%,100%{transform:none}50%{transform:translateY(-8px)}}@keyframes ticket-run{from{left:3%}to{left:96%}}@keyframes phone-float{50%{transform:translateY(-10px) rotate(2deg)}}@keyframes qr-path{from{top:0}to{top:100%}}@keyframes floor-pulse{from{transform:scale(.3);opacity:.8}to{transform:scale(3);opacity:0}}@keyframes recipe-spin{to{transform:rotate(360deg)}}@keyframes recipe-packet{0%,100%{transform:translate(-185px,-70px)}25%{transform:translate(175px,-70px)}50%{transform:translate(175px,70px)}75%{transform:translate(-185px,70px)}}@keyframes radar{to{transform:rotate(360deg)}}
         @media(max-width:720px){.neo-workbench{border-radius:22px}.neo-feature-stage{padding:28px 20px}.feature-sim{height:275px}.kds-sim{padding:14px;gap:7px}.kds-sim-ticket{padding:11px}.qr-sim{padding:20px;grid-template-columns:.9fr 1.1fr;gap:15px}.floor-plan{grid-template-columns:repeat(4,1fr);gap:5px}.floor-plan button{height:72px}.ops-report-sim{grid-template-columns:1fr 1fr}.ops-summary{display:none}}
       `}</style>
+      <style>{`
+        .neo-page{background:#070706;color:#fffaf5}.neo-page:before{background:radial-gradient(circle at 78% 8%,rgba(255,117,24,.16),transparent 34rem),radial-gradient(circle at 12% 46%,rgba(29,105,202,.09),transparent 30rem),linear-gradient(rgba(255,151,75,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,151,75,.025) 1px,transparent 1px);background-size:auto,auto,46px 46px,46px 46px}
+        .neo-nav{background:rgba(7,7,6,.84);border-color:rgba(255,155,84,.16);box-shadow:0 14px 46px rgba(0,0,0,.28)}.neo-links,.neo-mobile a{color:#baa99b}.neo-links a:hover{color:#fff}.neo-button{color:#fff5ed;background:rgba(24,15,9,.72);border-color:rgba(255,155,84,.2)}.neo-primary{color:#321300}.neo-menu{color:#fff;background:#170d07}
+        .neo-kicker{background:rgba(52,22,6,.72);color:#ffd7bd;border-color:rgba(255,117,24,.32)}.neo-lead,.neo-section-head p,.neo-stage-copy p,.neo-solution-copy p{color:#b5a398}.neo-check{color:#9e8b7e}.neo-check b{color:#fff8f2}
+        .neo-hero-cinematic{grid-template-columns:.82fr 1.18fr;gap:30px}
+        .neo-hero-cinematic .neo-title{font-size:clamp(46px,4.35vw,58px);line-height:1.01}
+        .hero-scene-image{height:570px;position:relative;overflow:hidden;border:1px solid rgba(255,133,47,.22);border-radius:30px;background:#070503;isolation:isolate;box-shadow:0 40px 90px rgba(0,0,0,.46),inset 0 1px rgba(255,255,255,.04)}
+        .hero-scene-image:before{content:"";position:absolute;inset:-10px;background:url("/dapuros/assets/scenes/dapuros-kitchen.png") 77% center/cover no-repeat;animation:kitchen-camera 13s ease-in-out infinite alternate;z-index:-3}
+        .hero-scene-image:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,7,6,.48),transparent 38%),linear-gradient(180deg,transparent 62%,rgba(7,5,3,.7));z-index:-2}
+        .scene-sweep{position:absolute;left:-30%;top:0;width:24%;height:100%;transform:skewX(-12deg);background:linear-gradient(90deg,transparent,rgba(255,137,50,.13),transparent);animation:kitchen-sweep 6.5s ease-in-out infinite}
+        .scene-sigil{position:absolute;right:28px;bottom:28px;width:94px;height:94px;display:grid;place-items:center;border:1px solid rgba(255,132,44,.38);border-radius:28px;background:rgba(24,10,3,.76);box-shadow:0 22px 50px rgba(0,0,0,.4),0 0 35px rgba(255,117,24,.17);backdrop-filter:blur(14px);animation:sigil-float 5s ease-in-out infinite}
+        .scene-sigil:before,.scene-sigil:after{content:"";position:absolute;inset:-13px;border:1px solid rgba(255,117,24,.2);border-radius:36px;animation:sigil-pulse 3.6s ease-out infinite}.scene-sigil:after{animation-delay:-1.8s}
+        .scene-sigil img{width:62px;height:62px;object-fit:contain;filter:drop-shadow(0 0 18px rgba(255,117,24,.48))}
+        .scene-particle{position:absolute;width:8px;height:8px;border-radius:50%;background:${ACCENT};box-shadow:0 0 16px ${ACCENT};animation:kitchen-particle 8s ease-in-out infinite}.scene-particle.p1{left:14%;top:24%}.scene-particle.p2{left:48%;top:14%;animation-delay:-2.7s}.scene-particle.p3{left:38%;bottom:12%;animation-delay:-5.1s}
+        .neo-strip{background:rgba(15,10,6,.78);border-color:rgba(255,147,70,.14)}.neo-strip-item{color:#ae9a8c;border-color:rgba(255,147,70,.13)}
+        .neo-workbench{border-color:rgba(255,147,70,.14);background:#100b08;box-shadow:0 34px 90px rgba(0,0,0,.32)}.neo-feature-rail{background:#0b0806;border-color:rgba(255,147,70,.13)}.neo-feature-tab{color:#9f8d80;border-color:rgba(255,147,70,.1)}.neo-feature-tab:hover,.neo-feature-tab.is-active{color:#fff7f0;background:linear-gradient(90deg,rgba(255,117,24,.17),transparent)}
+        .neo-feature-stage{background:radial-gradient(circle at 84% 16%,rgba(255,117,24,.13),transparent 25rem),linear-gradient(145deg,#140c07,#0c0907)}.neo-stage-icon{background:#241207}.neo-stage-copy h3{color:#fff8f2}
+        .feature-sim{border-color:rgba(255,147,70,.13);background:linear-gradient(145deg,#17100c,#0d0b09);box-shadow:inset 0 1px rgba(255,255,255,.03)}
+        .menu-grid span,.kds-sim-ticket,.qr-phone,.floor-plan button,.dish-core,.ingredient,.ops-stream span{color:#f8eee8;background:#1c120c;border-color:rgba(255,147,70,.14);box-shadow:0 15px 28px rgba(0,0,0,.24)}.order-bill{background:#080604}.qr-code{border-color:#ff9650}.qr-code span{background:#ff9650}.floor-plan button{color:#f8eee8}.floor-plan button.occupied{background:#28150a}.dish-core b,.ingredient b{color:#fff7f1}.ops-radar{border-color:#4d3020;background:repeating-radial-gradient(circle,transparent 0 22px,rgba(255,117,24,.07) 23px 24px)}
+        .neo-solution{border-color:rgba(255,147,70,.14)}.neo-flow>div{border-color:rgba(255,147,70,.13)}.neo-flow b{color:#fff5ed}.neo-flow span{color:#a79385}.neo-footer{background:#0e0906;border-color:rgba(255,147,70,.14)}.neo-footer-inner{color:#aa9688}.neo-footer a:hover{color:#fff}
+        @keyframes kitchen-camera{0%{transform:scale(1.03) translate3d(-3px,0,0)}100%{transform:scale(1.09) translate3d(11px,-8px,0)}}@keyframes kitchen-sweep{0%,18%{left:-30%;opacity:0}42%{opacity:1}70%,100%{left:115%;opacity:0}}@keyframes sigil-float{50%{transform:translateY(-11px) rotate(1.5deg)}}@keyframes sigil-pulse{0%{transform:scale(.84);opacity:.8}100%{transform:scale(1.3);opacity:0}}@keyframes kitchen-particle{0%,100%{transform:translate3d(0,0,0);opacity:.35}35%{transform:translate3d(35px,-22px,0);opacity:1}70%{transform:translate3d(70px,18px,0);opacity:.55}}
+        @media(max-width:1050px){.neo-hero-cinematic{grid-template-columns:1fr}.hero-scene-image{width:min(900px,100%);height:520px;margin:auto}}
+        @media(max-width:720px){.hero-scene-image{height:430px;margin-top:14px;border-radius:23px}.hero-scene-image:before{background-position:72% center}.scene-sigil{right:18px;bottom:18px;width:76px;height:76px}.scene-sigil img{width:50px;height:50px}}
+        @media(prefers-reduced-motion:reduce){.hero-scene-image:before,.scene-sweep,.scene-sigil,.scene-sigil:before,.scene-sigil:after,.scene-particle{animation:none}}
+      `}</style>
       <Nav user={user} />
       <main>
-        <section className="neo-hero">
+        <section className="neo-hero neo-hero-cinematic">
           <div className="neo-copy">
             <span className="neo-kicker">Sistem Restoran &amp; F&amp;B</span>
             <h1 className="neo-title" data-testid="hero-title">Restoran Lebih <span>Efisien, Layanan Lebih Cepat, Pelanggan Lebih Puas.</span></h1>
@@ -249,7 +274,11 @@ export default function DapurOS() {
             </div>
             <div className="neo-checks"><div className="neo-check"><b><CheckCircle2 size={15} />Operasional F&amp;B</b>Fokus pada alur front-of-house dan back-of-house.</div><div className="neo-check"><b><CheckCircle2 size={15} />Pesanan Terhubung</b>Kasir, meja, dan dapur berada dalam alur yang sama.</div><div className="neo-check"><b><CheckCircle2 size={15} />Bagian dari DagangOS</b>Identitas DapurOS tetap terhubung dengan parent ecosystem.</div></div>
           </div>
-          <TiltWrap><KitchenVisual /></TiltWrap>
+          <div className="hero-scene-image dapuros-scene" aria-label="Lingkungan operasional restoran DapurOS">
+            <i className="scene-sweep" aria-hidden="true" />
+            <i className="scene-particle p1" aria-hidden="true" /><i className="scene-particle p2" aria-hidden="true" /><i className="scene-particle p3" aria-hidden="true" />
+            <div className="scene-sigil" aria-hidden="true"><img src="/assets/brand/dapuros-icon.png" alt="" /></div>
+          </div>
         </section>
 
         <section className="neo-strip"><div className="neo-strip-inner">{QUICK_FEATURES.map((item) => <div className="neo-strip-item" key={item.label}><item.icon size={17} /><span>{item.label}</span></div>)}</div></section>
