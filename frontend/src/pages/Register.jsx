@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { checkoutReturn, checkoutAuthLink } from "@/auth/checkoutReturn";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { ArrowRight } from "lucide-react";
@@ -10,6 +11,7 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
+  const next = checkoutReturn("dapuros");
   const { register } = useAuth();
 
   const submit = async (event) => {
@@ -18,7 +20,8 @@ export default function Register() {
     setLoading(true);
     try {
       await register(email, password, storeName);
-      nav("/dapuros/app/dashboard");
+      if (next) window.location.assign(next);
+      else nav("/dapuros/app/dashboard");
     } catch (requestError) {
       setError(requestError?.response?.data?.detail || "Gagal mendaftar.");
     } finally {
@@ -36,7 +39,7 @@ export default function Register() {
         </Link>
         <nav aria-label="Navigasi pendaftaran DapurOS">
           <Link to="/dapuros/pricing">Lihat harga</Link>
-          <Link to="/dapuros/login">Masuk</Link>
+          <Link to={checkoutAuthLink("dapuros", "login")}>Masuk</Link>
         </nav>
       </header>
 
@@ -59,7 +62,7 @@ export default function Register() {
         <section className="auth-form-wrap">
           <form onSubmit={submit} className="auth-form" data-testid="register-form">
             <h1>Buat akun DapurOS</h1>
-            <p>Mulai trial 14 hari tanpa kartu kredit.</p>
+            <p>{next ? "Buat akun untuk melanjutkan pembelian paket yang Anda pilih." : "Mulai trial 14 hari tanpa kartu kredit."}</p>
 
             <div className="auth-field">
               <label htmlFor="dapuros-register-store" data-testid="register-store-label">Nama restoran atau kafe</label>
@@ -79,10 +82,10 @@ export default function Register() {
             {error && <p className="auth-error" role="alert" data-testid="register-error">{error}</p>}
 
             <button type="submit" disabled={loading} data-testid="register-submit-btn" className="auth-submit">
-              {loading ? "Memproses..." : "Mulai Trial 14 Hari"} {!loading && <ArrowRight size={17} />}
+              {loading ? "Memproses..." : next ? "Daftar & Lanjut Bayar" : "Mulai Trial 14 Hari"} {!loading && <ArrowRight size={17} />}
             </button>
 
-            <p className="auth-switch">Sudah punya akun? <Link to="/dapuros/login" data-testid="register-to-login-link">Masuk</Link></p>
+            <p className="auth-switch">Sudah punya akun? <Link to={checkoutAuthLink("dapuros", "login")} data-testid="register-to-login-link">Masuk</Link></p>
           </form>
         </section>
       </main>
