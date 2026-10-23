@@ -69,6 +69,11 @@ export default function Pricing() {
   const isYearly = billing === "yearly";
 
   const handleUpgrade = async (tierId) => {
+    if (['starter', 'pro', 'business'].includes(tierId)) {
+      sessionStorage.setItem('dagangos_checkout_dapuros', JSON.stringify({ tier: tierId, period: billing, expires: Date.now() + 1800000 }));
+      window.location.assign(`/dapuros/pricing?period=${billing}&plan=${tierId}&checkout=1`);
+      return;
+    }
     setUpgradingId(tierId);
     try {
       await api.post("/pricing/upgrade", { tier_id: tierId });
