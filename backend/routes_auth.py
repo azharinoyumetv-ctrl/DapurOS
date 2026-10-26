@@ -131,7 +131,7 @@ async def login(payload: UserLogin):
     user = await db.users.find_one({"email": payload.email})
     if not user or not verify_password(payload.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Email atau password salah")
-    token = create_access_token(user["id"], user.get("store_id"), user.get("role", "Owner"), user["email"])
+    token = create_access_token(user["id"], user.get("store_id"), user.get("role", "Owner"), user["email"], user.get("credential_version", 0))
     return Token(access_token=token, user=_user_public(user))
 
 
@@ -141,7 +141,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     user = await db.users.find_one({"email": form_data.username})
     if not user or not verify_password(form_data.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Email atau password salah")
-    token = create_access_token(user["id"], user.get("store_id"), user.get("role", "Owner"), user["email"])
+    token = create_access_token(user["id"], user.get("store_id"), user.get("role", "Owner"), user["email"], user.get("credential_version", 0))
     return Token(access_token=token, user=_user_public(user))
 
 
@@ -152,7 +152,7 @@ async def me(user: dict = Depends(get_identity)):
     stores = await db.stores.find({"owner_user_id": user["id"]}, {"_id": 0}).to_list(length=100)
     await reconcile_pending(user, user["current_module"])
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
-    pub = _user_public({**fresh, "current_module": user["current_module"], "subscriptions": {**user.get("subscriptions", {}), **fresh.get("subscriptions", {})}})
+    pub = _user_public({**fresh, **{key: user.get(key) for key in ("role", "store_id", "store_name", "current_module")}, "subscriptions": {**user.get("subscriptions", {}), **fresh.get("subscriptions", {})}})
     pub["stores"] = [
         {"store_id": s["id"], "name": s.get("name"), "module": s.get("module")} for s in stores
     ]
@@ -171,6 +171,8 @@ async def list_stores(user: dict = Depends(get_identity)):
 @router.post("/stores")
 async def add_store(payload: AddStore, user: dict = Depends(get_identity)):
     """Tambah toko baru untuk modul lain di bawah akun yang sama (aktivasi modul)."""
+    if user.get("role") not in ("Owner", "admin"):
+        raise HTTPException(status_code=403, detail="Peran Owner diperlukan untuk membuat toko.")
     db = get_db()
     module = _norm_module(payload.module)
     name = (payload.store_name or "").strip()

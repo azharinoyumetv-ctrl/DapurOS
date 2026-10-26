@@ -141,25 +141,30 @@ def test_expiry_and_calendar_terms_are_enforced(account):
 
 def test_api_binds_order_to_authenticated_owner_and_does_not_trust_browser_paid_status(account, monkeypatch):
     db, user = account
+    run(db.stores.update_one({"id": STORE}, {"$set": {"module": "dapuros"}}))
+    user = {**user, "current_module": "dapuros"}
+    order = ORDER.replace("geraina", "dapuros")
+    def settled(**kwargs):
+        return {**payment(order=order, **kwargs), "module": "dapuros", "amount": 249000}
     app = FastAPI()
     app.include_router(routes_subscriptions.router)
     app.include_router(routes_auth.router)
     token = auth.create_access_token(OWNER, STORE, "Owner", user["email"])
-    headers = {"Authorization": "Bearer " + token, "X-DagangOS-Module": "geraina"}
+    headers = {"Authorization": "Bearer " + token, "X-DagangOS-Module": "dapuros"}
     with TestClient(app) as client:
-        assert client.post("/api/subscriptions/orders", json={"orderId": ORDER, "tier": "starter", "period": "monthly"}).status_code == 401
-        response = client.post("/api/subscriptions/orders", headers=headers, json={"orderId": ORDER, "tier": "starter", "period": "monthly", "amount": 1, "owner_id": "attacker"})
+        assert client.post("/api/subscriptions/orders", json={"orderId": order, "tier": "starter", "period": "monthly"}).status_code == 401
+        response = client.post("/api/subscriptions/orders", headers=headers, json={"orderId": order, "tier": "starter", "period": "monthly", "amount": 1, "owner_id": "attacker"})
         assert response.status_code == 200
         assert response.json()["owner_id"] == OWNER
-        assert response.json()["amount"] == 149000
-        run(billing.attach_reference(ORDER, "test-reference-" + ORDER + "-signed-by-portal", user))
-        monkeypatch.setattr(billing, "fetch_payment_status", AsyncMock(return_value=payment(state="pending")))
-        result = client.post("/api/subscriptions/reconcile", json={"orderId": ORDER, "status": "paid", "owner_id": "attacker"})
+        assert response.json()["amount"] == 249000
+        run(billing.attach_reference(order, "test-reference-" + order + "-signed-by-portal", user))
+        monkeypatch.setattr(billing, "fetch_payment_status", AsyncMock(return_value=settled(state="pending")))
+        result = client.post("/api/subscriptions/reconcile", json={"orderId": order, "status": "paid", "owner_id": "attacker"})
         assert result.status_code == 200
         assert result.json()["status"] == "pending"
         assert client.get("/api/auth/me", headers=headers).json()["plan"] == "trial"
-        monkeypatch.setattr(billing, "fetch_payment_status", AsyncMock(return_value=payment()))
-        assert client.post("/api/subscriptions/reconcile", json={"orderId": ORDER}).json()["activation"] == "active"
+        monkeypatch.setattr(billing, "fetch_payment_status", AsyncMock(return_value=settled()))
+        assert client.post("/api/subscriptions/reconcile", json={"orderId": order}).json()["activation"] == "active"
         assert client.get("/api/auth/me", headers=headers).json()["plan"] == "starter"
 
 

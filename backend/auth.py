@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, HTTPException, status, Header, Request
 from fastapi.security import OAuth2PasswordBearer
 
 from database import get_db, utcnow
@@ -35,13 +35,14 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, store_id: str, role: str, email: str) -> str:
+def create_access_token(user_id: str, store_id: str, role: str, email: str, credential_version: int = 0) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "store_id": store_id,
         "role": role,
         "email": email,
+        "cv": credential_version,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=JWT_EXPIRE_MIN)).timestamp()),
     }
@@ -101,6 +102,11 @@ async def _maybe_expire_trial(user: dict) -> dict:
     return user
 
 
+def _account_active(user: dict) -> bool:
+    state = str(user.get("status", "Aktif")).replace("-", "").replace(" ", "").lower()
+    return user.get("is_active") is not False and user.get("disabled") is not True and not user.get("deleted_at") and state in ("aktif", "active")
+
+
 async def _decode_identity(token: str) -> dict:
     cred_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -113,8 +119,9 @@ async def _decode_identity(token: str) -> dict:
         raise cred_exc
     db = get_db()
     user = await db.users.find_one({"id": payload.get("sub")}, {"_id": 0, "password_hash": 0})
-    if not user:
+    if not user or not _account_active(user) or payload.get("cv", 0) != user.get("credential_version", 0):
         raise cred_exc
+    user["_token_has_cv"] = "cv" in payload
     user = await _maybe_expire_trial(user)
     return user
 
@@ -126,7 +133,14 @@ async def get_identity(token: str = Depends(oauth2_scheme), x_dagangos_module: s
     detect the expired state or show the paywall in the first place."""
     user = await _decode_identity(token)
     module = x_dagangos_module.lower()
-    return apply_store_subscription(user, await _resolve_store(user, module), module)
+    store = await _resolve_store(user, module)
+    if store:
+        return await _resolve_current(token, module)
+    # Cross-product activation belongs to an established account owner only.
+    if not await get_db().stores.find_one({"owner_user_id": user["id"]}):
+        raise HTTPException(status_code=409, detail="no_store_for_module")
+    user.update(role="Owner", store_id=None, store_name=None, current_module=module)
+    return apply_store_subscription(user, None, module)
 
 
 async def _resolve_store(user: dict, module: str) -> Optional[dict]:
@@ -154,6 +168,19 @@ async def _resolve_current(token: str, module: str) -> dict:
     store = await _resolve_store(user, module)
     if not store:
         raise HTTPException(status_code=409, detail="no_store_for_module")
+    member = await get_db().staff.find_one({"store_id": store["id"], "$or": [{"user_id": user["id"]}, {"id": user["id"]}]})
+    is_owner = store.get("owner_user_id") == user["id"]
+    legacy_owner = not store.get("owner_user_id") and member is None and user.get("role") in ("Owner", "admin") and user.get("store_id") == store["id"]
+    if is_owner or legacy_owner:
+        user["role"] = "Owner"
+    else:
+        if not member or not _account_active(member):
+            raise HTTPException(status_code=401, detail="Keanggotaan staf tidak aktif atau memerlukan kredensial baru.")
+        if member.get("role") not in ("Manager", "Cashier", "Warehouse"):
+            raise HTTPException(status_code=403, detail="Peran staf tidak valid.")
+        user["role"] = member["role"]
+    if user.get("must_change_password"):
+        raise HTTPException(status_code=403, detail="Ganti kata sandi sementara di aplikasi asal sebelum menggunakan aplikasi.")
     user["store_id"] = store["id"]
     user["store_name"] = store.get("name")
     user["current_module"] = module
@@ -163,6 +190,7 @@ async def _resolve_current(token: str, module: str) -> dict:
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     x_dagangos_module: str = Header(default="dapuros", alias="X-DagangOS-Module"),
+    request: Request = None,
 ) -> dict:
     """Akun + toko aktif sesuai modul (header X-DagangOS-Module). Dipakai semua route data,
     sehingga data tetap ter-scope per toko (store_id). Jika akun belum punya toko untuk modul
@@ -173,6 +201,8 @@ async def get_current_user(
     free; the service stops until the account subscribes. Billing routes use get_billing_user
     / require_billing_admin instead of this dependency, precisely so an expired account can
     still reach /pricing/upgrade and /pricing/addons/purchase to pay and unlock itself again."""
+    if request is not None and x_dagangos_module.lower() != "dapuros":
+        raise HTTPException(status_code=409, detail="wrong_backend_for_module")
     user = await _resolve_current(token, x_dagangos_module)
     if user.get("plan") == "expired":
         raise HTTPException(
@@ -185,11 +215,14 @@ async def get_current_user(
 async def get_billing_user(
     token: str = Depends(oauth2_scheme),
     x_dagangos_module: str = Header(default="dapuros", alias="X-DagangOS-Module"),
+    request: Request = None,
 ) -> dict:
     """Same resolution as get_current_user but WITHOUT the expired-trial block. Reserved for
     the billing endpoints (upgrade / addon purchase / addon history) in routes_pricing.py --
     those must stay reachable exactly when everything else is locked out, or an expired
     account could never pay to reactivate itself."""
+    if request is not None and x_dagangos_module.lower() != "dapuros":
+        raise HTTPException(status_code=409, detail="wrong_backend_for_module")
     return await _resolve_current(token, x_dagangos_module)
 
 
