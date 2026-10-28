@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import bcrypt
 import jwt
+from erasure_guard import actor_context
 from fastapi import Depends, HTTPException, status, Header, Request
 from fastapi.security import OAuth2PasswordBearer
 
@@ -94,7 +95,7 @@ async def _maybe_expire_trial(user: dict) -> dict:
     # Best-effort only -- store.plan is never read for authorization (every check_capacity()/
     # require_plan() call reads user.get("plan")), this just keeps it from looking stale.
     await db.stores.update_many(
-        {"owner_user_id": user["id"], "plan": "trial"},
+        {"owner_user_id": user["id"], "plan": "trial", "module": actor_context.get()[1] or "dapuros"},
         {"$set": {"plan": "expired"}},
     )
     user["plan"] = "expired"
@@ -104,7 +105,9 @@ async def _maybe_expire_trial(user: dict) -> dict:
 
 def _account_active(user: dict) -> bool:
     state = str(user.get("status", "Aktif")).replace("-", "").replace(" ", "").lower()
-    return user.get("is_active") is not False and user.get("disabled") is not True and not user.get("deleted_at") and state in ("aktif", "active")
+    return (user.get("is_active") is not False and user.get("disabled") is not True
+            and not user.get("deleted_at") and user.get("erasure_state") not in ("closing", "erased")
+            and state in ("aktif", "active"))
 
 
 async def _decode_identity(token: str) -> dict:
@@ -147,14 +150,20 @@ async def _resolve_store(user: dict, module: str) -> Optional[dict]:
     """Cari toko milik akun ini untuk modul tertentu (satu toko per modul per akun, Fase 1)."""
     db = get_db()
     module = (module or "dapuros").lower()
+    if isinstance(user.get("closed_modules"), dict) and user["closed_modules"].get(module):
+        raise HTTPException(401, detail="Akses produk ini telah dihapus sesuai permintaan. Akses produk lain yang masih aktif tetap tersedia.")
     store = await db.stores.find_one({"owner_user_id": user["id"], "module": module})
     if store:
+        if store.get("erasure_state") in ("closing", "erased"):
+            raise HTTPException(409, "Toko sedang ditutup atau telah dihapus.")
         return store
     # Kompatibilitas data lama: akun single-store yang store-nya belum punya field `module`.
     legacy_id = user.get("store_id")
     if legacy_id:
         ls = await db.stores.find_one({"id": legacy_id})
         if ls and ls.get("module") in (None, module):
+            if ls.get("erasure_state") in ("closing", "erased"):
+                raise HTTPException(409, "Toko sedang ditutup atau telah dihapus.")
             return ls
     return None
 
