@@ -1,43 +1,131 @@
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
+import { subscriptionState } from "@/auth/subscriptionState";
+import { ROLE_MODULES, canAccessPath, canonicalRole } from "@/auth/permissions";
 import { toast } from "@/components/ui/sonner";
 import {
   LayoutDashboard, ShoppingCart, Package, Warehouse, ClipboardList,
   Truck, Users, Landmark, CreditCard, BarChart3, UserCheck,
   GitBranch, Cpu, Settings, Info, ChevronDown, ChevronRight,
-  LogOut, Sparkles, Crown, Shield, ChefHat, QrCode, Lock, Menu, X
+  LogOut, Crown, Shield, Menu, X, Lock, Clock, UserRound, ReceiptText, ChefHat, QrCode
 } from "lucide-react";
 
-const ROLE_PERMISSIONS = {
-  Owner: ["*"],
-  Manager: [
-    "dashboard", "pos", "kds", "qr-menu", "products", "inventory", "purchase",
-    "suppliers", "customers", "debt", "payments", "reports", "staff", "settings", "billing", "about"
-  ],
-  Cashier: [
-    "dashboard", "pos", "kds", "qr-menu", "products", "customers", "about"
-  ],
-  Warehouse: [
-    "products", "inventory", "purchase", "suppliers", "about"
-  ]
+import { sectionMenu, isPlanLocked as isLocked, PLAN_LABEL } from "@/navigation/sections";
+
+const TIER_COLORS = {
+  trial: { backgroundColor: "#fef3c7", color: "#78350f", borderColor: "#fbbf24" },
+  starter: { backgroundColor: "#dcfce7", color: "#14532d", borderColor: "#86efac" },
+  pro: { backgroundColor: "#dbeafe", color: "#1e3a8a", borderColor: "#93c5fd" },
+  business: { backgroundColor: "#f3e8ff", color: "#581c87", borderColor: "#d8b4fe" },
+  expired: { backgroundColor: "#fee2e2", color: "#7f1d1d", borderColor: "#fca5a5" },
+  unknown: { backgroundColor: "#fef3c7", color: "#78350f", borderColor: "#fbbf24" },
 };
 
-// Plan-gated nav (cosmetic only -- there is no backend enforcement behind this yet; every
-// endpoint is still reachable regardless of plan). This just shows what each tier unlocks and
-// nudges upgrades, per the Starter/Pro/Business repackaging. "trial" ranks as Business since
-// the 14-day trial now grants full Business-level access.
-const PLAN_RANK = { expired: -1, starter: 0, pro: 1, business: 2, trial: 2 };
-const PLAN_LABEL = { starter: "Starter", pro: "Pro", business: "Business" };
-
-function planRank(plan) {
-  return PLAN_RANK[plan] ?? 0;
-}
-
-function isLocked(minPlan, userPlan) {
-  if (!minPlan || minPlan === "starter") return false;
-  return planRank(userPlan) < planRank(minPlan);
-}
+export const MENU_STRUCTURE = [
+  { to: "/dapuros/app/kds", icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
+  { to: "/dapuros/app/qr-menu", icon: QrCode, label: "Menu QR Code", key: "qr-menu", minPlan: "pro" },
+  { to: "/dapuros/app/dashboard", icon: LayoutDashboard, label: "Dasbor", key: "dashboard" },
+  { to: "/dapuros/app/pos", icon: ShoppingCart, label: "Kasir", key: "pos" },
+  { to: "/dapuros/app/sales", icon: ReceiptText, label: "Riwayat Penjualan", key: "sales" },
+  { to: "/dapuros/app/attendance", icon: Clock, label: "Absensi saya", key: "attendance", minPlan: "business" },
+  {
+    label: "Produk",
+    icon: Package,
+    key: "products",
+    sub: [
+      { to: "/dapuros/app/products", label: "Daftar Produk" },
+      { to: "/dapuros/app/products/ingredients", label: "Bahan Baku (BOM)", minPlan: "pro" },
+      { to: "/dapuros/app/products/categories", label: "Kategori" },
+      { to: "/dapuros/app/products/brands", label: "Merek" },
+      { to: "/dapuros/app/products/units", label: "Satuan" },
+      { to: "/dapuros/app/products/stock-adjustment", label: "Penyesuaian Stok" },
+      { to: "/dapuros/app/products/stock-transfer", label: "Transfer Stok", minPlan: "business" }
+    ]
+  },
+  {
+    label: "Inventaris",
+    icon: Warehouse,
+    key: "inventory",
+    sub: [
+      { to: "/dapuros/app/inventory/overview", label: "Ringkasan Stok" },
+      { to: "/dapuros/app/inventory/movement", label: "Mutasi Stok", minPlan: "pro" },
+      { to: "/dapuros/app/inventory/valuation", label: "Penilaian Inventaris", minPlan: "pro" },
+      { to: "/dapuros/app/inventory/low-stock", label: "Stok Menipis" },
+      { to: "/dapuros/app/inventory/dead-stock", label: "Stok Mati", minPlan: "pro" }
+    ]
+  },
+  {
+    label: "Pembelian",
+    icon: ClipboardList,
+    key: "purchase",
+    minPlan: "pro",
+    sub: [
+      { to: "/dapuros/app/purchase/orders", label: "Order Pembelian (PO)" },
+      { to: "/dapuros/app/purchase/receiving", label: "Penerimaan Barang" },
+      { to: "/dapuros/app/purchase/invoices", label: "Faktur Pemasok" }
+    ]
+  },
+  { to: "/dapuros/app/suppliers", icon: Truck, label: "Pemasok", key: "suppliers", minPlan: "pro" },
+  {
+    label: "Pelanggan",
+    icon: Users,
+    key: "customers",
+    sub: [
+      { to: "/dapuros/app/customers", label: "Daftar Pelanggan" },
+      { to: "/dapuros/app/customers/membership", label: "Keanggotaan", minPlan: "business" },
+      { to: "/dapuros/app/customers/loyalty", label: "Poin Loyalitas", minPlan: "business" }
+    ]
+  },
+  {
+    label: "Hutang Piutang",
+    icon: Landmark,
+    key: "debt",
+    minPlan: "pro",
+    sub: [
+      { to: "/dapuros/app/debt/receivable", label: "Piutang Usaha" },
+      { to: "/dapuros/app/debt/payable", label: "Utang Usaha" }
+    ]
+  },
+  {
+    label: "Pembayaran",
+    icon: CreditCard,
+    key: "payments",
+    sub: sectionMenu("payments")
+  },
+  {
+    label: "Laporan",
+    icon: BarChart3,
+    key: "reports",
+    minPlan: "pro",
+    sub: sectionMenu("reports")
+  },
+  {
+    label: "Staf & Karyawan",
+    icon: UserCheck,
+    key: "staff",
+    sub: [
+      { to: "/dapuros/app/staff/management", label: "Manajemen Staf" },
+      { to: "/dapuros/app/staff/roles", label: "Peran", minPlan: "business" },
+      { to: "/dapuros/app/staff/permissions", label: "Izin Akses", minPlan: "business" },
+      { to: "/dapuros/app/staff/attendance", label: "Absensi", minPlan: "business" }
+    ]
+  },
+  { to: "/dapuros/app/branches", icon: GitBranch, label: "Cabang", key: "branches", minPlan: "business" },
+  {
+    label: "Integrasi",
+    icon: Cpu,
+    key: "integrations",
+    sub: sectionMenu("integrations")
+  },
+  {
+    label: "Pengaturan",
+    icon: Settings,
+    key: "settings",
+    sub: sectionMenu("settings")
+  },
+  { to: "/dapuros/app/about", icon: Info, label: "Tentang", key: "about" }
+];
 
 function notifyLocked(minPlan) {
   toast.error(`Fitur ini tersedia dalam paket ${PLAN_LABEL[minPlan] || "Pro"}.`, {
@@ -48,206 +136,95 @@ function notifyLocked(minPlan) {
 function trialDaysLeft(iso) {
   if (!iso) return null;
   const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return null;
   return Math.max(0, Math.ceil(ms / 86400000));
 }
 
 export default function AppLayout() {
-  const { user, logout, changeRole } = useAuth();
+  const { user, logout } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
   const days = trialDaysLeft(user?.trial_ends_at);
-  const isTrial = (user?.plan || "trial") === "trial";
-  
-  const role = user?.role || "Owner";
-  const permissions = ROLE_PERMISSIONS[role] || [];
-  
+  const license = subscriptionState(user);
+  const isTrial = license.plan === "trial";
+
+  const role = canonicalRole(user?.role);
+  const permissions = ROLE_MODULES[role] || [];
+  const TierNotice = role === "Owner" ? Link : "div";
+  const tierLabel = license.plan === "expired" ? "Paket berakhir" : license.label;
+
   const [openMenus, setOpenMenus] = useState({});
   const [showEcosystemSwitcher, setShowEcosystemSwitcher] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
+  const [handoff, setHandoff] = useState(false);
+  const beginHandoff = () => {
+    const event = new Event("dapuros-before-account-switch", { cancelable: true });
+    window.dispatchEvent(event);
+    if (event.defaultPrevented) { toast.error("Selesaikan transaksi atau simpan/tutup draf sebelum mengganti akun."); return; }
+    if (!navigator.onLine) { toast.error("Ganti pengguna memerlukan internet. Akun saat ini tetap dapat mencatat penjualan tunai offline; Keluar tetap mengunci akun."); return; }
     setMobileOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    document.body.style.overflow = mobileOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [mobileOpen]);
+    setHandoff(true);
+  };
 
   const toggleMenu = (key) => {
     setOpenMenus((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const isDapurOS = true;
-  const prefix = "/dapuros/app";
-  const brandIconSrc = "/assets/brand/dapuros-icon.png";
-  const brandName = "DapurOS";
+  // Close the off-canvas sidebar automatically whenever the route changes
+  // (phone/tablet only -- on lg+ the sidebar is always visible and this is a no-op).
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
 
-  const dynamicMenu = [
-    { to: `${prefix}/dashboard`, icon: LayoutDashboard, label: "Dasbor", key: "dashboard" },
-    { to: `${prefix}/pos`, icon: ShoppingCart, label: "Kasir", key: "pos" },
-    { to: `${prefix}/kds`, icon: ChefHat, label: "Layar Dapur (KDS)", key: "kds" },
-    { to: `${prefix}/qr-menu`, icon: QrCode, label: "Menu QR Code", key: "qr-menu", minPlan: "pro" },
-    {
-      label: "Produk",
-      icon: Package,
-      key: "products",
-      sub: [
-        { to: `${prefix}/products`, label: "Daftar Produk" },
-        ...(isDapurOS ? [{ to: `${prefix}/products/ingredients`, label: "Bahan Baku (BOM)", minPlan: "pro" }] : []),
-        { to: `${prefix}/products/categories`, label: "Kategori" },
-        { to: `${prefix}/products/brands`, label: "Merek" },
-        { to: `${prefix}/products/units`, label: "Satuan" },
-        { to: `${prefix}/products/stock-adjustment`, label: "Penyesuaian Stok" },
-        { to: `${prefix}/products/stock-transfer`, label: "Transfer Stok", minPlan: "business" }
-      ]
-    },
-    {
-      label: "Inventaris",
-      icon: Warehouse,
-      key: "inventory",
-      sub: [
-        { to: `${prefix}/inventory/overview`, label: "Ringkasan Stok" },
-        { to: `${prefix}/inventory/movement`, label: "Mutasi Stok", minPlan: "pro" },
-        { to: `${prefix}/inventory/valuation`, label: "Penilaian Inventaris", minPlan: "pro" },
-        { to: `${prefix}/inventory/low-stock`, label: "Stok Menipis" },
-        { to: `${prefix}/inventory/dead-stock`, label: "Stok Mati", minPlan: "pro" }
-      ]
-    },
-    {
-      label: "Pembelian",
-      icon: ClipboardList,
-      key: "purchase",
-      minPlan: "pro",
-      sub: [
-        { to: `${prefix}/purchase/orders`, label: "Order Pembelian (PO)" },
-        { to: `${prefix}/purchase/receiving`, label: "Penerimaan Barang" },
-        { to: `${prefix}/purchase/invoices`, label: "Faktur Pemasok" }
-      ]
-    },
-    { to: `${prefix}/suppliers`, icon: Truck, label: "Pemasok", key: "suppliers", minPlan: "pro" },
-    {
-      label: "Pelanggan",
-      icon: Users,
-      key: "customers",
-      minPlan: "pro",
-      sub: [
-        { to: `${prefix}/customers`, label: "Daftar Pelanggan" },
-        { to: `${prefix}/customers/membership`, label: "Keanggotaan", minPlan: "business" },
-        { to: `${prefix}/customers/loyalty`, label: "Poin Loyalitas", minPlan: "business" }
-      ]
-    },
-    {
-      label: "Hutang Piutang",
-      icon: Landmark,
-      key: "debt",
-      minPlan: "pro",
-      sub: [
-        { to: `${prefix}/debt/receivable`, label: "Piutang Usaha" },
-        { to: `${prefix}/debt/payable`, label: "Utang Usaha" }
-      ]
-    },
-    {
-      label: "Pembayaran",
-      icon: CreditCard,
-      key: "payments",
-      sub: [
-        { to: `${prefix}/payments/cash`, label: "Tunai" },
-        { to: `${prefix}/payments/qris`, label: "QRIS" },
-        { to: `${prefix}/payments/ewallet`, label: "E-Wallet" },
-        { to: `${prefix}/payments/va`, label: "Virtual Account" },
-        { to: `${prefix}/payments/credit-card`, label: "Kartu Kredit" },
-        { to: `${prefix}/payments/bank-transfer`, label: "Transfer Bank" }
-      ]
-    },
-    {
-      label: "Laporan",
-      icon: BarChart3,
-      key: "reports",
-      minPlan: "pro",
-      sub: [
-        { to: `${prefix}/reports/sales`, label: "Penjualan" },
-        { to: `${prefix}/reports/product`, label: "Produk" },
-        { to: `${prefix}/reports/inventory`, label: "Stok / Inventaris" },
-        { to: `${prefix}/reports/profit`, label: "Laba Rugi" },
-        { to: `${prefix}/reports/cashflow`, label: "Arus Kas" },
-        { to: `${prefix}/reports/tax`, label: "Pajak" }
-      ]
-    },
-    {
-      label: "Staf & Karyawan",
-      icon: UserCheck,
-      key: "staff",
-      sub: [
-        { to: `${prefix}/staff/management`, label: "Manajemen Staf" },
-        { to: `${prefix}/staff/roles`, label: "Peran", minPlan: "business" },
-        { to: `${prefix}/staff/permissions`, label: "Izin Akses", minPlan: "business" },
-        { to: `${prefix}/staff/attendance`, label: "Absensi", minPlan: "business" }
-      ]
-    },
-    { to: `${prefix}/branches`, icon: GitBranch, label: "Cabang", key: "branches", minPlan: "business" },
-    {
-      label: "Integrasi",
-      icon: Cpu,
-      key: "integrations",
-      minPlan: "pro",
-      sub: [
-        { to: `${prefix}/integrations/xendit`, label: "Xendit" },
-        { to: `${prefix}/integrations/midtrans`, label: "Midtrans" },
-        { to: `${prefix}/integrations/stripe`, label: "Stripe" },
-        { to: `${prefix}/integrations/whatsapp`, label: "WhatsApp", minPlan: "business" },
-        { to: `${prefix}/integrations/telegram`, label: "Telegram", minPlan: "business" },
-        { to: `${prefix}/integrations/email`, label: "Email", minPlan: "business" }
-      ]
-    },
-    {
-      label: "Pengaturan",
-      icon: Settings,
-      key: "settings",
-      sub: [
-        { to: `${prefix}/settings/general`, label: "Umum" },
-        { to: `${prefix}/settings/store`, label: "Toko" },
-        { to: `${prefix}/settings/billing`, label: "Langganan & Tagihan" },
-        { to: `${prefix}/settings/receipt`, label: "Struk" },
-        { to: `${prefix}/settings/printer`, label: "Printer" },
-        { to: `${prefix}/settings/users`, label: "Pengguna" },
-        { to: `${prefix}/settings/license`, label: "Lisensi" }
-      ]
-    },
-    { to: `${prefix}/about`, icon: Info, label: "Tentang", key: "about" }
-  ];
+  // Prevent background scroll while the mobile drawer is open.
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
 
-  const filteredMenu = dynamicMenu.filter((item) => {
-    if (item.key === "dashboard" || item.key === "pos" || item.key === "kds" || item.key === "qr-menu") return true;
-    if (permissions.includes("*")) return true;
-    return permissions.includes(item.key);
-  });
+  const filteredMenu = MENU_STRUCTURE.filter(item => permissions.includes("*") || permissions.includes(item.key))
+    .map(item => item.sub ? { ...item, sub: item.sub.filter(sub => canAccessPath(role, sub.to)) } : item)
+    .filter(item => item.sub ? item.sub.length > 0 : canAccessPath(role, item.to));
 
   return (
-    <div className={`ecosystem-app-shell h-screen flex flex-col lg:flex-row overflow-hidden bg-[hsl(var(--background))] ${isDapurOS ? "theme-dapuros" : ""}`} data-testid="app-layout">
+    <div className="ecosystem-app-shell h-screen flex flex-col lg:flex-row overflow-hidden bg-[hsl(var(--background))]" data-testid="app-layout">
+      {/* Mobile/tablet top bar -- hidden on desktop (lg+), where the sidebar is always visible */}
       <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))]" data-testid="app-mobile-topbar">
-        <button onClick={() => setMobileOpen(true)} className="p-2 -ml-2 rounded-md" aria-label="Buka menu" data-testid="mobile-menu-open-btn">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-2 -ml-2 rounded-md text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-colors"
+          aria-label="Buka menu"
+          data-testid="mobile-menu-open-btn"
+        >
           <Menu size={22} />
         </button>
-        <Link to={`${prefix}/dashboard`} className="font-display text-base font-extrabold flex items-center gap-2">
-          <img src={brandIconSrc} alt="" className="w-[18px] h-[18px] object-contain" /> {brandName}
+        <Link to="/dapuros/app/dashboard" className="font-display text-base font-extrabold flex items-center gap-2">
+          <img src="/assets/brand/dapuros-icon.png" alt="" className="w-[18px] h-[18px] object-contain" /> DapurOS POS
         </Link>
         <div className="w-9" aria-hidden="true" />
       </header>
 
+      {/* Backdrop for the off-canvas mobile/tablet sidebar */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-black/45 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="mobile-sidebar-backdrop" />
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          data-testid="mobile-sidebar-backdrop"
+        />
       )}
 
-      <aside className={`ecosystem-command-rail fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] flex flex-col h-screen overflow-hidden transition-transform duration-200 ease-out
-        ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-        lg:static lg:translate-x-0 lg:w-64 lg:max-w-none lg:z-auto`} data-testid="app-sidebar">
+      <aside
+        className={`ecosystem-command-rail fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] flex flex-col h-screen overflow-hidden transition-transform duration-200 ease-out
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+          lg:static lg:translate-x-0 lg:w-64 lg:max-w-none lg:z-auto`}
+        data-testid="app-sidebar"
+      >
         <div className="p-4 border-b border-[hsl(var(--border))] relative bg-[hsl(var(--surface))]">
           <div className="flex items-center justify-between">
-            <Link to={`${prefix}/dashboard`} className="font-display text-lg font-extrabold flex items-center gap-2" data-testid="app-logo">
-              <img src={brandIconSrc} alt="" className="w-5 h-5 object-contain" /> {brandName}
+            <Link to="/dapuros/app/dashboard" className="font-display text-lg font-extrabold flex items-center gap-2" data-testid="app-logo">
+              <img src="/assets/brand/dapuros-icon.png" alt="" className="w-5 h-5 object-contain" /> DapurOS POS
             </Link>
-            
+
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setShowEcosystemSwitcher(!showEcosystemSwitcher)}
@@ -255,11 +232,16 @@ export default function AppLayout() {
                 title="Beralih aplikasi DagangOS"
                 data-testid="odoo-ecosystem-switcher-btn"
               >
-                <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span className="text-[10px]">Suite</span>
                 <ChevronDown size={12} />
               </button>
-              <button onClick={() => setMobileOpen(false)} className="lg:hidden p-1.5 rounded-lg" aria-label="Tutup menu" data-testid="mobile-menu-close-btn">
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="lg:hidden p-1.5 rounded-lg text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-colors"
+                aria-label="Tutup menu"
+                data-testid="mobile-menu-close-btn"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -269,12 +251,12 @@ export default function AppLayout() {
           {showEcosystemSwitcher && (
             <div className="absolute top-14 left-2 right-2 bg-slate-900 text-white p-3 rounded-2xl shadow-2xl border border-slate-700 z-[100] animate-fadein space-y-2 text-left" data-testid="odoo-ecosystem-menu">
               <div className="flex justify-between items-center px-1 pb-2 border-b border-slate-800">
-                <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Aplikasi Ekosistem DagangOS</span>
-                <span className="text-[9px] bg-blue-600/30 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-mono">SSO Aktif</span>
+                <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">DagangOS Ecosystem Apps</span>
+                <span className="text-[9px] bg-blue-600/30 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-mono">SSO Active</span>
               </div>
 
               {(() => {
-                const activated = new Set((user?.stores || []).map((s) => s.module));
+                const activated = new Set(["dapuros", ...(user?.stores || []).map((s) => s.module)]);
                 const tiles = [
                   { mod: "dapuros", label: "DapurOS", desc: "F&B & Restoran OS", img: "/assets/brand/dapuros-icon.png", tone: "orange", home: "/dapuros/app/dashboard", activate: "/dapuros/activate" },
                   { mod: "geraina", label: "Geraina POS", desc: "Retail & Toko OS", img: "/assets/brand/geraina-icon.png", tone: "blue", home: "/geraina/app/dashboard", activate: "/geraina/activate" },
@@ -350,8 +332,10 @@ export default function AppLayout() {
                   <button
                     onClick={() => {
                       toggleMenu(item.key);
-                      nav(`${prefix}/${item.key}`);
+                      // Android drawers must stay open until a destination is chosen.
+
                     }}
+                    aria-expanded={!!isOpen}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-colors text-left"
                     data-testid={`menu-parent-${item.key}`}
                   >
@@ -419,7 +403,6 @@ export default function AppLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                data-testid={`menu-link-${item.key}`}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                     isActive
@@ -434,40 +417,24 @@ export default function AppLayout() {
           })}
         </nav>
 
-        {isTrial && (
-          <div className={`m-3 p-4 rounded-lg text-white ${isDapurOS ? "bg-gradient-to-br from-[hsl(35,84%,18%)] to-[hsl(35,84%,12%)]" : "bg-gradient-to-br from-[hsl(151,39%,17%)] to-[hsl(151,39%,12%)]"}`} data-testid="trial-upgrade-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Crown size={16} className="text-[hsl(9,65%,62%)]" />
-              <p className="label-tiny" style={{ color: "hsl(9,65%,75%)" }}>Trial Aktif</p>
-            </div>
-            <p className="font-display text-2xl font-bold num-display" data-testid="trial-days-left">
-              {days !== null ? `${days} hari` : "—"}
-            </p>
-            <p className="text-xs text-white/70 mt-0.5">tersisa</p>
-            <Link to="/dapuros/pricing" className="btn-accent w-full mt-3 text-xs text-center block" data-testid="trial-upgrade-cta">
-              <Sparkles size={14} /> Upgrade Sekarang
-            </Link>
-          </div>
-        )}
+        <TierNotice {...(role === "Owner" ? { to: "/dapuros/app/settings/billing", title: "Informasi paket" } : {})}
+          className="mx-3 my-2 flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium whitespace-nowrap"
+          style={TIER_COLORS[license.plan]}
+          data-testid="tier-notice">
+          <Crown size={14} className="shrink-0" aria-hidden="true" />
+          <span className="font-semibold" data-testid="tier-name">{tierLabel}</span>
+          {isTrial && days !== null && <><span aria-hidden="true">·</span><span data-testid="trial-days-left">{days > 0 ? `${days} hari tersisa` : "Berakhir"}</span></>}
+        </TierNotice>
 
         <div className="p-3 border-t border-[hsl(var(--border))] space-y-3 bg-[hsl(var(--background))]/30">
           <div className="flex items-center justify-between px-2">
             <div>
-              <p className="text-[10px] text-[hsl(var(--muted))]">Role Saat Ini</p>
+              <p className="text-[10px] text-[hsl(var(--muted))]">Peran akun</p>
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[hsl(var(--primary))]/8 text-[hsl(var(--primary))] mt-0.5 inline-block">
                 {role}
               </span>
             </div>
-            <select
-              value={role}
-              onChange={(e) => changeRole(e.target.value)}
-              className="text-xs border border-[hsl(var(--border))] rounded px-1.5 py-1 bg-[hsl(var(--surface))] outline-none font-medium cursor-pointer"
-            >
-              <option value="Owner">Owner</option>
-              <option value="Manager">Manager</option>
-              <option value="Cashier">Cashier</option>
-              <option value="Warehouse">Warehouse</option>
-            </select>
+            <button type="button" onClick={beginHandoff} className="btn-outline text-xs" data-testid="account-switch-open"><UserRound size={14} /> Ganti pengguna</button>
           </div>
 
           <div className="px-2 pt-1 border-t border-[hsl(var(--border))]/50 flex items-center justify-between">
@@ -476,7 +443,7 @@ export default function AppLayout() {
             </div>
             <button
               className="p-1 rounded text-red-600 hover:bg-red-50 transition-colors"
-              onClick={() => { logout(); nav("/login"); }}
+              onClick={() => { logout(); nav("/dapuros/login"); }}
               title="Keluar"
               data-testid="logout-btn"
             >
@@ -489,9 +456,16 @@ export default function AppLayout() {
       <main className="ecosystem-workspace flex-1 min-w-0 overflow-y-auto bg-[hsl(var(--background))]">
         <div key={location.pathname} className="route-stage">
           <Outlet />
+          {handoff && <div role="dialog" aria-modal="true" aria-labelledby="account-switch-title" className="fixed inset-0 z-[100] bg-black/50 grid place-items-center p-4" data-testid="account-switch-dialog">
+            <div className="card-surface bg-white p-6 space-y-4 w-full max-w-md">
+              <h2 id="account-switch-title" className="font-display text-xl font-bold">Ganti pengguna perangkat ini?</h2>
+              <p className="text-sm">Sesi {user?.name || user?.email} ({role}) akan diakhiri. Pengguna berikutnya wajib masuk dengan akun dan kata sandinya sendiri. Kembali ke Owner juga memerlukan login Owner.</p>
+              <p className="text-xs text-[hsl(var(--muted))]">Penjualan offline yang tersimpan tetap terikat pada akun ini. Masuk kembali dengan akun yang sama untuk menyinkronkannya.</p>
+              <div className="flex gap-3"><button type="button" onClick={() => setHandoff(false)} className="btn-outline flex-1" data-testid="account-switch-cancel">Batal</button><button type="button" onClick={() => { setHandoff(false); logout(); nav("/dapuros/login?switch=1", { replace: true }); }} className="btn-primary flex-1" data-testid="account-switch-confirm">Keluar & ganti pengguna</button></div>
+            </div>
+          </div>}
         </div>
       </main>
     </div>
   );
 }
-

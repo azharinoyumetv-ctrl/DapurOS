@@ -1,126 +1,38 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { ShieldAlert, Lock } from "lucide-react";
+import { canAccessPath } from "@/auth/permissions";
 
-// SYNC: KEEP IN SYNC with the minPlan annotations on dynamicMenu in layouts/AppLayout.jsx.
-// That nav lock icon only stops nav-clicks -- this is what actually stops a direct URL (typed,
-// bookmarked, or deep-linked) from reaching a plan-locked page regardless of how the request
-// got there. Ordered most-specific-to-least-specific; the first matching suffix wins. DapurOS
-// carries a few entries GerainaOS doesn't (qr-menu, products/ingredients + its path aliases,
-// and a parent-level /customers gate -- DapurOS's "Pelanggan" nav item is Pro at the parent,
-// unlike GerainaOS where only the membership/loyalty sub-items are locked).
-const PLAN_RANK = { expired: -1, starter: 0, pro: 1, business: 2, trial: 2 };
-const PLAN_LABEL = { starter: "Starter", pro: "Pro", business: "Business" };
-const PLAN_ROUTES = [
-  ["/qr-menu", "pro"],
-  ["/products/stock-transfer", "business"],
-  ["/products/ingredients", "pro"],
-  ["/inventory/ingredients", "pro"],
-  ["/inventory/raw-materials", "pro"],
-  ["/raw-materials", "pro"],
-  ["/ingredients", "pro"],
-  ["/bom", "pro"],
-  ["/recipes", "pro"],
-  ["/inventory/movement", "pro"],
-  ["/inventory/valuation", "pro"],
-  ["/inventory/dead-stock", "pro"],
-  ["/purchase", "pro"],
-  ["/suppliers", "pro"],
-  ["/customers/membership", "business"],
-  ["/customers/loyalty", "business"],
-  ["/customers", "pro"],
-  ["/debt", "pro"],
-  ["/reports", "pro"],
-  ["/staff/roles", "business"],
-  ["/staff/permissions", "business"],
-  ["/staff/attendance", "business"],
-  ["/branches", "business"],
-  ["/integrations/whatsapp", "business"],
-  ["/integrations/telegram", "business"],
-  ["/integrations/email", "business"],
-  ["/integrations", "pro"],
-];
-
-function planRank(plan) {
-  return PLAN_RANK[plan] ?? 0;
-}
-
-function minPlanForPath(pathname) {
-  const hit = PLAN_ROUTES.find(([suffix]) => pathname.includes(suffix));
-  return hit ? hit[1] : null;
-}
-
-const ROLE_PERMISSIONS = {
-  Owner: ["*"],
-  admin: ["*"], // akun lama dengan peran "admin" setara Owner
-  Manager: [
-    "dashboard",
-    "pos",
-    "kds",
-    "products",
-    "ingredients",
-    "inventory",
-    "purchase",
-    "suppliers",
-    "customers",
-    "debt",
-    "payments",
-    "reports",
-    "staff",
-    "settings",
-    "billing",
-    "license",
-    "about"
-  ],
-  Cashier: [
-    "dashboard",
-    "pos",
-    "kds",
-    "products",
-    "customers",
-    "about"
-  ],
-  Warehouse: [
-    "products",
-    "ingredients",
-    "inventory",
-    "purchase",
-    "suppliers",
-    "about"
-  ]
-};
+import { minPlanForPath, isPlanLocked, PLAN_LABEL } from "@/navigation/sections";
 
 export default function RoleGuard({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-
-  console.log('[RoleGuard] loading:', loading, 'user:', !!user, 'path:', location.pathname);
 
   if (loading) {
     return <div className="p-10 text-sm text-center text-[hsl(var(--muted))]" data-testid="auth-loading">Memuat sesi…</div>;
   }
 
   if (!user) {
-    console.log('[RoleGuard] No user, redirecting to /login');
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/dapuros/login" replace />;
   }
 
-  // Expired trial blocks the ENTIRE app, not just plan-locked modules -- "starter" is itself
-  // a paid plan, so an account that never subscribed gets no app access at all until it does.
-  // Runs before the per-module PLAN_ROUTES gate below, applies to every role including Owner.
-  // The Pricing page lives outside this /app/* + RoleGuard tree (mounted at /dapuros/pricing),
-  // so it stays reachable from here -- that's the only way out of this screen.
+  // Keep account billing available to an expired Owner while POS and other
+  // paid operations remain locked. Staff never acquire billing permissions.
+  const billingPage = ["/dapuros/app/settings/billing", "/dapuros/app/settings/subscription", "/dapuros/app/billing"].includes(location.pathname.replace(/\/+$/, ""));
+  if (billingPage && user.role === "Owner") return children;
+  if (location.pathname.replace(/\/+$/, '') === '/dapuros/app/about' && canAccessPath(user.role, location.pathname)) return children;
   if (user.plan === "expired") {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center space-y-4" data-testid="trial-expired-page">
         <div className="w-16 h-16 rounded-full bg-[hsl(9,65%,55%,0.12)] text-[hsl(9,65%,55%)] grid place-items-center">
           <Lock size={32} />
         </div>
-        <h1 className="font-display text-2xl font-bold">Masa Trial Berakhir</h1>
+        <h1 className="font-display text-2xl font-bold">Akses Paket Berakhir</h1>
         <p className="text-[hsl(var(--muted))] max-w-md text-sm">
-          Trial 14 hari Anda sudah berakhir dan belum ada langganan aktif. Pilih paket untuk mengaktifkan kembali akses ke seluruh fitur.
+          Masa akses Anda sudah berakhir. Pemilik toko dapat memilih paket untuk mengaktifkan kembali layanan.
         </p>
-        <a href="/dapuros/pricing" className="btn-primary text-xs px-4 py-2 rounded-lg">Pilih Paket</a>
+        {user.role === "Owner" && <a href="/dapuros/app/settings/billing" className="btn-primary text-xs px-4 py-2 rounded-lg">Kelola Paket</a>}
       </div>
     );
   }
@@ -128,7 +40,7 @@ export default function RoleGuard({ children }) {
   // Plan gate runs for every role, including Owner -- direct-URL access to a plan-locked page
   // must be blocked the same way a nav click would be.
   const requiredPlan = minPlanForPath(location.pathname);
-  if (requiredPlan && planRank(user.plan) < planRank(requiredPlan)) {
+  if (isPlanLocked(requiredPlan, user.plan)) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center space-y-4" data-testid="plan-locked-page">
         <div className="w-16 h-16 rounded-full bg-[hsl(38,90%,50%,0.12)] text-[hsl(38,90%,42%)] grid place-items-center">
@@ -143,31 +55,16 @@ export default function RoleGuard({ children }) {
     );
   }
 
-  const role = user.role || "Owner";
-  const permissions = ROLE_PERMISSIONS[role] || [];
-
-  if (permissions.includes("*")) {
-    return children;
-  }
-
-  // Robustly get the module name following the "app" segment in the URL
-  const pathParts = location.pathname.split("/");
-  const appIndex = pathParts.indexOf("app");
-  const moduleName = appIndex !== -1 ? pathParts[appIndex + 1] : "";
-  
-  // Always allow core operational pages for everyone
-  if (
-    location.pathname.includes("dashboard") ||
-    location.pathname.includes("pos") ||
-    location.pathname.includes("kds") ||
-    location.pathname.includes("about")
-  ) {
-    return children;
-  }
-
-  const hasAccess = pathParts.some((part) => permissions.includes(part));
+  const role = user.role;
+  const hasAccess = canAccessPath(role, location.pathname);
 
   if (!hasAccess) {
+    // First path segment after the app prefix is the closest thing to a "module name" here
+    // (e.g. /dapuros/app/branches -> "branches"). This was previously an undefined variable
+    // (`moduleName`) that would throw a ReferenceError and crash this component the moment any
+    // non-Owner role hit an access-denied page, instead of showing this message.
+    const pathParts = location.pathname.split("/").filter(Boolean);
+    const moduleName = pathParts.find((p) => p !== "dapuros" && p !== "app") || pathParts[pathParts.length - 1] || "";
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center space-y-4" data-testid="access-denied-page">
         <div className="w-16 h-16 rounded-full bg-[hsl(9,65%,55%,0.1)] text-[hsl(9,65%,55%)] grid place-items-center">
@@ -175,7 +72,7 @@ export default function RoleGuard({ children }) {
         </div>
         <h1 className="font-display text-2xl font-bold">Akses Ditolak</h1>
         <p className="text-[hsl(var(--muted))] max-w-md text-sm">
-          Peran Anda ({role}) tidak memiliki izin untuk mengakses halaman <strong>/{moduleName}</strong>. 
+          Peran Anda ({role}) tidak memiliki izin untuk mengakses halaman <strong>/{moduleName}</strong>.
           Silakan hubungi pemilik toko jika Anda memerlukan akses.
         </p>
       </div>

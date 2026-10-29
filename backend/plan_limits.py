@@ -66,14 +66,9 @@ def require_plan(min_plan: str):
     return _dep
 
 
-async def _active_addon_counts(db, store_id: str) -> dict:
-    """Count ACTIVE (staff-approved) addon purchases per addon_id for a store. Pending/rejected
-    requests grant nothing yet -- see routes_pricing.py's purchase_addon() for why activation is
-    a manual step (no subscription payment gateway wired to this app's own billing)."""
-    counts = {}
-    async for doc in db.addon_purchases.find({"store_id": store_id, "status": "active"}, {"_id": 0, "addon_id": 1}):
-        counts[doc["addon_id"]] = counts.get(doc["addon_id"], 0) + 1
-    return counts
+async def _active_addon_counts(db, store_id: str, plan=None) -> dict:
+    from addon_catalog import active_counts
+    return await active_counts(db, store_id, plan)
 
 
 def _addon_bonus(counts: dict, field: str) -> int:
@@ -99,7 +94,7 @@ async def check_capacity(db, store_id: str, plan: str, collection: str, field: s
     cap = tier.get(field)
     if cap is None:
         return
-    counts = await _active_addon_counts(db, store_id)
+    counts = await _active_addon_counts(db, store_id, plan)
     cap += _addon_bonus(counts, field)
     count = await db[collection].count_documents({"store_id": store_id})
     if count >= cap:

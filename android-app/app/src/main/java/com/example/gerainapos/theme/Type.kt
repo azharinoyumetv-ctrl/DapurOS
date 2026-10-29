@@ -1,4 +1,4 @@
-package com.example.gerainapos.theme
+package com.example.dapurospos.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

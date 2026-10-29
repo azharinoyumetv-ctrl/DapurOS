@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { fmtIDR, API_BASE } from "@/api/client";
-import { Plus, Upload, Search, Edit3, Trash2, X, Download, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, Upload, Search, Edit3, Trash2, X, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ScanBarcode } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 function ProductForm({ product, onClose, onSaved }) {
@@ -19,6 +19,8 @@ function ProductForm({ product, onClose, onSaved }) {
     image_url: product?.image_url || null,
     recipe: product?.recipe || [],
   });
+  useEffect(() => { const scan = event => { if (event.detail?.target === 'product' && typeof event.detail.value === 'string' && event.detail.value.length <= 200) setForm(f => ({...f, sku: event.detail.value})); }; window.addEventListener('dapuros-barcode', scan); return () => window.removeEventListener('dapuros-barcode', scan); }, []);
+  const saveLock = useRef(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   
@@ -123,6 +125,8 @@ function ProductForm({ product, onClose, onSaved }) {
 
   const save = async (e) => {
     e.preventDefault();
+    if (saveLock.current) return;
+    saveLock.current = true;
     setSaving(true); setErr("");
     try {
       const payload = {
@@ -139,8 +143,9 @@ function ProductForm({ product, onClose, onSaved }) {
       else await api.post("/products", payload);
       onSaved();
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Gagal menyimpan");
-    } finally { setSaving(false); }
+      const detail = e?.response?.data?.detail;
+      setErr(typeof detail === "string" ? detail : Array.isArray(detail) ? detail.map(v => v.msg || "Data tidak valid").join("; ") : "Gagal menyimpan. Periksa koneksi lalu coba lagi.");
+    } finally { setSaving(false); saveLock.current = false; }
   };
 
   return (
@@ -164,6 +169,7 @@ function ProductForm({ product, onClose, onSaved }) {
                 <label className="label-tiny">SKU</label>
                 <input className="input-field mt-1.5" value={form.sku}
                        onChange={(e) => setForm({ ...form, sku: e.target.value })} data-testid="pf-sku" />
+                {window.DapurOSDevice?.scanBarcode && <button type="button" className="btn-outline mt-2" onClick={() => window.DapurOSDevice.scanBarcode("product")} data-testid="pf-scan-barcode"><ScanBarcode size={16}/> Scan barcode</button>}
               </div>
               <div>
                 <label className="label-tiny">Kategori</label>

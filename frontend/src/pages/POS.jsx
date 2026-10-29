@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { loadCatalogue } from "@/api/catalogue";
+import usePaymentOptions from "@/hooks/usePaymentOptions";
+import OfflineStatus from "@/offline/OfflineStatus";
+import { offlineAvailable, scopeFor, cached, cache, recordCashSale, synchronize, localSales } from "@/offline/posStore";
+import { canonicalRole, canManageProducts } from "@/auth/permissions";
+import BankQrisPayment from "@/payments/BankQrisPayment";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import api, { fmtIDR, downloadPdf } from "@/api/client";
 import { useAuth } from "@/auth/AuthContext";
@@ -23,16 +29,23 @@ const EWALLET_CHANNELS = [
   { code: "LINKAJA", label: "LinkAja" },
 ];
 
-function ReceiptDialog({ order, onClose }) {
+export function ReceiptDialog({ order, onClose, onUpdated }) {
+  const { user } = useAuth();
+  const isOwner = canonicalRole(user?.role) === "Owner";
+  const [markingPaid, setMarkingPaid] = useState(false);
+  const markLock = useRef(false);
   const [poll, setPoll] = useState(order);
+  const [edcProcessing, setEdcProcessing] = useState(false);
+  useEffect(() => { setPoll(order); }, [order]);
   useEffect(() => {
-    if (poll?.payment_status === "paid" || poll?.payment_method === "cash") return;
+    if (poll?.payment_status !== "pending" || ["cash", "qris_bank"].includes(poll?.payment_method)) return;
     const t = setInterval(async () => {
       try {
         const r = await api.get(`/orders/${poll.id}`);
         setPoll(r.data);
       } catch (err) {
         if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
           console.warn("[POS] poll order status failed", err);
         }
       }
@@ -44,14 +57,34 @@ function ReceiptDialog({ order, onClose }) {
   const isPaid = o.payment_status === "paid";
 
   const simulatePaid = async () => {
-    await api.post(`/orders/${o.id}/mark-paid`);
-    const r = await api.get(`/orders/${o.id}`);
-    setPoll(r.data);
+    if (!isOwner || markLock.current) return;
+    markLock.current = true; setMarkingPaid(true);
+    try {
+      await api.post(`/orders/${o.id}/mark-paid`);
+      const r = await api.get(`/orders/${o.id}`);
+      setPoll(r.data); onUpdated?.(r.data);
+    } catch (error) { toast.error(error?.response?.data?.detail || "Pembayaran belum dapat dikonfirmasi. Periksa status lalu coba lagi."); }
+    finally { markLock.current = false; setMarkingPaid(false); }
+  };
+
+  const processEdc = async () => {
+    setEdcProcessing(true);
+    try {
+      const r = await api.post(`/edc/orders/${o.id}/charge`);
+      setPoll(r.data);
+    } catch (err) {
+      const msg = err?.response?.data?.detail || "Gagal terhubung ke server.";
+      toast.error(`Transaksi EDC gagal: ${msg}`, {
+        description: "Anda masih bisa memproses kartu langsung di mesin EDC lalu tekan \"Tandai sudah dibayar\" di bawah setelah disetujui.",
+      });
+    } finally {
+      setEdcProcessing(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" data-testid="receipt-dialog">
-      <div className="card-surface bg-white w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="card-surface bg-white w-full max-w-md p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <span className="label-tiny">Struk</span>
@@ -61,12 +94,20 @@ function ReceiptDialog({ order, onClose }) {
         </div>
 
         <div className="text-center mb-4">
+          {o.sync_status === "pending" && <p className="text-xs text-[#754419] mb-2" data-testid="receipt-pending-sync">Pembayaran tunai dicatat di perangkat. Menunggu sinkronisasi; jangan hapus data aplikasi.</p>}
+          {o.payment_initialization === "initializing" && <p role="status" className="text-sm my-3">Pembayaran sedang disiapkan. Tunggu status transaksi ini; jangan membuat pembayaran baru.</p>}
+        {o.payment_initialization === "uncertain" && <p role="alert" className="text-sm my-3 text-red-800">Status pembayaran dari penyedia belum pasti. Periksa transaksi ini di akun merchant; jangan meminta pelanggan membayar ulang.</p>}
+        {o.payment_exception && <p role="alert" className="text-sm my-3 text-red-800">{o.payment_exception}</p>}
+        {o.loyalty_points_earned > 0 && <p className="text-sm my-2" data-testid="receipt-loyalty-points">Pelanggan memperoleh {o.loyalty_points_earned} poin.</p>}
+        {o.customer_id && o.sync_status === "pending" && <p className="text-xs my-2">Poin pelanggan diproses setelah transaksi tersinkron.</p>}
+        {o.offline_reference && <p className="text-xs mb-2">Referensi perangkat: {o.offline_reference}</p>}
+          {o.inventory_warnings?.length > 0 && <p className="text-xs text-[#8a3b17] mb-2" role="alert">Transaksi tersinkron. Periksa stok: ada produk yang berubah atau stok di bawah nol.</p>}
           {isPaid ? (
             <span className="pill pill-success" data-testid="receipt-status">
               <CheckCircle2 size={12} /> Lunas
             </span>
           ) : (
-            <span className="pill pill-warning" data-testid="receipt-status">Menunggu pembayaran…</span>
+            <span className="pill pill-warning" data-testid="receipt-status">{o.payment_status === "pending" ? "Menunggu pembayaran…" : o.payment_status}</span>
           )}
         </div>
 
@@ -78,6 +119,13 @@ function ReceiptDialog({ order, onClose }) {
             <p className="text-xs text-[hsl(var(--muted))] mt-2">Scan QRIS untuk membayar</p>
           </div>
         )}
+
+        {o.payment_method === "qris_bank" && <BankQrisPayment key={o.id} order={o} onConfirmed={updated => { setPoll(updated); onUpdated?.(updated); }} />}
+
+        {o.gateway_checkout_url && !isPaid && <div className="text-center mb-4" data-testid="gateway-display">
+          <p className="text-sm mb-2">Lanjutkan pembayaran melalui akun gateway toko.</p>
+          <a href={o.gateway_checkout_url} target="_blank" rel="noreferrer" className="btn-accent" data-testid="gateway-open-link">Buka pembayaran {o.payment_provider === 'doku' ? 'DOKU' : o.payment_provider === 'midtrans' ? 'Midtrans' : 'Xendit'}</a>
+        </div>}
 
         {o.payment_method === "ewallet" && o.xendit_checkout_url && !isPaid && (
           <div className="text-center mb-4" data-testid="ewallet-display">
@@ -97,12 +145,25 @@ function ReceiptDialog({ order, onClose }) {
           </div>
         )}
 
+        {o.payment_method === "edc" && !isPaid && (
+          <div className="text-center mb-4" data-testid="edc-display">
+            <p className="text-xs text-[hsl(var(--muted))] mb-2">Gesek/tap kartu di mesin EDC, lalu tekan tombol di bawah untuk mencatat pembayaran.</p>
+            <button onClick={processEdc} disabled={edcProcessing} className="btn-accent disabled:opacity-50" data-testid="edc-process-btn">
+              <CreditCard size={15} /> {edcProcessing ? "Memproses…" : "Proses EDC"}
+            </button>
+          </div>
+        )}
+        {o.payment_method === "edc" && isPaid && o.edc_transaction_id && (
+          <div className="text-center mb-4 text-xs text-[hsl(var(--muted))]" data-testid="edc-details">
+            <p>Trx: {o.edc_transaction_id} {o.edc_approval_code ? `· Approval: ${o.edc_approval_code}` : ""}</p>
+          </div>
+        )}
+
         <div className="divide-y divide-[hsl(var(--border))] text-sm mb-3 max-h-48 overflow-y-auto">
           {o.items.map((it, i) => (
             <div key={`${it.product_id}-${i}`} className="py-2 flex justify-between" data-testid={`receipt-item-${i}`}>
               <div>
                 <p className="font-medium">{it.name}</p>
-                {it.note && <p className="text-[10px] text-amber-600 italic">"{it.note}"</p>}
                 <p className="text-xs text-[hsl(var(--muted))]">{it.quantity} × {fmtIDR(it.price)}</p>
               </div>
               <p className="font-display font-bold num-display">{fmtIDR(it.subtotal)}</p>
@@ -113,39 +174,31 @@ function ReceiptDialog({ order, onClose }) {
         <div className="space-y-1 text-sm pt-3 border-t border-[hsl(var(--border))]">
           <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Subtotal</span><span className="num-display">{fmtIDR(o.subtotal)}</span></div>
           {o.discount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Diskon</span><span className="num-display">-{fmtIDR(o.discount)}</span></div>}
-          
-          {/* F&B Taxes Display */}
-          {o.service_charge > 0 ? (
-            <>
-              <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Service Charge (5%)</span><span className="num-display">{fmtIDR(o.service_charge)}</span></div>
-              <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Pajak PB1 (10%)</span><span className="num-display">{fmtIDR(o.tax_pb1)}</span></div>
-            </>
-          ) : (
-            o.tax_amount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">PPN {o.tax_percent}%</span><span className="num-display">{fmtIDR(o.tax_amount)}</span></div>
-          )}
-          
+          {o.service_charge > 0 && <div className="flex justify-between"><span>Layanan (5%)</span><span>{fmtIDR(o.service_charge)}</span></div>}
+          {o.tax_amount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">{o.service_charge > 0 ? "PB1 (10%)" : `PPN ${o.tax_percent}%`}</span><span className="num-display">{fmtIDR(o.tax_amount)}</span></div>}
           <div className="flex justify-between font-display text-lg font-bold text-[hsl(var(--primary))] mt-2">
             <span>TOTAL</span><span className="num-display" data-testid="receipt-total">{fmtIDR(o.total)}</span>
           </div>
           {o.payment_method === "cash" && o.cash_received != null && (
             <>
               <div className="flex justify-between text-xs text-[hsl(var(--muted))]"><span>Tunai</span><span className="num-display">{fmtIDR(o.cash_received)}</span></div>
-              <div className="flex justify-between text-xs text-[hsl(var(--muted))]"><span>Kembalian</span><span className="num-display">{o.change ? fmtIDR(o.change) : "Rp 0"}</span></div>
+              <div className="flex justify-between text-xs text-[hsl(var(--muted))]"><span>Kembalian</span><span className="num-display">{fmtIDR(o.change || 0)}</span></div>
             </>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-2 mt-5">
-          <button onClick={() => downloadPdf(`/pdf/receipt/${o.id}`, `receipt-${o.order_no}.pdf`)} className="btn-outline" data-testid="receipt-pdf-thermal-btn">
+          {window.DapurOSDevice?.printReceipt && <button onClick={() => window.DapurOSDevice.printReceipt(o)} className="btn-primary col-span-2" data-testid="receipt-bluetooth-print"><Printer size={15} /> Cetak struk ke printer</button>}
+          <button disabled={o.sync_status === "pending" || !navigator.onLine} title="PDF tersedia setelah sinkronisasi dan saat terhubung" onClick={() => downloadPdf(`/pdf/receipt/${o.id}`, `receipt-${o.order_no}.pdf`).catch(() => toast.error("PDF belum tersedia. Periksa koneksi dan sinkronisasi."))} className="btn-outline disabled:opacity-50" data-testid="receipt-pdf-thermal-btn">
             <Printer size={15} /> Struk PDF
           </button>
-          <button onClick={() => downloadPdf(`/pdf/invoice/${o.id}`, `invoice-${o.order_no}.pdf`)} className="btn-outline" data-testid="receipt-pdf-invoice-btn">
+          <button disabled={o.sync_status === "pending" || !navigator.onLine} title="PDF tersedia setelah sinkronisasi dan saat terhubung" onClick={() => downloadPdf(`/pdf/invoice/${o.id}`, `invoice-${o.order_no}.pdf`).catch(() => toast.error("PDF belum tersedia. Periksa koneksi dan sinkronisasi."))} className="btn-outline disabled:opacity-50" data-testid="receipt-pdf-invoice-btn">
             <Download size={15} /> Invoice A4
           </button>
         </div>
 
-        {!isPaid && o.payment_method !== "cash" && (
-          <button onClick={simulatePaid} className="btn-ghost w-full mt-2 text-xs" data-testid="receipt-mark-paid">
+        {isOwner && o.payment_status === "pending" && !["cash", "qris_bank"].includes(o.payment_method) && (
+          <button onClick={simulatePaid} disabled={markingPaid} className="btn-ghost w-full mt-2 text-xs" data-testid="receipt-mark-paid">
             <RefreshCw size={13} /> Tandai sudah dibayar
           </button>
         )}
@@ -155,6 +208,7 @@ function ReceiptDialog({ order, onClose }) {
     </div>
   );
 }
+
 
 const DEFAULT_PRODUCTS = [
   { id: "prod-1", name: "Kopi Susu Gula Aren", price: 22000, category: "Minuman", stock: 50, recipe: [{ ingredient: "Biji Kopi", qty: 15 }] },
@@ -177,7 +231,7 @@ const DEFAULT_TABLES = [
   { id: "tbl-04", floor_id: "fl-main", label: "Meja 04", capacity: 6, status: "Billing" },
   { id: "tbl-05", floor_id: "fl-main", label: "Meja 05", capacity: 6, status: "Vacant" },
   { id: "tbl-06", floor_id: "fl-main", label: "Meja Bar 01", capacity: 2, status: "Vacant" },
-  
+
   { id: "tbl-v1", floor_id: "fl-vip", label: "VIP Sofa A", capacity: 8, status: "Dining" },
   { id: "tbl-v2", floor_id: "fl-vip", label: "VIP Sofa B", capacity: 8, status: "Vacant" },
 
@@ -188,18 +242,28 @@ const DEFAULT_TABLES = [
 
 export default function POS() {
   const { user } = useAuth();
+  const scope = scopeFor(user);
+  const [online, setOnline] = useState(navigator.onLine);
+  const payments = usePaymentOptions(scope, offlineAvailable(), online);
+  const checkoutLock = useRef(false), paymentAttempt = useRef(null), splitAttempt = useRef(null);
+  const [snapshot, setSnapshot] = useState(null);
+  const [bankConfig, setBankConfig] = useState(null);
+  const [bankConfirmed, setBankConfirmed] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
+  const [pageLimit, setPageLimit] = useState(48);
+  const [cartOpen, setCartOpen] = useState(false);
   const [viewMode, setViewMode] = useState("floor"); // floor | catalog
-  
+
   // Floors and Tables state
-  const [floors, setFloors] = useState(DEFAULT_FLOORS);
+  const [floors, setFloors] = useState([]);
   const [selectedFloorId, setSelectedFloorId] = useState("fl-main");
-  const [tables, setTables] = useState(DEFAULT_TABLES);
+  const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [websocketConnected, setWebsocketConnected] = useState(false);
-  
+
   // Catalog & Cart state
-  const [products, setProducts] = useState(DEFAULT_PRODUCTS);
+  const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [cart, setCart] = useState([]);
@@ -215,11 +279,11 @@ export default function POS() {
   const [scannedProduct, setScannedProduct] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
-  
+
   // Custom EDC Simulator State
   const [edcSimulating, setEdcSimulating] = useState(false);
   const [edcSplitSimulating, setEdcSplitSimulating] = useState(false);
-  
+
   // Settle (bayar & tutup meja dine-in)
   const [settleOpen, setSettleOpen] = useState(false);
 
@@ -380,21 +444,8 @@ export default function POS() {
   };
 
   const loadFloors = async () => {
-    try {
-      const res = await api.get("/floors");
-      if (res.data && res.data.length > 0) {
-        setFloors(res.data);
-        if (!selectedFloorId || !res.data.some(f => f.id === selectedFloorId)) {
-          setSelectedFloorId(res.data[0].id);
-        }
-      } else {
-        setFloors(DEFAULT_FLOORS);
-        if (!selectedFloorId) setSelectedFloorId(DEFAULT_FLOORS[0].id);
-      }
-    } catch (e) {
-      setFloors(DEFAULT_FLOORS);
-      if (!selectedFloorId) setSelectedFloorId(DEFAULT_FLOORS[0].id);
-    }
+    try {const r = await api.get('/floors'); const rows = Array.isArray(r.data) ? r.data : [];setFloors(rows);setSelectedFloorId(current => rows.some(f=>f.id===current) ? current : rows[0]?.id || '');}
+    catch {setCatalogError('Denah belum dapat dimuat. Periksa koneksi.');}
   };
 
   const loadTables = async () => {
@@ -403,10 +454,10 @@ export default function POS() {
       if (res.data && res.data.length > 0) {
         setTables(res.data);
       } else {
-        setTables(DEFAULT_TABLES);
+        setTables([]);
       }
     } catch (e) {
-      setTables(DEFAULT_TABLES);
+      setTables([]);
     }
   };
 
@@ -418,38 +469,52 @@ export default function POS() {
       } else if (res.data && res.data.session && Array.isArray(res.data.items)) {
         setActiveSession(res.data);
       } else {
-        setActiveSession({ id: `sess-${tableId}`, table_id: tableId, items: [], subtotal: 0, service_charge: 0, tax_pb1: 0, grand_total: 0 });
+        setActiveSession(null); toast.error("Sesi meja belum dapat dimuat. Buka kembali meja saat terhubung.");
       }
     } catch (e) {
-      setActiveSession({ id: `sess-${tableId}`, table_id: tableId, items: [], subtotal: 0, service_charge: 0, tax_pb1: 0, grand_total: 0 });
+      setActiveSession(null); toast.error("Sesi meja belum dapat dimuat. Buka kembali meja saat terhubung.");
     }
   };
 
   const initData = async () => {
-    await loadFloors();
-    await loadTables();
-    api.get("/products").then((r) => {
-      if (r.data && Array.isArray(r.data) && r.data.length > 0) setProducts(r.data);
-      else setProducts(DEFAULT_PRODUCTS);
-    }).catch(() => setProducts(DEFAULT_PRODUCTS));
-    api.get("/products/category-names").then((r) => {
-      const names = (Array.isArray(r.data) ? r.data : [])
-        .map((c) => (typeof c === "string" ? c : c?.name))
-        .filter(Boolean);
-      if (names.length > 0) setCategories(names);
-      else setCategories(["Makanan Utama", "Minuman", "Cemilan", "Dessert"]);
-    }).catch(() => setCategories(["Makanan Utama", "Minuman", "Cemilan", "Dessert"]));
-    api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {});
+    loadFloors(); loadTables();
+    const local = offlineAvailable() ? await cached(scope, 'products').catch(() => null) : null;
+    if (local) {setProducts(local.data); setSnapshot(local.savedAt);}
+    try {
+      const r = {data: await loadCatalogue({activeOnly:true})};
+      if (!Array.isArray(r.data)) throw Error('catalogue');
+      setProducts(r.data); setCatalogError('');
+      if (offlineAvailable()) {await cache(scope, 'products', r.data, {complete:true});setSnapshot(new Date().toISOString());}
+    } catch { if (!local) setCatalogError('Menu belum dapat dimuat. Periksa koneksi lalu coba lagi.'); }
+    api.get('/products/category-names').then(r => setCategories((Array.isArray(r.data) ? r.data : []).map(c => typeof c === 'string' ? c : c.name))).catch(() => {});
+    api.get('/payments/bank-qris').then(r => setBankConfig(r.data)).catch(() => {});
+    api.get('/settings').then(r => offlineAvailable() && cache(scope, 'settings', r.data)).catch(() => {});
+    api.get('/customers').then(r => setCustomers(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   };
 
   useEffect(() => {
     initData();
   }, []);
 
+  useEffect(() => {
+    const scanned = e => { if (e.detail?.target !== 'pos') return; const product = products.find(p => p.sku === e.detail.value || p.id === e.detail.value); if (product) addToCart(product); else toast.error('Barcode tidak ditemukan dalam katalog.'); };
+    window.addEventListener('dapuros-barcode', scanned);
+    const beforeSwitch = e => { if (cart.length) {e.preventDefault(); toast.error("Selesaikan atau kosongkan pesanan sebelum mengganti pengguna.");} };
+    window.addEventListener("dapuros-before-account-switch", beforeSwitch);
+    window.DapurOSPos = {hasDraft: () => cart.length > 0};
+    return () => {window.removeEventListener('dapuros-barcode', scanned); delete window.DapurOSPos; window.removeEventListener("dapuros-before-account-switch", beforeSwitch);};
+  }, [products, cart]);
+  useEffect(() => { const update = () => setOnline(navigator.onLine); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
+  useEffect(() => {
+    if (!receipt?.id || !offlineAvailable()) return;
+    const update = async () => {const row = (await localSales(scope)).find(r => r.order.id === receipt.id); if (row) setReceipt(row.order);};
+    window.addEventListener('dapuros-offline-changed', update);
+    return () => window.removeEventListener('dapuros-offline-changed', update);
+  }, [scope, receipt?.id]);
   // WebSocket Sync
   useEffect(() => {
     if (!user?.store_id) return;
-    
+
     let ws;
     let pollInterval;
 
@@ -461,12 +526,12 @@ export default function POS() {
       } else if (!window.location.origin.includes("localhost")) {
         backendHost = window.location.host || "dagangos.com";
       }
-      
+
       const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${wsProto}//${backendHost}/api/ws/${user.store_id}`;
-      
+
       ws = new WebSocket(wsUrl);
-      
+
       ws.onopen = () => {
         setWebsocketConnected(true);
         if (pollInterval) {
@@ -474,7 +539,7 @@ export default function POS() {
           pollInterval = null;
         }
       };
-      
+
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "TABLE_UPDATE" || data.type === "ORDER_CREATE") {
@@ -484,7 +549,7 @@ export default function POS() {
           }
         }
       };
-      
+
       ws.onclose = () => {
         setWebsocketConnected(false);
         if (!pollInterval) {
@@ -496,7 +561,7 @@ export default function POS() {
           }, 3000);
         }
       };
-      
+
       ws.onerror = () => {
         ws.close();
       };
@@ -553,8 +618,8 @@ export default function POS() {
     let arr = products;
     if (activeCat !== "all") arr = arr.filter((p) => p.category === activeCat);
     if (q) arr = arr.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()) || p.sku?.toLowerCase().includes(q.toLowerCase()));
-    return arr;
-  }, [products, activeCat, q]);
+    return arr.slice(0, pageLimit);
+  }, [products, activeCat, q, pageLimit]);
 
   const addToCart = (p) => {
     setCart((c) => {
@@ -589,13 +654,13 @@ export default function POS() {
   const isDineIn = selectedTable !== null;
   const subtotal = cart.reduce((s, i) => s + i.subtotal, 0);
   const baseAmount = Math.max(0, subtotal - discount);
-  
+
   // F&B pb1 + service calculation vs retail tax
   const serviceCharge = isDineIn ? round(baseAmount * 0.05, 2) : 0.0;
   const taxAmount = isDineIn 
     ? round((baseAmount + serviceCharge) * 0.10, 2)
     : baseAmount * (taxPercent / 100);
-    
+
   const total = baseAmount + serviceCharge + taxAmount;
   const change = parseFloat(cashReceived || 0) - total;
 
@@ -623,7 +688,7 @@ export default function POS() {
   // F&B checkout or Direct retail checkout
   const checkout = async () => {
     if (cart.length === 0) return;
-    
+
     // Simulate local EDC terminal payload push for card and EDC transactions
     // Dine-in: simpan pesanan ke bill terbuka (belum dibayar). Pembayaran saat settle meja.
     if (isDineIn) {
@@ -639,6 +704,8 @@ export default function POS() {
   };
 
   const processCheckout = async (directPaid = false) => {
+    if (checkoutLock.current) return;
+    checkoutLock.current = true;
     setSubmitting(true);
     try {
       const payload = {
@@ -663,12 +730,23 @@ export default function POS() {
 
       const selCust = customers.find(c => c.id === selectedCustomerId);
       if (selCust) {
+        payload.customer_id = selCust.id;
         payload.customer_name = selCust.name;
         payload.customer_phone = selCust.phone || undefined;
         payload.customer_email = selCust.email || undefined;
       }
-      
-      const r = await api.post("/orders", payload);
+
+      let r;
+      if (offlineAvailable() && !isDineIn && payload.payment_method === 'cash') {
+        const saved = await recordCashSale(user, payload); r = {data: saved.order};
+        synchronize(scope, api).catch(() => {});
+      } else {
+        if (!navigator.onLine) throw Error('Meja dan pembayaran elektronik memerlukan koneksi.');
+        const fingerprint = JSON.stringify({scope, payload});
+        if (paymentAttempt.current?.fingerprint !== fingerprint) paymentAttempt.current = {fingerprint, key: crypto.randomUUID()};
+        r = await api.post('/orders', payload, {headers: {'Idempotency-Key': paymentAttempt.current.key}});
+      }
+      paymentAttempt.current = null;
 
       if (isDineIn) {
         // Simpan ke bill terbuka; JANGAN settle/close. Pembayaran dilakukan saat tamu minta bill.
@@ -680,12 +758,12 @@ export default function POS() {
       }
 
       setReceipt(r.data);
-      clearCart();
+      clearCart(); setCartOpen(false);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal memproses transaksi");
+      toast.error(e?.response?.data?.detail || e.message || "Gagal memproses transaksi");
     } finally {
       setSubmitting(false);
-      setEdcSimulating(false);
+      setEdcSimulating(false); checkoutLock.current = false;
     }
   };
 
@@ -712,7 +790,7 @@ export default function POS() {
     if (!selectedTable) return;
     setSubmitting(true);
     try {
-      await api.post(`/tables/${selectedTable.id}/checkout`, { payment_method: method });
+      await api.post(`/tables/${selectedTable.id}/checkout`, { payment_method: method, expected_session_id: activeSession?.session?.id || activeSession?.id, checked_in_bank: method === "qris_bank" && bankConfirmed, received_amount: activeSession?.grand_total });
       setSettleOpen(false);
       setSelectedTable(null);
       setActiveSession(null);
@@ -758,20 +836,21 @@ export default function POS() {
           splitItems.push({ product_id: pId, quantity: q });
         }
       });
-      
+
       if (splitItems.length === 0) {
         toast.error("Pilih item untuk dipisah.");
         return;
       }
-      
-      const res = await api.post(`/tables/${selectedTable.id}/split-bill`, {
-        type: "item",
-        items: splitItems
-      });
-      
+
+      const payload = {type: "item", items: splitItems};
+      const fingerprint = JSON.stringify(payload);
+      if (splitAttempt.current?.fingerprint !== fingerprint) splitAttempt.current = {fingerprint, key: crypto.randomUUID()};
+      const res = await api.post(`/tables/${selectedTable.id}/split-bill`, payload, {headers: {"Idempotency-Key": splitAttempt.current.key}});
+      splitAttempt.current = null;
+
       setSplitOrderResult(res.data.split_order);
       setSplitOpen(false);
-      
+
       // Load updated bill session
       loadActiveTableSession(selectedTable.id);
     } catch (e) {
@@ -781,13 +860,13 @@ export default function POS() {
 
   const handlePaySplitOrder = async (payMethod) => {
     if (!splitOrderResult) return;
-    
+
     if (payMethod === "edc") {
       setEdcSplitSimulating(true);
       setEdcSimulating(true);
       return;
     }
-    
+
     processSplitPayment(payMethod);
   };
 
@@ -796,15 +875,16 @@ export default function POS() {
   };
 
   const processSplitPayment = async (payMethod) => {
+    if (payMethod !== "cash") {toast.error("Pilih tunai untuk bagian tagihan ini."); return;}
     setSubmitting(true);
     try {
       // Mark split order as paid
-      const r = await api.post(`/orders/${splitOrderResult.id}/mark-paid`);
+      const r = await api.post(`/tables/${selectedTable.id}/split-orders/${splitOrderResult.id}/settle`, {payment_method: "cash"});
       setReceipt(r.data);
       setSplitOrderResult(null);
       setEdcSplitSimulating(false);
       setEdcSimulating(false);
-      
+
       // If table session is now empty, reset table to vacant
       const bill = await api.get(`/tables/${selectedTable.id}/session`);
       if (bill.data.items.length === 0) {
@@ -822,7 +902,10 @@ export default function POS() {
   };
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))]" data-testid="pos-page">
+    <div className="min-h-screen bg-[hsl(var(--background))]" data-testid="pos-page" data-cart-open={cartOpen ? "true" : "false"}>
+      <OfflineStatus scope={scope} snapshot={snapshot} onReceipt={setReceipt} onRefresh={initData} />
+      {catalogError && <div role="alert">{catalogError}<button onClick={initData}>Coba lagi</button></div>}
+      {products.length > pageLimit && <button className="btn-outline" onClick={() => setPageLimit(n => n + 48)}>Muat menu berikutnya</button>}
       {viewMode === "floor" ? (
         // FLOOR LAYOUT VIEW
         <div className="p-6 grid grid-cols-12 gap-6 text-left">
@@ -840,7 +923,7 @@ export default function POS() {
                 <button
                   onClick={handleOpenAddTable}
                   className="btn-primary text-xs py-2 px-3 flex items-center gap-1 bg-amber-600 hover:bg-amber-700 border-amber-600 font-bold"
-                  data-testid="pos-add-table-btn"
+                  disabled={!canManageProducts(user?.role)} data-testid="pos-add-table-btn"
                 >
                   <Plus size={14} /> Meja Baru
                 </button>
@@ -876,7 +959,7 @@ export default function POS() {
               <button
                 onClick={handleOpenAddFloor}
                 className="text-xs text-[hsl(var(--primary))] hover:underline font-bold flex items-center gap-1 shrink-0 ml-2"
-                data-testid="pos-add-floor-btn"
+                disabled={!canManageProducts(user?.role)} data-testid="pos-add-floor-btn"
               >
                 <Plus size={13} /> Tambah Lantai
               </button>
@@ -889,7 +972,7 @@ export default function POS() {
                 let statusBg = "bg-slate-50 border-slate-200 hover:border-slate-400";
                 let statusText = "Kosong (Vacant)";
                 let dotColor = "bg-slate-400";
-                
+
                 if (t.status === "Seated") {
                   statusBg = "bg-yellow-50 border-yellow-200 hover:border-yellow-400 text-yellow-900";
                   statusText = "Tamu Duduk";
@@ -916,7 +999,7 @@ export default function POS() {
                     </div>
                     <span className="font-display font-black text-base text-[hsl(var(--foreground))] mt-2">{t.label}</span>
                     <span className="text-[10px] font-semibold mt-1 opacity-70">{statusText}</span>
-                    
+
                     <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1 bg-white/90 p-1 rounded-md shadow border border-slate-200">
                       <button onClick={(e) => handleOpenEditTable(t, e)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit Meja"><Edit3 size={12} /></button>
                       <button onClick={(e) => handleDeleteTable(t.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Hapus Meja"><Trash2 size={12} /></button>
@@ -1007,7 +1090,7 @@ export default function POS() {
                         >
                           Ambil Pesanan
                         </button>
-                        
+
                         {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 ? (
                           <button
                             onClick={() => setSettleOpen(true)}
@@ -1029,7 +1112,7 @@ export default function POS() {
                             Kosongkan Meja
                           </button>
                         )}
-                        
+
                         {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 && (
                           <button
                             onClick={() => {
@@ -1068,7 +1151,7 @@ export default function POS() {
         </div>
       ) : (
         // PRODUCT CATALOG & CHECKOUT CART VIEW
-        <div className="grid grid-cols-12 h-screen relative">
+        <div className="restaurant-pos-grid grid grid-cols-12 h-screen relative">
           {/* Left: Product Grid */}
           <div className="col-span-12 lg:col-span-8 p-6 overflow-y-auto text-left">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4">
@@ -1090,7 +1173,7 @@ export default function POS() {
                 <button
                   onClick={handleOpenAddProduct}
                   className="btn-primary text-xs py-2 px-3 flex items-center gap-1 font-bold"
-                  data-testid="pos-add-product-btn"
+                  disabled={!canManageProducts(user?.role)} data-testid="pos-add-product-btn"
                 >
                   <Plus size={14} /> Menu Baru
                 </button>
@@ -1103,6 +1186,7 @@ export default function POS() {
                   <Barcode size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted))]" />
                   <input className="input-field pl-9 pr-14" placeholder="SKU/Barcode…"
                          value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)} data-testid="pos-barcode-input" />
+                {window.DapurOSDevice?.scanBarcode && <button type="button" className="btn-outline" data-testid="pos-camera-scan" onClick={() => window.DapurOSDevice.scanBarcode("pos")}>Kamera</button>}
                   <button type="submit" className="absolute right-1 px-2 py-1 bg-[hsl(var(--primary))] text-white rounded text-xs font-semibold hover:bg-[hsl(var(--primary))]/80">
                     Scan
                   </button>
@@ -1148,8 +1232,8 @@ export default function POS() {
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
                     <p className="num-display font-display text-base font-bold text-[hsl(var(--primary))]">{fmtIDR(p.price)}</p>
                     <div className="flex items-center gap-1">
-                      <button onClick={(e) => handleOpenEditProduct(p, e)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit Menu"><Edit3 size={13} /></button>
-                      <button onClick={(e) => handleDeleteProduct(p.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Hapus Menu"><Trash2 size={13} /></button>
+                      <button disabled={!canManageProducts(user?.role)} onClick={(e) => handleOpenEditProduct(p, e)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit Menu"><Edit3 size={13} /></button>
+                      <button disabled={!canManageProducts(user?.role)} onClick={(e) => handleDeleteProduct(p.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Hapus Menu"><Trash2 size={13} /></button>
                     </div>
                   </div>
                 </div>
@@ -1160,6 +1244,7 @@ export default function POS() {
 
           {/* Right Panel: Cart */}
           <aside className="col-span-12 lg:col-span-4 border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))] flex flex-col" data-testid="pos-cart">
+            <button className="restaurant-cart-close btn-outline" onClick={() => setCartOpen(false)}>Tutup keranjang</button>
             <div className="p-5 border-b border-[hsl(var(--border))] flex items-center justify-between text-left">
               <div>
                 <h2 className="font-display text-lg font-bold">Keranjang ({cart.length})</h2>
@@ -1201,7 +1286,7 @@ export default function POS() {
                     <p className="font-medium text-sm leading-tight">{it.name}</p>
                     <p className="font-display font-bold num-display text-sm">{fmtIDR(it.subtotal)}</p>
                   </div>
-                  
+
                   {/* Notes Input per-item for food modifications */}
                   <div className="mb-2">
                     <input
@@ -1245,11 +1330,11 @@ export default function POS() {
               <div className="space-y-1 text-sm pt-1 text-left">
                 <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Subtotal</span><span className="num-display">{fmtIDR(subtotal)}</span></div>
                 {discount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Diskon</span><span className="num-display">-{fmtIDR(discount)}</span></div>}
-                
+
                 {/* Cart summary breakdown with explicit Service Charge row */}
                 <div className="flex justify-between" data-testid="cart-service-charge-line"><span className="text-[hsl(var(--muted))]">Biaya Layanan / Service Charge (5%)</span><span className="num-display" data-testid="cart-service-charge">{fmtIDR(serviceCharge)}</span></div>
                 {taxAmount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Pajak (PB1 / PPN)</span><span className="num-display">{fmtIDR(taxAmount)}</span></div>}
-                
+
                 <div className="flex justify-between font-display text-xl font-extrabold text-[hsl(var(--primary))] pt-1">
                   <span>TOTAL</span><span className="num-display" data-testid="cart-total">{fmtIDR(total)}</span>
                 </div>
@@ -1259,27 +1344,8 @@ export default function POS() {
               <div className="text-left">
                 <label className="label-tiny mb-2 block">Metode Pembayaran</label>
                 <div className="grid grid-cols-3 sm:grid-cols-7 gap-1">
-                  <button onClick={() => setPaymentMethod("cash")}
-                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "cash" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-cash"><Banknote size={12} className="mx-auto mb-1" />Tunai</button>
-                  <button onClick={() => setPaymentMethod("qris")}
-                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "qris" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-qris"><QrCode size={12} className="mx-auto mb-1" />QRIS</button>
-                  <button onClick={() => setPaymentMethod("ewallet")}
-                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "ewallet" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-ewallet"><Smartphone size={12} className="mx-auto mb-1" />E-Wallet</button>
-                  <button onClick={() => setPaymentMethod("doku")}
-                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "doku" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-doku"><Landmark size={12} className="mx-auto mb-1" />DOKU (VA)</button>
-                  <button onClick={() => setPaymentMethod("debit")}
-                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "debit" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-debit"><CreditCard size={12} className="mx-auto mb-1" />Kartu Debit</button>
-                  <button onClick={() => setPaymentMethod("credit")}
-                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "credit" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-credit"><CreditCard size={12} className="mx-auto mb-1 text-amber-500" />Kartu Kredit</button>
-                  <button onClick={() => setPaymentMethod("edc")}
-                          className={`p-2 rounded-md text-[10px] font-semibold border transition-colors ${paymentMethod === "edc" ? "bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]" : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"}`}
-                          data-testid="pm-edc"><CreditCard size={12} className="mx-auto mb-1" />Kartu (EDC)</button>
+                  {[{id:'cash',label:'Tunai'}, {id:'qris_bank',label:'QRIS bank'}, {id:'ewallet',label:'E-Wallet'}, {id:'va',label:'Virtual Account'}, {id:'credit_card',label:'Kartu Kredit'}, {id:'doku',label:'Checkout gateway'}].filter(method => payments.options?.methods?.[method.id]?.enabled && (online || method.id === "cash")).map(method => <button key={method.id} onClick={() => setPaymentMethod(method.id)} className={`p-2 rounded-md text-xs border ${paymentMethod === method.id ? 'bg-amber-100 border-amber-700' : ''}`} data-testid={`pm-${method.id}`}>{method.label}</button>)}
+                  {payments.error && <p role="alert">{payments.error}</p>}
                 </div>
               </div>
               )}
@@ -1321,7 +1387,7 @@ export default function POS() {
                 <div data-testid="pm-ewallet-details" className="text-left">
                   <label className="label-tiny">Pilih E-Wallet</label>
                   <div className="grid grid-cols-2 gap-1.5 mt-1">
-                    {EWALLET_CHANNELS.map((c) => (
+                    {(payments.options?.ewallet_channels || []).map((c) => (
                       <button key={c.code} onClick={() => setEwallet(c.code)}
                               className={`p-2 rounded-md text-xs font-semibold border ${ewallet === c.code ? "bg-[hsl(var(--accent))] text-white border-[hsl(var(--accent))]" : "border-[hsl(var(--border))]"}`}
                               data-testid={`ew-${c.code}`}>{c.label}</button>
@@ -1332,7 +1398,7 @@ export default function POS() {
 
               <button
                 onClick={checkout}
-                disabled={submitting || cart.length === 0 || (!isDineIn && paymentMethod === "cash" && (parseFloat(cashReceived || 0) < total))}
+                disabled={submitting || cart.length === 0 || (!isDineIn && !payments.options?.methods?.[paymentMethod]?.enabled) || (!isDineIn && paymentMethod === "cash" && (parseFloat(cashReceived || 0) < total))}
                 className="btn-primary w-full py-3"
                 data-testid="checkout-btn"
               >
@@ -1343,6 +1409,7 @@ export default function POS() {
         </div>
       )}
 
+      {viewMode === "catalog" && <button className="restaurant-cart-dock btn-primary" data-testid="mobile-cart-open" onClick={() => setCartOpen(true)}>Keranjang ({cart.reduce((s,i) => s+i.quantity,0)}) · {fmtIDR(total)}</button>}
       {receipt && <ReceiptDialog order={receipt} onClose={() => setReceipt(null)} />}
 
       {/* EDC / card payment — MANUAL confirmation on the merchant's own terminal */}
@@ -1380,10 +1447,11 @@ export default function POS() {
               <h2 className="font-display text-lg font-bold">Bayar &amp; Tutup Meja</h2>
               <span className="text-[11px] text-[hsl(var(--muted))]">Meja {selectedTable.label} · Total {fmtIDR(activeSession.grand_total || 0)}</span>
             </div>
-            <p className="text-xs text-[hsl(var(--muted))]">Pilih metode pembayaran yang diterima dari pelanggan:</p>
+            <p className="text-xs text-[hsl(var(--muted))]">Konfirmasi hanya setelah nominal tagihan diterima dari pelanggan.</p>
+            {payments.options?.methods?.qris_bank?.enabled && bankConfig?.qr_payload && <div className="text-center"><QRCodeSVG value={bankConfig.qr_payload} size={180} className="mx-auto"/><p>{bankConfig.merchant_name} · {bankConfig.bank_name}</p><label className="flex gap-2 text-xs"><input type="checkbox" checked={bankConfirmed} onChange={e => setBankConfirmed(e.target.checked)}/>Saya sudah memeriksa penerimaan {fmtIDR(activeSession.grand_total)} di aplikasi bank merchant.</label></div>}
             <div className="grid grid-cols-2 gap-2">
-              {[{ m: "cash", l: "Tunai" }, { m: "qris", l: "QRIS" }, { m: "ewallet", l: "E-Wallet" }, { m: "edc", l: "Kartu / EDC" }].map(({ m, l }) => (
-                <button key={m} type="button" disabled={submitting} onClick={() => settleDineIn(m)}
+              {[{ m: "cash", l: "Tunai diterima" }, { m: "qris_bank", l: "Konfirmasi QRIS bank" }].filter(({m}) => payments.options?.methods?.[m]?.enabled).map(({ m, l }) => (
+                <button key={m} type="button" disabled={submitting || (m === "qris_bank" && !bankConfirmed)} onClick={() => settleDineIn(m)}
                         className="py-3 rounded-xl border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] text-sm font-bold disabled:opacity-60"
                         data-testid={`settle-${m}`}>{l}</button>
               ))}
@@ -1434,7 +1502,7 @@ export default function POS() {
                   />
                 </div>
                 <button onClick={handleBillSplitEqual} className="btn-primary w-full py-2.5 text-xs">Hitung Pembagian</button>
-                
+
                 {splitEqualResult && (
                   <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-amber-900 flex justify-between items-center">
                     <span className="font-semibold">Per Orang ({splitEqualResult.ways} cara):</span>
@@ -1517,9 +1585,9 @@ export default function POS() {
             <div>
               <label className="label-tiny mb-1 block">Pilih Pembayaran Split</label>
               <div className="grid grid-cols-3 gap-1">
-                <button onClick={() => handlePaySplitOrder("cash")} className="btn-outline py-2 text-[10px] font-bold">Tunai</button>
-                <button onClick={() => handlePaySplitOrder("qris")} className="btn-outline py-2 text-[10px] font-bold">QRIS</button>
-                <button onClick={() => handlePaySplitOrder("edc")} className="btn-outline py-2 text-[10px] font-bold">EDC</button>
+                <button disabled={!payments.options?.methods?.cash?.enabled || submitting} onClick={() => handlePaySplitOrder("cash")} className="btn-outline py-2 text-[10px] font-bold">Tunai</button>
+
+
               </div>
             </div>
 

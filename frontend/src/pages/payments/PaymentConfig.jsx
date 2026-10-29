@@ -1,517 +1,82 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import api from "@/api/client";
-import { Save, ShieldCheck } from "lucide-react";
-import { toast } from "@/components/ui/sonner";
+import { useEffect, useRef, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import api from '@/api/client';
+import { Save } from 'lucide-react';
+import { toast } from '@/components/ui/sonner';
+import SectionNavigation from '@/navigation/SectionNavigation';
+import ReadState from '@/components/ReadState';
 
-import { Link } from "react-router-dom";
-
-const EDC_BANKS = [
-  { id: "bca", label: "BCA" },
-  { id: "mandiri", label: "Mandiri" },
-  { id: "bri", label: "BRI" },
-  { id: "bni", label: "BNI" },
-];
-
-const DEFAULT_PAYMENT_CONFIG = {
-  cash: { is_active: true, provider: "Sistem Kasir Lokal", require_drawer: true, active_drawer_port: "COM3" },
-  qris: { is_active: true, provider: "Xendit", type: "dynamic", merchant_id: "MID-DPR-QRIS-99", callback_status: "Active" },
-  ewallet: {
-    is_active: true,
-    provider: "Xendit",
-    channels: { GoPay: true, OVO: true, DANA: true, ShopeePay: true, LinkAja: true, AstraPay: false, Sakuku: false, iSaku: false, MotionPay: false, JeniusPay: true }
-  },
-  va: {
-    is_active: true,
-    provider: "Midtrans",
-    banks: { BCA: true, BNI: true, BRI: true, Mandiri: true, Permata: true, CIMB: true, Maybank: false, Danamon: false, Neo: false, BSI: true }
-  },
-  debit_card: { is_active: false, provider: "", edc_brand: "", terminal_id: "", merchant_id: "", enable_surcharge: false, surcharge_percent: 0 },
-  credit_card: { is_active: true, provider: "Stripe", enable_3ds: true, merchant_id: "MID-CC-88219", installment_banks: ["Mandiri", "BCA", "CIMB"] },
-  bank_transfer: { is_active: true, accounts: [{ bank: "Bank Central Asia", account_no: "8820987111", account_name: "DagangOS DapurOS POS" }] }
-};
-
+const LABELS = { cash: 'Tunai', qris: 'QRIS bank', ewallet: 'E-Wallet', va: 'Virtual Account', credit_card: 'Kartu Kredit', bank_transfer: 'Transfer Bank', edc: 'EDC' };
+const defaults = { cash: { is_active: true }, qris_bank: { is_active: false }, ewallet: { is_active: false, provider: 'Xendit', channels: {} }, va: { is_active: false, provider: '', banks: {} }, credit_card: { is_active: false, provider: '', enable_3ds: true } };
 export default function PaymentConfig() {
-  const params = useParams();
-  const pathPart = typeof window !== "undefined" ? window.location.pathname.split("/").pop() : "";
-  const rawType = params.type || pathPart || "cash";
-  const normalizedType = rawType.replace("-", "_").toLowerCase();
-  const type = (normalizedType === "payments" || !normalizedType) ? "cash" : normalizedType;
-
-  const [config, setConfig] = useState(DEFAULT_PAYMENT_CONFIG);
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState({});
-
-  // Same unsequenced-GET race fixed in GerainaOS's PaymentConfig.jsx (commit 75307b2): this
-  // effect re-fires on every subtab switch, so a slow GET from an earlier tab can resolve
-  // after a newer tab's GET (or after a save's own setConfig call) and silently overwrite
-  // fresher state with stale data. reqIdRef is bumped at request-*issue* time for both the
-  // mount-effect GET and the save's POST, so whichever request was issued last always wins.
-  const reqIdRef = useRef(0);
+  const { type: routeType } = useParams();
+  const type = (routeType || 'cash').replaceAll('-', '_');
+  const key = type === 'qris' ? 'qris_bank' : type;
+  const supported = key in defaults;
+  const gatewayMethod = ['ewallet', 'va', 'credit_card'].includes(key);
+  const [config, setConfig] = useState(defaults), [options, setOptions] = useState(null);
+  const [loading, setLoading] = useState(true), [error, setError] = useState('');
+  const [saving, setSaving] = useState(false), [attempt, setAttempt] = useState(0), [loadedType, setLoadedType] = useState('');
+  const lock = useRef(false);
   useEffect(() => {
-    const reqId = ++reqIdRef.current;
-    api.get("/payments/config").then((r) => {
-      if (r.data && reqId === reqIdRef.current) setConfig(r.data);
-    }).catch(() => {});
-  }, [type]);
-
-  const renderConfigForm = () => {
-    switch (type) {
-      case "cash":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Aktifkan Tunai</label>
-              <input
-                type="checkbox"
-                checked={config.cash.is_active}
-                onChange={(e) => setConfig({ ...config, cash: { ...config.cash, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="flex flex-col space-y-1">
-              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Provider Sistem</label>
-              <input
-                type="text"
-                value={config.cash.provider}
-                onChange={(e) => setConfig({ ...config, cash: { ...config.cash, provider: e.target.value } })}
-                className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-              />
-            </div>
-            <div className="flex items-center justify-between pt-2">
-              <label className="text-sm font-semibold">Wajib Hubungkan Cash Drawer (Laci Kasir)</label>
-              <input
-                type="checkbox"
-                checked={config.cash.require_drawer}
-                onChange={(e) => setConfig({ ...config, cash: { ...config.cash, require_drawer: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            {config.cash.require_drawer && (
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Port Printer / Drawer</label>
-                <input
-                  type="text"
-                  value={config.cash.active_drawer_port}
-                  onChange={(e) => setConfig({ ...config, cash: { ...config.cash, active_drawer_port: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                />
-              </div>
-            )}
-          </div>
-        );
-      
-      case "qris":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Aktifkan QRIS Dinamis</label>
-              <input
-                type="checkbox"
-                checked={config.qris.is_active}
-                onChange={(e) => setConfig({ ...config, qris: { ...config.qris, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Integrasi Provider</label>
-                <select
-                  value={config.qris.provider}
-                  onChange={(e) => setConfig({ ...config, qris: { ...config.qris, provider: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                >
-                  <option value="Xendit">Xendit (Rekomendasi)</option>
-                  <option value="Midtrans">Midtrans</option>
-                  <option value="Doku">Doku</option>
-                </select>
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">QRIS Merchant ID</label>
-                <input
-                  type="text"
-                  value={config.qris.merchant_id || ""}
-                  onChange={(e) => {
-                    setConfig({ ...config, qris: { ...config.qris, merchant_id: e.target.value } });
-                    if (e.target.value.trim()) {
-                      setErrors((prev) => {
-                        const newErr = { ...prev };
-                        delete newErr.merchant_id;
-                        return newErr;
-                      });
-                    }
-                  }}
-                  className={`border ${errors.merchant_id ? 'border-red-500' : 'border-[hsl(var(--border))]'} rounded-md px-4 py-2 bg-white text-sm font-mono`}
-                  data-testid="qris-merchant-id-input"
-                />
-                {errors.merchant_id && (
-                  <span className="text-xs text-red-500 mt-1" data-testid="qris-validation-error">
-                    {errors.merchant_id}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-
-      case "ewallet":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
-              <label className="text-sm font-semibold">Aktifkan Dompet Digital (E-Wallet)</label>
-              <input
-                type="checkbox"
-                checked={config.ewallet.is_active}
-                onChange={(e) => setConfig({ ...config, ewallet: { ...config.ewallet, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="flex flex-col space-y-1 pb-4">
-              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Provider Payment Gateway</label>
-              <select
-                value={config.ewallet.provider}
-                onChange={(e) => setConfig({ ...config, ewallet: { ...config.ewallet, provider: e.target.value } })}
-                className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm max-w-xs"
-              >
-                <option value="Xendit">Xendit</option>
-                <option value="Midtrans">Midtrans</option>
-              </select>
-            </div>
-            <h3 className="text-xs font-bold text-[hsl(var(--muted))] uppercase">Saluran E-Wallet</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {Object.keys(config.ewallet.channels).map((ch) => (
-                <div key={ch} className="flex items-center justify-between p-3 border border-[hsl(var(--border))] rounded-lg bg-[hsl(var(--surface))]">
-                  <span className="text-xs font-semibold">{ch}</span>
-                  <input
-                    type="checkbox"
-                    checked={config.ewallet.channels[ch]}
-                    onChange={(e) => {
-                      const updated = { ...config.ewallet.channels, [ch]: e.target.checked };
-                      setConfig({ ...config, ewallet: { ...config.ewallet, channels: updated } });
-                    }}
-                    className="rounded border-[hsl(var(--border))] text-[hsl(var(--primary))]"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case "va":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
-              <label className="text-sm font-semibold">Aktifkan Virtual Account Bank</label>
-              <input
-                type="checkbox"
-                checked={config.va.is_active}
-                onChange={(e) => setConfig({ ...config, va: { ...config.va, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="flex flex-col space-y-1 pb-4">
-              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Provider Payment Gateway</label>
-              <select
-                value={config.va.provider}
-                onChange={(e) => setConfig({ ...config, va: { ...config.va, provider: e.target.value } })}
-                className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm max-w-xs"
-              >
-                <option value="Midtrans">Midtrans</option>
-                <option value="Xendit">Xendit</option>
-              </select>
-            </div>
-            <h3 className="text-xs font-bold text-[hsl(var(--muted))] uppercase">Virtual Account Bank yang Didukung</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {Object.keys(config.va.banks).map((bk) => (
-                <div key={bk} className="flex items-center justify-between p-3 border border-[hsl(var(--border))] rounded-lg bg-[hsl(var(--surface))]">
-                  <span className="text-xs font-semibold">{bk} VA</span>
-                  <input
-                    type="checkbox"
-                    checked={config.va.banks[bk]}
-                    onChange={(e) => {
-                      const updated = { ...config.va.banks, [bk]: e.target.checked };
-                      setConfig({ ...config, va: { ...config.va, banks: updated } });
-                    }}
-                    className="rounded border-[hsl(var(--border))] text-[hsl(var(--primary))]"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case "debit_card":
-      case "debit-card":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
-              <label className="text-sm font-semibold">Aktifkan Pembayaran Kartu Debit (EDC Bank)</label>
-              <input
-                type="checkbox"
-                checked={config?.debit_card?.is_active ?? true}
-                onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs leading-relaxed">
-              Integrasi EDC memerlukan SDK resmi dan proses sertifikasi dari bank terkait sebelum bisa memproses transaksi kartu sungguhan secara elektronik. Memilih bank di bawah hanya menyimpan preferensi Anda — belum mengaktifkan pemrosesan otomatis. Kasir tetap menggesek/tap kartu langsung di mesin EDC fisik dan mengonfirmasi manual di POS setelah disetujui, seperti biasa.
-            </div>
-            <div className="flex flex-col space-y-1 pb-2">
-              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Bank EDC</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-1">
-                {EDC_BANKS.map((b) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), provider: b.id } })}
-                    className={`p-3 rounded-lg border text-left ${config?.debit_card?.provider === b.id ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5" : "border-[hsl(var(--border))]"}`}
-                  >
-                    <p className="text-sm font-semibold">{b.label}</p>
-                    <p className="text-[10px] text-amber-600 font-semibold mt-1">Belum Tersedia</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Merk / Tipe Mesin EDC</label>
-                <select
-                  value={config?.debit_card?.edc_brand || ""}
-                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), edc_brand: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                >
-                  <option value="">Pilih merk mesin...</option>
-                  <option value="BCA EDC Dual Merchant">BCA EDC Dual Merchant</option>
-                  <option value="Mandiri EDC Android">Mandiri EDC Android</option>
-                  <option value="BRI EDC Smart">BRI EDC Smart</option>
-                  <option value="BNI EDC Mobile">BNI EDC Mobile</option>
-                  <option value="Ingenico / Pax Universal EDC">Ingenico / Pax Universal EDC</option>
-                </select>
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Terminal ID (TID)</label>
-                <input
-                  type="text"
-                  value={config?.debit_card?.terminal_id || ""}
-                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), terminal_id: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                  placeholder="Contoh: TID-998231"
-                />
-              </div>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4 pt-2">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Merchant ID (MID)</label>
-                <input
-                  type="text"
-                  value={config?.debit_card?.merchant_id || ""}
-                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), merchant_id: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                  placeholder="Contoh: MID-88291"
-                />
-              </div>
-              <div className="flex items-center justify-between pt-6">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Biaya Penanganan (Surcharge %)</label>
-                <input
-                  type="number"
-                  value={config?.debit_card?.surcharge_percent || 0}
-                  onChange={(e) => setConfig({ ...config, debit_card: { ...(config.debit_card || {}), surcharge_percent: parseFloat(e.target.value) || 0 } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-3 py-1 bg-white text-sm w-24 font-mono"
-                  placeholder="0"
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case "credit_card":
-      case "credit-card":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
-              <label className="text-sm font-semibold">Aktifkan Kartu Kredit Online & EDC</label>
-              <input
-                type="checkbox"
-                checked={config?.credit_card?.is_active ?? true}
-                onChange={(e) => setConfig({ ...config, credit_card: { ...(config.credit_card || {}), is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Gateway Pemroses / Provider</label>
-                <select
-                  value={config?.credit_card?.provider || "Stripe"}
-                  onChange={(e) => setConfig({ ...config, credit_card: { ...(config.credit_card || {}), provider: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                >
-                  <option value="Stripe">Stripe Gateway</option>
-                  <option value="Midtrans">Midtrans CC Payment</option>
-                  <option value="Xendit">Xendit Cards API</option>
-                  <option value="Mesin EDC Offline">Mesin EDC Store Offline</option>
-                </select>
-              </div>
-              <div className="flex items-center justify-between pt-6">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Wajibkan 3D Secure (3DS)</label>
-                <input
-                  type="checkbox"
-                  checked={config?.credit_card?.enable_3ds ?? true}
-                  onChange={(e) => setConfig({ ...config, credit_card: { ...(config.credit_card || {}), enable_3ds: e.target.checked } })}
-                  className="rounded border-[hsl(var(--border))]"
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case "bank-transfer":
-      case "bank_transfer":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))]/50 pb-2">
-              <label className="text-sm font-semibold">Aktifkan Transfer Bank Manual</label>
-              <input
-                type="checkbox"
-                checked={config?.bank_transfer?.is_active ?? true}
-                onChange={(e) => setConfig({ ...config, bank_transfer: { ...(config.bank_transfer || {}), is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <h3 className="text-xs font-bold text-[hsl(var(--muted))] uppercase">Rekening Penerima</h3>
-            {(config?.bank_transfer?.accounts || []).map((ac, idx) => (
-              <div key={idx} className="border border-[hsl(var(--border))] p-4 rounded-lg bg-[hsl(var(--surface))] grid grid-cols-3 gap-4">
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] text-[hsl(var(--muted))] uppercase">Nama Bank</label>
-                  <input
-                    type="text"
-                    value={ac.bank}
-                    onChange={(e) => {
-                      const updated = [...config.bank_transfer.accounts];
-                      updated[idx].bank = e.target.value;
-                      setConfig({ ...config, bank_transfer: { ...config.bank_transfer, accounts: updated } });
-                    }}
-                    className="border border-[hsl(var(--border))] rounded px-2 py-1 text-xs"
-                  />
-                </div>
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] text-[hsl(var(--muted))] uppercase">No Rekening</label>
-                  <input
-                    type="text"
-                    value={ac.account_no}
-                    onChange={(e) => {
-                      const updated = [...config.bank_transfer.accounts];
-                      updated[idx].account_no = e.target.value;
-                      setConfig({ ...config, bank_transfer: { ...config.bank_transfer, accounts: updated } });
-                    }}
-                    className="border border-[hsl(var(--border))] rounded px-2 py-1 text-xs font-mono"
-                  />
-                </div>
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] text-[hsl(var(--muted))] uppercase">Nama Pemilik Rekening</label>
-                  <input
-                    type="text"
-                    value={ac.account_name}
-                    onChange={(e) => {
-                      const updated = [...config.bank_transfer.accounts];
-                      updated[idx].account_name = e.target.value;
-                      setConfig({ ...config, bank_transfer: { ...config.bank_transfer, accounts: updated } });
-                    }}
-                    className="border border-[hsl(var(--border))] rounded px-2 py-1 text-xs"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-
-      default:
-        return <p className="text-sm text-[hsl(var(--muted))]">Konfigurasi tidak ditemukan.</p>;
-    }
+    let active = true; const controller = new AbortController();
+    setLoading(supported); setError(''); setLoadedType('');
+    if (supported) api.get('/payments/config', { signal: controller.signal, timeout: 12000 }).then(({ data }) => {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid settings');
+      if (active) {
+        setConfig(Object.fromEntries(Object.entries(defaults).map(([name, value]) => [name, { ...value, ...data[name] }])));
+        setOptions(data.checkout_options || null); setLoadedType(type);
+      }
+    }).catch(() => { if (active) setError('Pengaturan pembayaran belum dapat dimuat. Coba lagi sebelum menyimpan.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [type, supported, attempt]);
+  const value = config[key] || {}, provider = String(value.provider || '').toLowerCase();
+  const gateways = options?.gateways || {}, policy = options?.methods?.[key];
+  const channelField = key === 'va' ? 'banks' : 'channels';
+  const channels = gateways[provider]?.methods?.[key] || [];
+  const edit = patch => setConfig(previous => ({ ...previous, [key]: { ...previous[key], ...patch } }));
+  const save = async event => {
+    event.preventDefault();
+    if (!supported || loading || loadedType !== type || error || lock.current) return;
+    lock.current = true; setSaving(true);
+    try {
+      await api.post('/payments/config', { [key]: value });
+      toast.success('Pilihan metode kasir disimpan.');
+      window.dispatchEvent(new Event('dapuros-payment-options-changed'));
+      setAttempt(previous => previous + 1);
+    } catch (e) { toast.error(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'Pengaturan gagal disimpan. Coba lagi.'); }
+    finally { lock.current = false; setSaving(false); }
   };
-
-  const handleSave = (e) => {
-    e.preventDefault();
-    setErrors({});
-    if (type?.toLowerCase() === "qris" && config?.qris?.is_active && (!config?.qris?.merchant_id || !config.qris.merchant_id.trim())) {
-      setErrors({ merchant_id: "Merchant ID wajib diisi" });
-      return;
-    }
-    setSaving(true);
-    const reqId = ++reqIdRef.current;
-    api.post("/payments/config", config)
-      .then((r) => {
-        if (r.data && reqId === reqIdRef.current) setConfig(r.data);
-        toast.success(`Konfigurasi pembayaran ${type.toUpperCase()} berhasil disimpan!`);
-      })
-      .catch((err) => {
-        // Was previously claiming success even when the save request actually failed
-        // ("... berhasil disimpan! (Local Mode)") -- same fake-success-on-error bug already
-        // fixed in GerainaOS's PaymentConfig.jsx. A failed save must say so, not lie about it.
-        toast.error(err?.response?.data?.detail || `Gagal menyimpan konfigurasi pembayaran ${type.toUpperCase()}.`);
-      })
-      .finally(() => {
-        setSaving(false);
-      });
-  };
-
-  const subtabs = [
-    { id: "cash", label: "Tunai", path: "/dapuros/app/payments/cash" },
-    { id: "qris", label: "QRIS", path: "/dapuros/app/payments/qris" },
-    { id: "ewallet", label: "E-Wallet", path: "/dapuros/app/payments/ewallet" },
-    { id: "va", label: "Virtual Account", path: "/dapuros/app/payments/va" },
-    { id: "debit_card", label: "Kartu Debit (EDC)", path: "/dapuros/app/payments/debit-card" },
-    { id: "credit_card", label: "Kartu Kredit", path: "/dapuros/app/payments/credit-card" },
-    { id: "bank_transfer", label: "Transfer Bank", path: "/dapuros/app/payments/bank-transfer" }
-  ];
-
-  return (
-    <div className="p-8 space-y-6 text-left" data-testid="payment-config-page">
-      <div className="flex items-center justify-between">
-        <div>
-          <span className="label-tiny">Pembayaran</span>
-          <h1 className="font-display text-3xl font-bold mt-1 capitalize">Metode Pembayaran ({type.replace("_", " ")})</h1>
-        </div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded border border-emerald-100">
-          <ShieldCheck size={14} /> Keamanan PCI-DSS Terjamin
-        </div>
-      </div>
-
-      {/* Subtab Navigation Bar */}
-      <div className="flex flex-wrap gap-2 border-b border-[hsl(var(--border))] pb-3">
-        {subtabs.map((tab) => {
-          const isActive = type === tab.id;
-          return (
-            <Link
-              key={tab.id}
-              to={tab.path}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isActive ? "bg-[hsl(var(--primary))] text-white shadow-md" : "bg-[hsl(var(--surface))] border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"}`}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="max-w-3xl card-surface p-6">
-        <form onSubmit={handleSave} className="space-y-6">
-          <h2 className="font-display font-bold text-lg border-b border-[hsl(var(--border))] pb-3 capitalize">
-            Pengaturan Pembayaran ({type.replace("_", " ")})
-          </h2>
-          
-          {renderConfigForm()}
-
-          <div className="border-t border-[hsl(var(--border))] pt-4 flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="btn-primary py-2 px-6 flex items-center gap-2 text-sm font-semibold disabled:opacity-50"
-              data-testid="payment-config-save-btn"
-            >
-              <Save size={16} /> {saving ? "Menyimpan..." : "Simpan Pengaturan"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  return <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="payment-config-page">
+    <div><span className="label-tiny">Pembayaran</span><h1 className="font-display text-3xl font-bold mt-1">{LABELS[type] || 'Metode pembayaran'}</h1></div>
+    <SectionNavigation section="payments" active={type} />
+    <p className="text-sm max-w-3xl">Pilih metode yang ditampilkan di Kasir. Pengaturan akun gateway dan QRIS bank berada di Integrasi.</p>
+    {!supported ? <div className="card-surface p-6 space-y-4 max-w-3xl" data-testid="payment-method-unavailable">
+      <h2 className="font-display text-lg font-bold">{LABELS[type]} belum tersedia di Kasir</h2>
+      <p className="text-sm">{type === 'edc' ? 'Pemrosesan mesin EDC memerlukan integrasi resmi perangkat dan bank. Preferensi lama tetap tersimpan.' : 'Pencatatan dan konfirmasi transfer ke rekening biasa belum tersedia. Virtual Account diatur terpisah melalui gateway toko.'}</p>
+      <Link to="/dapuros/app/pos" className="btn-outline inline-flex">Buka kasir</Link>
+    </div> : <div className="card-surface p-6 max-w-3xl">
+      <ReadState loading={loading} error={error} retry={() => setAttempt(previous => previous + 1)} testid="payment-config-error" />
+      <form onSubmit={save} className="space-y-5">
+        {!loading && !error && loadedType === type && <fieldset disabled={saving} className="space-y-5">
+          <label className="flex items-center justify-between gap-4 border-b pb-4 font-semibold text-sm"><span>Tampilkan {LABELS[type]} di Kasir</span><input type="checkbox" data-testid="payment-active" checked={value.is_active === true} onChange={event => edit({ is_active: event.target.checked })} /></label>
+          {key === 'cash' && <p className="text-sm">Tunai dapat digunakan saat offline. Perangkat memakai pengaturan terakhir yang tersimpan sampai kembali terhubung.</p>}
+          {key === 'qris_bank' && <div className="space-y-3"><p className="text-sm">Gunakan QRIS bank milik toko. Staf memeriksa pembayaran di aplikasi merchant bank sebelum mengonfirmasi Lunas.</p><Link to="/dapuros/app/integrations/qris" className="btn-outline inline-flex" data-testid="payment-qris-integration">Atur QRIS bank di Integrasi</Link></div>}
+          {gatewayMethod && <>
+            <label className="block text-sm font-semibold">Gateway pembayaran<select data-testid="payment-provider" value={provider} onChange={event => edit({ provider: gateways[event.target.value]?.label || '' })} className="input-field mt-2 max-w-sm"><option value="">Pilih gateway toko</option>{Object.entries(gateways).map(([id, gateway]) => <option key={id} value={id}>{gateway.label}</option>)}</select></label>
+            {provider && !gateways[provider] && <p role="alert" className="text-sm">Penyedia tersimpan {value.provider} belum didukung. Pilih gateway toko yang tersedia.</p>}
+            {gateways[provider] && <>
+              <p className="text-sm">Transaksi diproses melalui akun {gateways[provider].label} milik toko. Aktifkan kanal yang sama di akun merchant Anda.</p>
+              {key !== 'credit_card' && <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{channels.map(name => <label key={name} className="flex items-center justify-between gap-3 border rounded-xl p-3 text-sm"><span>{name}{key === 'va' ? ' VA' : ''}</span><input type="checkbox" data-testid={'payment-channel-' + name} checked={value[channelField]?.[name] !== false} onChange={event => edit({ [channelField]: { ...value[channelField], [name]: event.target.checked } })} /></label>)}</div>}
+              {key === 'credit_card' && <p className="text-sm">Pelanggan mengisi data kartu pada halaman aman gateway. Verifikasi kartu mengikuti ketentuan gateway dan bank penerbit.</p>}
+              <Link to={'/dapuros/app/integrations/' + provider} className="btn-outline inline-flex" data-testid="payment-provider-integration">Atur integrasi {gateways[provider].label}</Link>
+            </>}
+          </>}
+          {policy && <p role="status" className="text-sm rounded-xl border p-3" data-testid="payment-readiness">{!policy.displayed ? 'Tidak ditampilkan di Kasir.' : policy.enabled ? 'Ditampilkan di Kasir. Status ini berdasarkan kelengkapan pengaturan; uji merchant diperlukan untuk memastikan kanal aktif.' : 'Ditampilkan, tetapi belum dapat dipakai: ' + policy.reason}</p>}
+        </fieldset>}
+        <button type="submit" disabled={loading || loadedType !== type || !!error || saving} className="btn-primary disabled:opacity-50" data-testid="payment-config-save-btn"><Save size={16} />{saving ? 'Menyimpan…' : 'Simpan Pengaturan'}</button>
+      </form>
+    </div>}
+  </div>;
 }

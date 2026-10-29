@@ -1,3 +1,6 @@
+import { useAuth } from "@/auth/AuthContext";
+import SectionNavigation from "@/navigation/SectionNavigation";
+import SubscriptionSettings from "./SubscriptionSettings";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/api/client";
@@ -5,10 +8,10 @@ import { Save, Printer, UserPlus } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 const DEFAULT_SETTINGS = {
-  general: { store_name: "DapurOS Master Demo Store", currency: "IDR", timezone: "Asia/Jakarta" },
-  store: { legal_name: "PT DagangOS Jaya F&B", npwd: "31.740.123.4-015.000" },
-  receipt: { header_text: "Selamat Datang di DapurOS Cafe & Resto", footer_text: "Terima Kasih Atas Kunjungan Anda!", show_logo: true, show_cashier: true },
-  printer: { mode: "local", default_printer: "Thermal 80mm Kitchen", paper_size: "80mm", auto_print: true, printer_ip: "", printer_port: 9100, bridge_port: 9899 }
+  general: { store_name: "", currency: "IDR", timezone: "Asia/Jakarta" },
+  store: { legal_name: "", npwd: "" },
+  receipt: { header_text: "Selamat Datang di DapurOS POS Store", footer_text: "Terima Kasih Atas Kunjungan Anda!", show_logo: true, show_cashier: true },
+  printer: { mode: "local", default_printer: "Thermal 80mm Kasir", paper_size: "80mm", auto_print: true, printer_ip: "", printer_port: 9100, bridge_port: 9899 }
 };
 
 export default function Settings() {
@@ -17,37 +20,41 @@ export default function Settings() {
   const rawType = params.type || pathPart || "general";
   const type = (rawType === "settings" || !rawType) ? "general" : rawType.toLowerCase();
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [sub, setSub] = useState(null);
+  const { user } = useAuth();
+  const sub = { plan: user?.plan, status: user?.subscription?.status || (user?.plan === "trial" ? "trial" : user?.plan === "expired" ? "expired" : "active") };
   const [testingPrint, setTestingPrint] = useState(false);
+  const [loaded, setLoaded] = useState(false), [loadError, setLoadError] = useState(""), [retry, setRetry] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get("/settings").then((r) => {
-      if (r.data) setSettings(r.data);
-    }).catch(() => {});
-  }, [type]);
+    if (["billing", "subscription"].includes(type)) { setLoadError(""); return; }
+    let active = true; setLoaded(false); setLoadError("");
+    api.get("/settings", { timeout: 12000 }).then((r) => {
+      if (!r.data || typeof r.data !== "object" || Array.isArray(r.data)) throw new Error("Invalid settings response");
+      const merged = { ...r.data };
+      for (const [section, defaults] of Object.entries(DEFAULT_SETTINGS)) merged[section] = { ...defaults, ...r.data[section] };
+      if (active) { setSettings(merged); setLoaded(true); }
+    }).catch(() => { if (active) setLoadError("Pengaturan belum dapat dimuat. Coba lagi sebelum menyimpan perubahan."); });
+    return () => { active = false; };
+  }, [type, retry]);
 
-  useEffect(() => {
-    if (["billing", "subscription", "license"].includes(type)) {
-      api.get("/subscription").then((r) => setSub(r.data)).catch(() => setSub(null));
-    }
-  }, [type]);
 
   const handleSave = (e) => {
     e.preventDefault();
+    if (!loaded || saving) return;
+    setSaving(true);
     api.post("/settings", settings).then(() => {
       toast.success(`Pengaturan ${type.toUpperCase()} berhasil disimpan!`);
     }).catch((err) => {
       const msg = err?.response?.data?.detail || "Gagal terhubung ke server.";
-      toast.error(`Gagal menyimpan pengaturan ${type.toUpperCase()}: ${msg}`);
-    });
+      toast.error(`Gagal menyimpan pengaturan ${type.toUpperCase()}: ${typeof msg === "string" ? msg : "Periksa data pengaturan."}`);
+    }).finally(() => setSaving(false));
   };
 
   const handleTestPrint = async () => {
     const mode = settings?.printer?.mode || "local";
     if (mode === "local") {
-      // Mode A (local/USB): render the print-only receipt template below and hand off to
-      // the browser's own print dialog (works with any USB/shared thermal or regular printer
-      // already installed on this PC — no network/bridge needed).
+      // Mode A (local/USB): print via the browser's own print dialog.
       window.print();
       return;
     }
@@ -86,7 +93,7 @@ export default function Settings() {
     }
   };
 
-  if (!settings) return <div className="p-8 text-center text-xs text-[hsl(var(--muted))]">Memuat data pengaturan...</div>;
+  if (!settings) return <div className="p-4 sm:p-6 lg:p-8 text-center text-xs text-[hsl(var(--muted))]">Memuat data pengaturan...</div>;
 
   const renderForm = () => {
     switch (type) {
@@ -195,6 +202,7 @@ export default function Settings() {
         );
 
       case "printer":
+        if (window.DapurOSDevice?.configurePrinter) return <div className="card-surface p-5 space-y-4" data-testid="android-printer-settings"><h2 className="font-display text-xl">Printer struk Android</h2><p>Pilih printer Bluetooth yang sudah dipasangkan atau printer USB melalui OTG, lalu atur kertas 58 mm atau 80 mm. Printer tersimpan di perangkat ini dan dapat dipakai untuk struk tunai offline.</p><div className="flex gap-3 flex-wrap"><button type="button" className="btn-primary" onClick={() => window.DapurOSDevice.configurePrinter()} data-testid="configure-android-printer"><Printer size={16} /> Pilih printer</button><button type="button" className="btn-outline" onClick={() => window.DapurOSDevice.testPrinter()} data-testid="test-android-printer">Cetak contoh</button></div><p className="text-xs text-[#52674b]">Gunakan printer struk ESC/POS Bluetooth Classic atau USB printer-class. Printer BLE dan protokol khusus memerlukan dukungan model tersendiri.</p></div>;
         return (
           <div className="space-y-4">
             <div className="flex flex-col space-y-1">
@@ -202,15 +210,16 @@ export default function Settings() {
               <select
                 value={settings.printer.mode || "local"}
                 onChange={(e) => setSettings({ ...settings, printer: { ...settings.printer, mode: e.target.value } })}
-                className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
+                className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm max-w-xs"
               >
                 <option value="local">Lokal / USB (dialog cetak browser)</option>
                 <option value="network">Jaringan / Network (ESC-POS, butuh Printer Bridge)</option>
               </select>
-              <p className="text-[10px] text-[hsl(var(--muted))] mt-1">
+              <p className="text-[11px] text-[hsl(var(--muted))] mt-1">
                 Mode Jaringan mengirim struk langsung ke printer thermal via jaringan lokal toko. Ini butuh aplikasi kecil "Printer Bridge" berjalan di komputer kasir Anda — lihat folder <code>printer-bridge/</code> di instalasi DapurOS Anda untuk cara menjalankannya. Browser dan server cloud tidak bisa langsung terhubung ke printer di jaringan lokal toko, jadi bridge ini yang menjembataninya.
               </p>
             </div>
+
             <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Printer Default Utama</label>
               <input
@@ -245,7 +254,7 @@ export default function Settings() {
             </div>
 
             {settings.printer.mode === "network" && (
-              <div className="grid grid-cols-3 gap-4 p-3 rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))]">
+              <div className="grid grid-cols-3 gap-4 p-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))]">
                 <div className="flex flex-col space-y-1">
                   <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">IP Address Printer</label>
                   <input
@@ -266,7 +275,7 @@ export default function Settings() {
                   />
                 </div>
                 <div className="flex flex-col space-y-1">
-                  <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Port Printer Bridge</label>
+                  <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Port Bridge (Lokal)</label>
                   <input
                     type="number"
                     value={settings.printer.bridge_port || 9899}
@@ -322,127 +331,37 @@ export default function Settings() {
         );
 
       case "billing":
-      case "subscription": {
-        const PLAN_NAMES = { trial: "Free Trial", starter: "Starter", pro: "Pro", business: "Business", multibranch: "Multi-Branch" };
-        const planId = (sub?.plan || "trial").toLowerCase();
-        const planName = PLAN_NAMES[planId] || planId;
-        const isTrialPlan = planId === "trial";
-        return (
-          <div className="space-y-6" data-testid="subscription-billing-management-area">
-            <div className="p-4 rounded-xl bg-[hsl(var(--surface))] border border-[hsl(var(--border))] space-y-2 text-left">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-black uppercase text-[hsl(var(--muted))] tracking-wider">Paket Langganan Aktif</span>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 text-[10px] font-extrabold" data-testid="subscription-status-badge">
-                  ● {isTrialPlan ? "TRIAL" : "AKTIF"}
-                </span>
-              </div>
-              <h3 className="font-display text-2xl font-black" data-testid="subscription-plan-title">Paket {planName}</h3>
-              {isTrialPlan && sub?.trial_ends_at && (
-                <p className="text-xs text-[hsl(var(--muted))]">Masa trial berakhir: {new Date(sub.trial_ends_at).toLocaleDateString("id-ID")}</p>
-              )}
-            </div>
-
-            <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs leading-relaxed">
-              Beli paket melalui halaman Harga dan selesaikan pembayaran di Midtrans. Membuka checkout atau pembayaran yang gagal tidak mengubah paket Anda. Aktivasi dikonfirmasi oleh tim DagangOS setelah pembayaran terverifikasi.
-            </div>
-
-            <div className="border-t border-[hsl(var(--border))] pt-4 flex justify-between items-center">
-              <Link to="/dapuros/pricing" className="text-xs font-bold text-blue-600 hover:underline" data-testid="view-pricing-matrix-link">
-                Lihat semua paket &amp; harga &rarr;
-              </Link>
-            </div>
-          </div>
-        );
-      }
+      case "subscription":
+        return <SubscriptionSettings />;
 
       default:
         return <p className="text-sm text-[hsl(var(--muted))]">Pengaturan tidak ditemukan.</p>;
     }
   };
 
-  const subtabs = [
-    { id: "general", label: "Umum", path: "/dapuros/app/settings/general" },
-    { id: "store", label: "Toko", path: "/dapuros/app/settings/store" },
-    { id: "billing", label: "Langganan & Tagihan", path: "/dapuros/app/settings/billing" },
-    { id: "receipt", label: "Struk", path: "/dapuros/app/settings/receipt" },
-    { id: "printer", label: "Printer", path: "/dapuros/app/settings/printer" },
-    { id: "users", label: "Pengguna", path: "/dapuros/app/settings/users" },
-    { id: "license", label: "Lisensi", path: "/dapuros/app/settings/license" }
-  ];
-
-  const receiptGeneral = settings.general || {};
-  const receiptCfg = settings.receipt || {};
-  const sampleReceiptItems = [
-    { name: "Contoh Produk A", quantity: 2, price: 15000, subtotal: 30000 },
-    { name: "Contoh Produk B", quantity: 1, price: 20000, subtotal: 20000 },
-  ];
 
   return (
-    <div className="p-8 space-y-6 text-left" data-testid="settings-page">
-      {/* Print-only sample receipt: hidden in normal view, shown only inside window.print()
-          for the "Mode Lokal / USB" test print button (see handleTestPrint above). */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #print-receipt-area, #print-receipt-area * { visibility: visible; }
-          #print-receipt-area { position: fixed; inset: 0; width: 80mm; margin: 0 auto; padding: 4mm; }
-        }
-      `}</style>
-      <div id="print-receipt-area" className="hidden" data-testid="print-receipt-area">
-        <div style={{ textAlign: "center", fontWeight: "bold" }}>{receiptGeneral.store_name || "Toko"}</div>
-        {receiptCfg.header_text && <div style={{ textAlign: "center" }}>{receiptCfg.header_text}</div>}
-        <hr />
-        <div>No: TEST-0001</div>
-        <div>Tgl: {new Date().toLocaleString("id-ID")}</div>
-        <hr />
-        {sampleReceiptItems.map((it, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>{it.name} ({it.quantity}x)</span>
-            <span>Rp{it.subtotal.toLocaleString("id-ID")}</span>
-          </div>
-        ))}
-        <hr />
-        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold" }}>
-          <span>TOTAL</span>
-          <span>Rp{sampleReceiptItems.reduce((a, b) => a + b.subtotal, 0).toLocaleString("id-ID")}</span>
-        </div>
-        <hr />
-        <div style={{ textAlign: "center" }}>{receiptCfg.footer_text || "Terima Kasih!"}</div>
-      </div>
-
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 text-left" data-testid="settings-page">
       <div>
         <span className="label-tiny">Pengaturan</span>
-        <h1 className="font-display text-3xl font-bold mt-1 capitalize">Pengaturan ({type})</h1>
+        <h1 className="font-display text-3xl font-bold mt-1 capitalize">{["billing", "subscription"].includes(type) ? "Langganan & Tagihan" : `Pengaturan (${type})`}</h1>
       </div>
 
-      {/* Subtab Navigation Bar */}
-      <div className="flex flex-wrap gap-2 border-b border-[hsl(var(--border))] pb-3">
-        {subtabs.map((tab) => {
-          const isActive = type === tab.id || (type === "subscription" && tab.id === "billing");
-          return (
-            <Link
-              key={tab.id}
-              to={tab.path}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isActive ? "bg-[hsl(var(--primary))] text-white shadow-md" : "bg-[hsl(var(--surface))] border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"}`}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </div>
+      <SectionNavigation section="settings" active={type === "subscription" ? "billing" : type} />
 
       <div className="max-w-3xl card-surface p-6">
+        {loadError && <div role="alert" data-testid="settings-error" className="mb-4"><p>{loadError}</p><button type="button" className="btn-outline mt-2" onClick={() => setRetry(value => value + 1)}>Coba lagi</button></div>}
         <form onSubmit={handleSave} className="space-y-6">
           <h2 className="font-display font-bold text-lg border-b border-[hsl(var(--border))] pb-3 capitalize">
-            Pengaturan Parameter ({type})
+            {["billing", "subscription"].includes(type) ? "Kelola Paket" : `Pengaturan Parameter (${type})`}
           </h2>
           
           {renderForm()}
 
-          {type !== "users" && type !== "license" && type !== "billing" && type !== "subscription" && (
+          {type !== "users" && type !== "license" && type !== "billing" && type !== "subscription" && !(type === "printer" && window.DapurOSDevice?.configurePrinter) && (
             <div className="border-t border-[hsl(var(--border))] pt-4 flex justify-end">
-              <button type="submit" className="btn-primary py-2 px-6 flex items-center gap-2 text-sm font-semibold">
-                <Save size={16} /> Simpan Pengaturan
+              <button type="submit" disabled={!loaded || saving} className="btn-primary py-2 px-6 flex items-center gap-2 text-sm font-semibold disabled:opacity-50">
+                <Save size={16} /> {saving ? "Menyimpan…" : "Simpan Pengaturan"}
               </button>
             </div>
           )}

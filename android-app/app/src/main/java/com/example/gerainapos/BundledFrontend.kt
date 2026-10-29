@@ -1,0 +1,24 @@
+package com.example.dapurospos
+
+import android.content.res.AssetManager
+import android.net.Uri
+import android.webkit.WebResourceResponse
+
+/** Package the actual UI so an authenticated cashier can restart without a network. */
+class BundledFrontend(private val assets: AssetManager) {
+    fun intercept(uri: Uri): WebResourceResponse? {
+        if (uri.scheme != "https" || uri.host != "dagangos.com" || uri.port !in setOf(-1, 443)) return null
+        val path = uri.path ?: return null
+        if (path.contains("..") || path.contains('\\')) return null
+        val asset = when {
+            path == "/dapuros/login" || path == "/dapuros/register" || path.startsWith("/dapuros/app/") || path == "/dapuros/app" -> "frontend/index.html"
+            path.startsWith("/dapuros/static/") -> "frontend/" + path.removePrefix("/dapuros/")
+            path in setOf("/dapuros/icon-192.png", "/dapuros/icon-512.png", "/dapuros/favicon.ico") -> "frontend/" + path.removePrefix("/dapuros/")
+            path in setOf("/assets/brand/dapuros-icon.png", "/assets/brand/dapuros-icon.png") -> "frontend" + path
+            path in setOf("/favicon.ico", "/favicon-16x16.png", "/favicon-32x32.png", "/apple-touch-icon.png", "/site.webmanifest") -> "frontend" + path
+            else -> return null
+        }
+        val mime = when (asset.substringAfterLast('.')) { "html" -> "text/html"; "js" -> "application/javascript"; "css" -> "text/css"; "png" -> "image/png"; "svg" -> "image/svg+xml"; "woff2" -> "font/woff2"; "ico" -> "image/x-icon"; else -> "application/octet-stream" }
+        return runCatching { WebResourceResponse(mime, if (mime.startsWith("text/") || mime.contains("javascript")) "UTF-8" else null, 200, "OK", mapOf("Cache-Control" to "no-cache", "X-Content-Type-Options" to "nosniff"), assets.open(asset)) }.getOrNull()
+    }
+}

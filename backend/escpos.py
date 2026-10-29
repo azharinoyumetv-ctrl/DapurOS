@@ -95,6 +95,8 @@ def build_receipt_escpos(order: dict, settings: Optional[dict] = None) -> bytes:
     buf += _kv_line("Subtotal", order.get("subtotal", 0))
     if order.get("discount"):
         buf += _kv_line("Diskon", -abs(order.get("discount") or 0))
+    if order.get("service_charge"):
+        buf += _kv_line("Layanan (5%)", order["service_charge"])
     if order.get("tax_amount"):
         buf += _kv_line(f"Pajak ({order.get('tax_percent', 0)}%)", order.get("tax_amount", 0))
     buf += ESC_BOLD_ON

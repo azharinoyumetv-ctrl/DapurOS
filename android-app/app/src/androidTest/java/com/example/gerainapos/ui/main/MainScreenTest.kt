@@ -1,4 +1,4 @@
-package com.example.gerainapos.ui.main
+package com.example.dapurospos.ui.main
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -7,7 +7,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/** UI tests for [com.example.gerainapos.ui.main.MainScreen]. */
+/** UI tests for [com.example.dapurospos.ui.main.MainScreen]. */
 class MainScreenTest {
 
   @get:Rule val composeTestRule = createAndroidComposeRule<ComponentActivity>()

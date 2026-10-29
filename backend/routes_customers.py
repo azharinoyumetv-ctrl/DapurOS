@@ -1,3 +1,4 @@
+from permissions import require_permission
 """Customer CRM, Memberships, Loyalty Rules, and Debt Receivables/Payables routes."""
 import uuid
 from typing import List
@@ -15,13 +16,13 @@ router = APIRouter(tags=["customers_debt"])
 
 # ---------- Customers (Pro-tier feature in DapurOS -- unlike GerainaOS, the "Pelanggan" nav
 # parent itself is Pro here, see AppLayout.jsx minPlan) ----------
-@router.get("/api/customers", response_model=List[Customer])
+@router.get("/api/customers", response_model=List[Customer], dependencies=[Depends(require_permission('customers.read'))])
 async def list_customers(user: dict = Depends(require_plan("pro"))):
     db = get_db()
     cursor = db.customers.find({"store_id": user["store_id"]}, {"_id": 0}).sort("name", 1)
     return await cursor.to_list(length=200)
 
-@router.post("/api/customers", response_model=Customer)
+@router.post("/api/customers", response_model=Customer, dependencies=[Depends(require_permission('customers.write'))])
 async def create_customer(payload: CustomerBase, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     existing = await db.customers.find_one({"store_id": user["store_id"], "phone": payload.phone} if payload.phone else {"_id": None})
@@ -42,7 +43,7 @@ async def create_customer(payload: CustomerBase, user: dict = Depends(require_pl
     doc.pop("_id", None)
     return doc
 
-@router.put("/api/customers/{cust_id}", response_model=Customer)
+@router.put("/api/customers/{cust_id}", response_model=Customer, dependencies=[Depends(require_permission('customers.write'))])
 async def update_customer(cust_id: str, payload: CustomerBase, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     res = await db.customers.find_one_and_update(
@@ -62,7 +63,7 @@ async def update_customer(cust_id: str, payload: CustomerBase, user: dict = Depe
         raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
     return res
 
-@router.delete("/api/customers/{cust_id}")
+@router.delete("/api/customers/{cust_id}", dependencies=[Depends(require_permission('customers.write'))])
 async def delete_customer(cust_id: str, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     res = await db.customers.delete_one({"id": cust_id, "store_id": user["store_id"]})
@@ -71,13 +72,13 @@ async def delete_customer(cust_id: str, user: dict = Depends(require_plan("pro")
     return {"ok": True}
 
 # ---------- Memberships (Business-tier feature -- see AppLayout.jsx minPlan) ----------
-@router.get("/api/customers/memberships", response_model=List[Membership])
+@router.get("/api/customers/memberships", response_model=List[Membership], dependencies=[Depends(require_permission('customers.read'))])
 async def list_memberships(user: dict = Depends(require_plan("business"))):
     db = get_db()
     cursor = db.memberships.find({"store_id": user["store_id"]}, {"_id": 0}).sort("min_points", 1)
     return await cursor.to_list(length=100)
 
-@router.post("/api/customers/memberships", response_model=Membership)
+@router.post("/api/customers/memberships", response_model=Membership, dependencies=[Depends(require_permission('customers.write'))])
 async def create_membership(payload: MembershipBase, user: dict = Depends(require_plan("business"))):
     db = get_db()
     existing = await db.memberships.find_one({"store_id": user["store_id"], "name": payload.name})
@@ -96,7 +97,7 @@ async def create_membership(payload: MembershipBase, user: dict = Depends(requir
     return doc
 
 # ---------- Loyalty Rules (Business-tier feature -- see AppLayout.jsx minPlan) ----------
-@router.get("/api/customers/loyalty", response_model=LoyaltyRules)
+@router.get("/api/customers/loyalty", response_model=LoyaltyRules, dependencies=[Depends(require_permission('customers.read'))])
 async def get_loyalty_rules(user: dict = Depends(require_plan("business"))):
     db = get_db()
     rules = await db.loyalty_rules.find_one({"store_id": user["store_id"]}, {"_id": 0})
@@ -105,7 +106,7 @@ async def get_loyalty_rules(user: dict = Depends(require_plan("business"))):
         return LoyaltyRules()
     return rules
 
-@router.post("/api/customers/loyalty", response_model=LoyaltyRules)
+@router.post("/api/customers/loyalty", response_model=LoyaltyRules, dependencies=[Depends(require_permission('customers.write'))])
 async def save_loyalty_rules(payload: LoyaltyRules, user: dict = Depends(require_plan("business"))):
     db = get_db()
     doc = payload.model_dump()
@@ -118,13 +119,13 @@ async def save_loyalty_rules(payload: LoyaltyRules, user: dict = Depends(require
     return payload
 
 # ---------- Debt Receivables (Piutang) -- Pro-tier feature, see AppLayout.jsx minPlan ----------
-@router.get("/api/debt/receivables", response_model=List[DebtReceivable])
+@router.get("/api/debt/receivables", response_model=List[DebtReceivable], dependencies=[Depends(require_permission('customers.read'))])
 async def list_receivables(user: dict = Depends(require_plan("pro"))):
     db = get_db()
     cursor = db.debt_receivables.find({"store_id": user["store_id"]}, {"_id": 0})
     return await cursor.to_list(length=100)
 
-@router.post("/api/debt/receivables", response_model=DebtReceivable)
+@router.post("/api/debt/receivables", response_model=DebtReceivable, dependencies=[Depends(require_permission('customers.write'))])
 async def create_receivable(payload: DebtReceivableCreate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     doc = {
@@ -142,7 +143,7 @@ async def create_receivable(payload: DebtReceivableCreate, user: dict = Depends(
     doc.pop("_id", None)
     return doc
 
-@router.put("/api/debt/receivables/{receivable_id}", response_model=DebtReceivable)
+@router.put("/api/debt/receivables/{receivable_id}", response_model=DebtReceivable, dependencies=[Depends(require_permission('customers.write'))])
 async def update_receivable(receivable_id: str, payload: DebtReceivableUpdate, user: dict = Depends(require_plan("pro"))):
     """Record a payment/settlement against an existing receivable (partial or full).
 
@@ -167,13 +168,13 @@ async def update_receivable(receivable_id: str, payload: DebtReceivableUpdate, u
     return res
 
 # ---------- Debt Payables (Hutang) -- Pro-tier feature, see AppLayout.jsx minPlan ----------
-@router.get("/api/debt/payables", response_model=List[DebtPayable])
+@router.get("/api/debt/payables", response_model=List[DebtPayable], dependencies=[Depends(require_permission('customers.read'))])
 async def list_payables(user: dict = Depends(require_plan("pro"))):
     db = get_db()
     cursor = db.debt_payables.find({"store_id": user["store_id"]}, {"_id": 0})
     return await cursor.to_list(length=100)
 
-@router.post("/api/debt/payables", response_model=DebtPayable)
+@router.post("/api/debt/payables", response_model=DebtPayable, dependencies=[Depends(require_permission('customers.write'))])
 async def create_payable(payload: DebtPayableCreate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     doc = {
@@ -190,7 +191,7 @@ async def create_payable(payload: DebtPayableCreate, user: dict = Depends(requir
     doc.pop("_id", None)
     return doc
 
-@router.put("/api/debt/payables/{payable_id}", response_model=DebtPayable)
+@router.put("/api/debt/payables/{payable_id}", response_model=DebtPayable, dependencies=[Depends(require_permission('customers.write'))])
 async def update_payable(payable_id: str, payload: DebtPayableUpdate, user: dict = Depends(require_plan("pro"))):
     """Record a payment/settlement against an existing payable (partial or full). Same
     missing-endpoint bug as update_receivable above, fixed the same way."""

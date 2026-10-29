@@ -1,7 +1,8 @@
-"""Account-bound subscriptions; the portal verifies Midtrans using its existing key.
+"""Account-bound prepaid subscriptions; the portal verifies its Xendit invoice.
 
-Keep this module identical in both product backends. A browser redirect or webhook
-body never grants access: read payment truth from the fixed portal payment service.
+Shared payment proof rules apply to both products. DapurOS additionally exposes
+active-term details for package-change confirmation. A redirect or webhook body
+never grants access: read payment truth from the fixed portal payment service.
 """
 import calendar
 import re
@@ -33,12 +34,17 @@ def term_end(start, period):
 
 
 async def prepare_order(payload, user):
+    if payload.get('kind') == 'addon':
+        from addon_billing import prepare
+        return await prepare(payload, user)
+    if payload.get('kind') is not None:
+        raise HTTPException(400, 'Jenis pesanan tidak valid')
     module = user["current_module"]
     tier, period, order_id = payload.get("tier"), payload.get("period"), payload.get("orderId")
     if tier not in PRICES.get(module, {}) or period not in ("monthly", "yearly") or not isinstance(order_id, str) or not re.fullmatch(rf"DG-{module}-[a-f0-9]{{32}}", order_id):
         raise HTTPException(400, "Pilihan paket tidak valid")
     active = subscription_for(user, module)
-    if active and active["active"] and active["tier"] == tier:
+    if active and active["active"] and active["tier"] == tier and (module not in ("geraina", "dapuros") or active.get("period") == period):
         raise HTTPException(409, detail={"code": "subscription_active", "subscription": active})
     record = {
         "_id": order_id, "owner_id": user["id"], "store_id": user["store_id"],
@@ -56,7 +62,10 @@ async def prepare_order(payload, user):
         if not existing or any(existing.get(key) != record[key] for key in ("owner_id", "store_id", "module", "tier", "period", "amount")):
             raise HTTPException(409, "Pesanan tidak cocok dengan akun ini")
         record = existing
-    return {**{key: record[key] for key in ("owner_id", "store_id", "module", "tier", "period", "amount")}, "order_id": order_id, "email": user["email"]}
+    result = {**{key: record[key] for key in ("owner_id", "store_id", "module", "tier", "period", "amount")}, "order_id": order_id, "email": user["email"]}
+    if module in ("geraina", "dapuros") and active and active["active"]:
+        result["active_subscription"] = {key: active.get(key) for key in ("tier", "period", "expires_at")}
+    return result
 
 
 async def attach_reference(order_id, receipt, user):
@@ -96,11 +105,16 @@ async def reconcile_order(order_id, *, force=True):
     except (httpx.HTTPError, ValueError, TypeError):
         raise HTTPException(503, "Status pembayaran belum dapat diperiksa")
     expected = {"orderId": order["_id"], "ownerId": order["owner_id"], "storeId": order["store_id"], **{key: order[key] for key in ("module", "tier", "period", "amount")}}
+    if order.get('kind') == 'addon':
+        expected.update(kind='addon', addonId=order['addon_id'], renewalId=order.get('renewal_id'))
     if any(payment.get(key) != value for key, value in expected.items()):
         raise HTTPException(502, "Konfirmasi pembayaran tidak cocok dengan pesanan")
     state = payment.get("status")
     if state not in ("paid", "pending", "failed", "refunded"):
         raise HTTPException(503, "Pembayaran belum terverifikasi")
+    if order.get('kind') == 'addon':
+        from addon_billing import apply_payment
+        return await apply_payment(order, payment)
     field = f"subscriptions.{order['module']}"
     activation = order.get("activation", "pending")
     expiry = order.get("expires_at")
@@ -151,7 +165,7 @@ async def reconcile_order(order_id, *, force=True):
 
 async def reconcile_pending(user, module):
     # Login/focus can recover a missed webhook without repeatedly checking every API request.
-    orders = await get_db().subscription_orders.find({"owner_id": user["id"], "module": module, "receipt": {"$exists": True}, "status": "pending"}).sort("created_at", -1).limit(1).to_list(length=1)
+    orders = await get_db().subscription_orders.find({"owner_id": user["id"], "module": module, "kind": {"$ne": "addon"}, "receipt": {"$exists": True}, "status": "pending"}).sort("created_at", -1).limit(1).to_list(length=1)
     for order in orders:
         try:
             await reconcile_order(order["_id"], force=False)

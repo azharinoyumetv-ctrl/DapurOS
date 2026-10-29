@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import api from "@/api/client";
 import { Plus, Edit3, Trash2, X, AlertCircle, RefreshCw, Clipboard } from "lucide-react";
 
@@ -9,6 +9,7 @@ export default function Ingredients() {
   const [formOpen, setFormOpen] = useState(false);
   const [selectedIng, setSelectedIng] = useState(null);
   const [form, setForm] = useState({ name: "", stock: 0, safety_stock: 0, unit: "g" });
+  const writeLock = useRef(false);
   const [saving, setSaving] = useState(false);
 
   // Spoilage log state
@@ -48,32 +49,10 @@ export default function Ingredients() {
   };
 
   const loadIngredients = async () => {
-    setLoading(true);
-    setErr("");
-    try {
-      const res = await api.get("/ingredients");
-      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-        setIngredients(res.data);
-      } else {
-        setIngredients([
-          { id: "ing-1", name: "Biji Kopi Arabika Gayo", stock: 1500, safety_stock: 500, unit: "g" },
-          { id: "ing-2", name: "Fresh Milk UHT", stock: 8000, safety_stock: 2000, unit: "ml" },
-          { id: "ing-3", name: "Saus Pizza Homemade", stock: 2500, safety_stock: 1000, unit: "g" },
-          { id: "ing-4", name: "Keju Mozzarella", stock: 1800, safety_stock: 500, unit: "g" },
-          { id: "ing-5", name: "Daging Sapi Slice", stock: 50, safety_stock: 15, unit: "pcs" },
-        ]);
-      }
-    } catch (e) {
-      setIngredients([
-        { id: "ing-1", name: "Biji Kopi Arabika Gayo", stock: 1500, safety_stock: 500, unit: "g" },
-        { id: "ing-2", name: "Fresh Milk UHT", stock: 8000, safety_stock: 2000, unit: "ml" },
-        { id: "ing-3", name: "Saus Pizza Homemade", stock: 2500, safety_stock: 1000, unit: "g" },
-        { id: "ing-4", name: "Keju Mozzarella", stock: 1800, safety_stock: 500, unit: "g" },
-        { id: "ing-5", name: "Daging Sapi Slice", stock: 50, safety_stock: 15, unit: "pcs" },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true);setErr('');
+    try {const res=await api.get('/ingredients');if(!Array.isArray(res.data))throw Error('Invalid ingredients response');setIngredients(res.data);}
+    catch {setErr('Bahan baku belum dapat dimuat. Periksa koneksi lalu coba lagi.');}
+    finally {setLoading(false);}
   };
 
   useEffect(() => {
@@ -99,51 +78,20 @@ export default function Ingredients() {
     setFormOpen(true);
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setErr("");
-    const payload = {
-      name: form.name,
-      stock: parseFloat(form.stock) || 0,
-      safety_stock: parseFloat(form.safety_stock) || 0,
-      unit: form.unit,
-    };
-
-    if (selectedIng) {
-      // Edit existing ingredient
-      const updatedIng = { ...selectedIng, ...payload };
-      setIngredients((prev) => prev.map((item) => (item.id === selectedIng.id ? updatedIng : item)));
-      try {
-        await api.put(`/ingredients/${selectedIng.id}`, payload);
-      } catch (e) {
-        if (process.env.NODE_ENV !== "production") console.warn("[Ingredients] Put fallback to local state");
-      }
-    } else {
-      // Add new ingredient
-      const newIng = { id: `ing-${Date.now()}`, ...payload };
-      setIngredients((prev) => [newIng, ...prev]);
-      try {
-        const res = await api.post("/ingredients", payload);
-        if (res.data && res.data.id) {
-          setIngredients((prev) => prev.map((item) => (item.id === newIng.id ? res.data : item)));
-        }
-      } catch (e) {
-        if (process.env.NODE_ENV !== "production") console.warn("[Ingredients] Post fallback to local state");
-      }
-    }
-    setFormOpen(false);
-    setSaving(false);
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Apakah Anda yakin ingin menghapus bahan baku ini?")) return;
-    setIngredients((prev) => prev.filter((item) => item.id !== id));
+  const handleSave = async e => {
+    e.preventDefault();if(writeLock.current)return;writeLock.current=true;setSaving(true);setErr('');
+    const payload={name:form.name,stock:Number(form.stock),safety_stock:Number(form.safety_stock),unit:form.unit};
     try {
-      await api.delete(`/ingredients/${id}`);
-    } catch (e) {
-      if (process.env.NODE_ENV !== "production") console.warn("[Ingredients] Delete fallback to local state");
-    }
+      const res=selectedIng?await api.put(`/ingredients/${selectedIng.id}`,payload):await api.post('/ingredients',payload);
+      if(!res.data?.id)throw Error('Jawaban penyimpanan tidak valid.');
+      await loadIngredients();setFormOpen(false);
+    } catch(error){setErr(typeof error?.response?.data?.detail==='string'?error.response.data.detail:'Perubahan belum tersimpan. Periksa koneksi lalu coba lagi.');}
+    finally{writeLock.current=false;setSaving(false);}
+  };
+  const handleDelete = async id => {
+    if(!window.confirm('Apakah Anda yakin ingin menghapus bahan baku ini?'))return;
+    try{await api.delete(`/ingredients/${id}`);setIngredients(rows=>rows.filter(row=>row.id!==id));}
+    catch{setErr('Bahan baku belum dihapus. Periksa koneksi lalu coba lagi.');}
   };
 
   const handleWasteSubmit = async (e) => {
@@ -178,29 +126,7 @@ export default function Ingredients() {
       setWasteOpen(false);
       setWasteForm({ ingredientId: "", qty: 0, reason: SPOILAGE_REASONS[0] });
     } catch (e2) {
-      const detail = e2?.response?.data?.detail;
-      if (detail) {
-        setErr(typeof detail === "string" ? detail : "Gagal mencatat bahan terbuang");
-      } else {
-        // Mode offline / demo: catat secara lokal agar operasional tetap berjalan
-        const localLog = {
-          id: `spl-${Date.now()}`,
-          ingredient_id: ing.id,
-          ingredient_name: ing.name,
-          unit: ing.unit,
-          quantity_lost: wasteQty,
-          reason: wasteForm.reason,
-          created_at: new Date().toISOString(),
-        };
-        setIngredients((prev) =>
-          prev.map((item) =>
-            item.id === ing.id ? { ...item, stock: Math.max(0, item.stock - wasteQty) } : item
-          )
-        );
-        setSpoilageLogs((prev) => [localLog, ...(Array.isArray(prev) ? prev : [])]);
-        setWasteOpen(false);
-        setWasteForm({ ingredientId: "", qty: 0, reason: SPOILAGE_REASONS[0] });
-      }
+      setErr(typeof e2?.response?.data?.detail === 'string' ? e2.response.data.detail : 'Bahan terbuang belum dicatat. Stok tidak diubah. Periksa koneksi lalu coba lagi.');
     } finally {
       setSaving(false);
     }
@@ -264,10 +190,10 @@ export default function Ingredients() {
                   <tr key={ing.id} className="hover:bg-[hsl(var(--secondary))]/20">
                     <td className="p-4 font-bold text-[hsl(var(--foreground))]">{ing.name}</td>
                     <td className="p-4 text-right font-mono font-bold text-slate-800">
-                      {ing.stock.toLocaleString()} {ing.unit}
+                      {Number(ing.stock || 0).toLocaleString()} {ing.unit}
                     </td>
                     <td className="p-4 text-right font-mono text-[hsl(var(--muted))]">
-                      {ing.safety_stock.toLocaleString()} {ing.unit}
+                      {Number(ing.safety_stock || 0).toLocaleString()} {ing.unit}
                     </td>
                     <td className="p-4 text-center">
                       {isLow ? (

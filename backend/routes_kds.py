@@ -1,3 +1,4 @@
+from permissions import require_permission
 """Kitchen Display System (KDS) routes for DapurOS."""
 import uuid
 from typing import List, Optional
@@ -17,7 +18,7 @@ def _strip_id(d: dict) -> dict:
     return d
 
 
-@router.get("", response_model=List[KdsTicket])
+@router.get("", response_model=List[KdsTicket], dependencies=[Depends(require_permission('pos.use'))])
 async def list_kds_tickets(
     station: Optional[str] = Query(None),
     user: dict = Depends(get_current_user)
@@ -48,7 +49,7 @@ async def list_kds_tickets(
     return tickets
 
 
-@router.put("/{ticket_id}/status")
+@router.put("/{ticket_id}/status", dependencies=[Depends(require_permission('pos.use'))])
 async def update_ticket_status(
     ticket_id: str,
     status: str = Body(..., embed=True), # Pending | Cooking | Ready | Served

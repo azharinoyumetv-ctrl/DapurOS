@@ -104,8 +104,12 @@ def _thermal_pdf(order: dict, store: dict) -> bytes:
         c.drawString(4 * mm, y, "Diskon")
         c.drawRightString(width - 4 * mm, y, f"-{_fmt_idr(order['discount'])}")
         y -= 3.5 * mm
+    if order.get("service_charge", 0):
+        c.drawString(4 * mm, y, "Layanan (5%)")
+        c.drawRightString(width - 4 * mm, y, _fmt_idr(order["service_charge"]))
+        y -= 4 * mm
     if order.get("tax_amount", 0):
-        c.drawString(4 * mm, y, f"PPN {order.get('tax_percent',0)}%")
+        c.drawString(4 * mm, y, ('PB1 (10%)' if order.get('service_charge') else f"PPN {order.get('tax_percent',0)}%"))
         c.drawRightString(width - 4 * mm, y, _fmt_idr(order["tax_amount"]))
         y -= 3.5 * mm
 
@@ -245,8 +249,10 @@ def _invoice_pdf(order: dict, store: dict) -> bytes:
     ]
     if order.get("discount", 0):
         rows.append(["Diskon", f"-{_fmt_idr(order['discount'])}"])
+    if order.get("service_charge", 0):
+        rows.append(["Layanan (5%)", _fmt_idr(order["service_charge"])])
     if order.get("tax_amount", 0):
-        rows.append([f"PPN {order.get('tax_percent',0)}%", _fmt_idr(order["tax_amount"])])
+        rows.append(["PB1 (10%)" if order.get("service_charge") else f"PPN {order.get('tax_percent',0)}%", _fmt_idr(order["tax_amount"])])
     rows.append(["TOTAL", _fmt_idr(order.get("total", 0))])
 
     totals = Table(rows, colWidths=[40 * mm, 30 * mm], hAlign="RIGHT")

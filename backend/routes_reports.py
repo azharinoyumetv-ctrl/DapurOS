@@ -1,3 +1,4 @@
+from permissions import require_permission
 """Reporting endpoints: profit (Laba Rugi), cashflow (Arus Kas), inventory turnover, and
 expense CRUD. Numbers here are computed from the real orders/products/expenses collections --
 no hardcoded demo series like the frontend used to render.
@@ -49,7 +50,7 @@ def _parse_iso(s: Optional[str]) -> Optional[datetime]:
 
 
 # ---------- Expenses (part of the Pro-tier Laporan module -- see AppLayout.jsx minPlan) ----------
-@router.get("/expenses")
+@router.get("/expenses", dependencies=[Depends(require_permission('reports.read'))])
 async def list_expenses(
     user: dict = Depends(require_plan("pro")),
     date_from: Optional[str] = None,
@@ -68,7 +69,7 @@ async def list_expenses(
     return await cursor.to_list(length=500)
 
 
-@router.post("/expenses")
+@router.post("/expenses", dependencies=[Depends(require_permission('reports.write'))])
 async def create_expense(payload: ExpenseCreate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     expense = Expense(**payload.model_dump(), store_id=user["store_id"], created_by=user.get("email"))
@@ -78,7 +79,7 @@ async def create_expense(payload: ExpenseCreate, user: dict = Depends(require_pl
     return doc
 
 
-@router.delete("/expenses/{expense_id}")
+@router.delete("/expenses/{expense_id}", dependencies=[Depends(require_permission('reports.write'))])
 async def delete_expense(expense_id: str, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     res = await db.expenses.delete_one({"id": expense_id, "store_id": user["store_id"]})
@@ -88,7 +89,7 @@ async def delete_expense(expense_id: str, user: dict = Depends(require_plan("pro
 
 
 # ---------- Profit (Laba Rugi) ----------
-@router.get("/reports/profit")
+@router.get("/reports/profit", dependencies=[Depends(require_permission('reports.read'))])
 async def report_profit(user: dict = Depends(require_plan("pro")), months: int = Query(6, ge=1, le=24)):
     db = get_db()
     store_id = user["store_id"]
@@ -168,7 +169,7 @@ async def report_profit(user: dict = Depends(require_plan("pro")), months: int =
 
 
 # ---------- Cashflow (Arus Kas) ----------
-@router.get("/reports/cashflow")
+@router.get("/reports/cashflow", dependencies=[Depends(require_permission('reports.read'))])
 async def report_cashflow(user: dict = Depends(require_plan("pro")), weeks: int = Query(4, ge=1, le=12)):
     db = get_db()
     store_id = user["store_id"]
@@ -225,7 +226,7 @@ async def report_cashflow(user: dict = Depends(require_plan("pro")), weeks: int 
 
 
 # ---------- Inventory turnover ----------
-@router.get("/reports/inventory/turnover")
+@router.get("/reports/inventory/turnover", dependencies=[Depends(require_permission('reports.read'))])
 async def report_inventory_turnover(user: dict = Depends(require_plan("pro")), days: int = Query(30, ge=1, le=365)):
     db = get_db()
     store_id = user["store_id"]

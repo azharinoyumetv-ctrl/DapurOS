@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional, Any, Annotated, Literal
 import uuid
-from pydantic import BaseModel, EmailStr, Field, BeforeValidator, ConfigDict
+from pydantic import model_validator, AliasChoices, BaseModel, EmailStr, Field, BeforeValidator, ConfigDict
 
 
 def _to_str(v: Any) -> str:
@@ -97,28 +97,47 @@ class Product(ProductBase):
 
 # ---------- POS / Orders ----------
 class OrderLineItem(BaseModel):
-    product_id: str
-    name: str
-    price: float
-    quantity: int = Field(ge=1)
-    subtotal: float
-    note: Optional[str] = None
+    product_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    price: float = Field(ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    quantity: int = Field(ge=1, le=100000)
+    subtotal: float = Field(ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    unit_cost: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+
+    @model_validator(mode='after')
+    def consistent_subtotal(self):
+        from decimal import Decimal, ROUND_HALF_UP
+        calculated = (Decimal(str(self.price)) * self.quantity).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        if abs(Decimal(str(self.subtotal)) - calculated) > Decimal('0.000001'):
+            raise ValueError('Subtotal produk tidak cocok dengan harga dan jumlah.')
+        self.subtotal = float(calculated)
+        return self
+    note: Optional[str] = Field(default=None, max_length=1000)
     modifiers: Optional[dict] = None
 
 
+
 class OrderCreate(BaseModel):
-    items: List[OrderLineItem]
-    payment_method: str  # cash | qris | ewallet
-    ewallet_channel: Optional[str] = None  # ID_OVO | ID_DANA | ID_SHOPEEPAY | ID_LINKAJA
-    customer_name: Optional[str] = None
-    customer_phone: Optional[str] = None
-    customer_email: Optional[str] = None
-    discount: float = 0
-    tax_percent: float = 0
-    cash_received: Optional[float] = None
-    note: Optional[str] = None
-    session_id: Optional[str] = None
-    dining_option: Optional[str] = "Dine-In"
+    items: List[OrderLineItem] = Field(min_length=1, max_length=500)
+    payment_method: str
+    ewallet_channel: Optional[str] = None
+    customer_id: Optional[str] = Field(default=None, max_length=200)
+    customer_name: Optional[str] = Field(default=None, max_length=200)
+    customer_phone: Optional[str] = Field(default=None, max_length=64)
+    customer_email: Optional[str] = Field(default=None, max_length=254)
+    discount: float = Field(default=0, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    tax_percent: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    cash_received: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    note: Optional[str] = Field(default=None, max_length=1000)
+
+    session_id: Optional[str] = Field(default=None, max_length=200)
+    dining_option: Optional[str] = "Takeaway"
+
+    @model_validator(mode='after')
+    def cash_amount_required(self):
+        if not self.session_id and self.payment_method == 'cash' and self.cash_received is None:
+            raise ValueError('Nominal tunai diterima wajib diisi.')
+        return self
 
 
 class Order(BaseModel):
@@ -347,17 +366,32 @@ class StaffBase(BaseModel):
 class Staff(StaffBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
+    user_id: Optional[str] = None
+    login_enabled: bool = False
+    must_change_password: bool = False
+    credential_reset_required: bool = False
+    is_owner_account: bool = False
     created_at: str = Field(default_factory=utcnow_iso)
 
 class AttendanceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+class Attendance(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    store_id: str
     staff_name: str
     clock_in: str
     clock_out: Optional[str] = None
     status: str = "Hadir"
-
-class Attendance(AttendanceCreate):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    store_id: str
+    user_id: Optional[str] = None
+    staff_id: Optional[str] = None
+    is_open: Optional[bool] = None
+    work_date: Optional[str] = None
+    timezone: Optional[str] = None
+    created_by: Optional[str] = None
+    check_in_request_id: Optional[str] = None
+    closed_by: Optional[str] = None
+    legacy_unassigned: bool = False
 
 class BranchBase(BaseModel):
     name: str
@@ -545,3 +579,27 @@ class KdsTicket(BaseModel):
     store_id: str
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)
+
+
+class StaffCreate(StaffBase):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["Manager", "Cashier", "Warehouse"]
+    status: Literal["Aktif", "Non-Aktif"] = "Aktif"
+    initial_password: str = Field(min_length=10, max_length=128)
+
+
+class StaffUpdate(StaffBase):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["Manager", "Cashier", "Warehouse"]
+    status: Literal["Aktif", "Non-Aktif"] = "Aktif"
+    initial_password: Optional[str] = Field(default=None, min_length=10, max_length=128)
+
+
+class AttendanceCheckIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: uuid.UUID
+
+
+class AttendanceCheckOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    attendance_id: str = Field(min_length=1, max_length=100)

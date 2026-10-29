@@ -49,6 +49,7 @@ export default function Dashboard() {
   const [cashflowReport, setCashflowReport] = useState(null);
 
   useEffect(() => {
+    if (window.__dapurosAndroid) return;
     // Parallel fetching for dashboard widgets
     api.get("/orders/stats").then((r) => setStats(r.data)).catch(() => {});
     api.get("/orders?limit=5").then((r) => setRecent(r.data)).catch(() => {});

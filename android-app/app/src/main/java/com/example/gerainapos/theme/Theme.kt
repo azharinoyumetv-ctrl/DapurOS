@@ -1,4 +1,4 @@
-package com.example.gerainapos.theme
+package com.example.dapurospos.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -30,7 +30,7 @@ private val LightColorScheme =
   )
 
 @Composable
-fun GerainaPOSTheme(
+fun DapurOSPOSTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
   // Dynamic color is available on Android 12+
   dynamicColor: Boolean = true,

@@ -1,11 +1,10 @@
 """DOKU (Checkout/Jokul API) client -- BYO per-tenant credentials.
 
-Ported from GerainaOS/backend/doku_client.py (identical -- generic, no
-Geraina/DapurOS-specific branding baked in). Mirrors the proven implementation in
-website-master-platform (lib/actions/payments.ts createDokuCheckout/handleDokuNotification),
-adapted to DagangOS's per-store BYO pattern (credentials read from the store's
-integrations.doku config, same as whatsapp_client.py -- NOT a shared global env var, unlike
-xendit_client.py's original design, which has since been fixed to match).
+Mirrors the proven implementation in website-master-platform
+(lib/actions/payments.ts createDokuCheckout/handleDokuNotification), adapted to
+GerainaOS's per-store BYO pattern (credentials read from the store's
+integrations.doku config, same as whatsapp_client.py -- NOT a shared global env
+var, unlike xendit_client.py which is a separate, pre-existing inconsistency).
 
 DOKU signs/verifies requests with HMAC-SHA256 over a canonical string built from
 the Client-Id, Request-Id, Request-Timestamp, Request-Target and a SHA-256 Digest
@@ -86,7 +85,7 @@ async def create_doku_checkout(
         )
     environment = cfg.get("environment") or "sandbox"
     base = _base_url(environment)
-    method_types = _method_types(cfg.get("preferred_channel") or "all")
+    method_types = cfg.get('payment_method_types') or _method_types(cfg.get("preferred_channel") or "all")
 
     body = {
         "order": {
@@ -105,10 +104,11 @@ async def create_doku_checkout(
         },
         "customer": {
             "name": customer_name or "Pelanggan",
-            "email": customer_email or "customer@example.com",
+            "email": customer_email,
             "phone": customer_phone or "",
         },
     }
+    body['customer'] = {key: value for key, value in body['customer'].items() if value}
     # Compact, deterministic separators -- this exact string is what gets digested
     # AND what gets sent on the wire (see module docstring).
     body_json = json.dumps(body, separators=(",", ":"))
@@ -155,7 +155,7 @@ def verify_doku_signature(
 
 
 def map_doku_status(payload: Dict[str, Any]) -> str:
-    """Map DOKU's transaction status to DagangOS's internal order.payment_status values."""
+    """Map DOKU's transaction status to GerainaOS's internal order.payment_status values."""
     status = ((payload.get("transaction") or {}).get("status") or payload.get("status") or "").upper()
     if status == "SUCCESS":
         return "paid"

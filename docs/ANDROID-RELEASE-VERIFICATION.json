@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "status": "passed-candidate",
+  "verifiedAt": "2026-10-29T06:41:34.717Z",
+  "sourceBaseline": "b5059b4",
+  "sourceState": "reviewable local changes; not committed or published",
+  "package": {
+    "applicationId": "com.dagangos.dapuros",
+    "version": "1.0.0",
+    "versionCode": 2,
+    "minimumSdk": 34,
+    "supportedAbis": [
+      "arm64-v8a",
+      "x86_64"
+    ],
+    "apkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+    "apkBytes": 19201066,
+    "aabSha256": "8d29350ae80bfd5021dc4b0eead66c9bd31769850de1e28bdb6c6c70fbdc1bca",
+    "signingCertificateSha256": "fced7b77d88c3477bd991d97e4a224567e775a633c2e16a280ad03991f2c914a",
+    "unitTests": 27,
+    "lintErrors": 0,
+    "lintWarnings": 56,
+    "privateCredentialScan": "passed",
+    "signatureVerified": true,
+    "distributionManifestAndCode": "passed",
+    "frontendManifestEntriesVerified": 92,
+    "nativeLibraries16KbAligned": 8,
+    "webViewDebuggingInRelease": false
+  },
+  "backend": {
+    "contractsPassed": 215,
+    "realTransactionPassed": 12,
+    "failed": 0,
+    "realEmailsSent": 0,
+    "realPayments": 0,
+    "customerRecordsErased": 0,
+    "productionWrites": 0,
+    "writeFencePreserved": true,
+    "normalizedWriteFenceSha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1"
+  },
+  "browser": {
+    "passed": 24,
+    "failed": 0,
+    "flaky": 0,
+    "layouts": [
+      "393x852 phone",
+      "1524x1016 Xiaomi-size landscape",
+      "1973x1232 Samsung-size landscape"
+    ]
+  },
+  "installed": [
+    {
+      "status": "passed",
+      "profile": "phone",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+      "installedApkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        1080,
+        2400
+      ],
+      "density": 420,
+      "distribution": "website"
+    },
+    {
+      "status": "passed",
+      "profile": "xiaomi-landscape",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+      "installedApkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        2032,
+        3048
+      ],
+      "density": 320,
+      "distribution": "website"
+    },
+    {
+      "status": "passed",
+      "profile": "samsung-landscape",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+      "installedApkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        1848,
+        2960
+      ],
+      "density": 240,
+      "distribution": "website"
+    }
+  ],
+  "play": {
+    "status": "passed",
+    "apkSha256": "0e9deabc5649b30a86f02e87d1b2dbfe533f4d8e6ae8b16cd9bb71398e6ac09d",
+    "aabSha256": "ef146501a9ece215973e49ea227e9e68709da9116b6107811376a71a3340b470",
+    "frontendManifestEntriesVerified": 92,
+    "installerPermissionPresent": false,
+    "webSubscriptionPurchaseLinksEnabled": false,
+    "installed": {
+      "status": "passed",
+      "profile": "phone",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "0e9deabc5649b30a86f02e87d1b2dbfe533f4d8e6ae8b16cd9bb71398e6ac09d",
+      "installedApkSha256": "0e9deabc5649b30a86f02e87d1b2dbfe533f4d8e6ae8b16cd9bb71398e6ac09d",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        1080,
+        2400
+      ],
+      "density": 420,
+      "distribution": "play"
+    },
+    "submittedToGooglePlay": false
+  },
+  "upgrade": {
+    "status": "passed",
+    "from": {
+      "version": "0.9.0",
+      "versionCode": 1,
+      "apkSha256": "d79da1cb0cc736ce786dacfed5f7049fad83baa2f0b38186bb7928a5f774f697",
+      "published": false
+    },
+    "to": {
+      "version": "1.0.0",
+      "versionCode": 2,
+      "apkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58"
+    },
+    "method": "Android signed install-over upgrade through ADB on the isolated emulator",
+    "preserved": [
+      "authenticated fixture account",
+      "preference",
+      "pending cash sale in the actual app IndexedDB"
+    ],
+    "websiteUpdaterEndToEnd": "Not claimed: first customer release has no previously published DapurOS baseline"
+  },
+  "backAndRotation": {
+    "status": "passed",
+    "profile": "back-rotation",
+    "applicationId": "com.dagangos.dapuros",
+    "signedRelease": true,
+    "fixtureNetworkOnly": true,
+    "checks": [
+      "Rotation preserves restaurant recipe draft and running document",
+      "Back dismisses keyboard then recipe dialog before navigation",
+      "Double Back exits the app",
+      "Restart retains the fixture account after confirmed exit"
+    ]
+  },
+  "barcodeDecoder": {
+    "status": "passed",
+    "testVariant": "separate debug APK with the same pinned bundled ML Kit version",
+    "network": "emulator Wi-Fi and mobile data disabled",
+    "rotations": [
+      0,
+      90
+    ],
+    "physicalOpticalScanningCertified": false,
+    "releaseNativeCameraPreviewAndPermissionRecovery": "passed on the exact release APK"
+  },
+  "publication": {
+    "status": "prepared-not-deployed",
+    "backendDeployed": false,
+    "portalDeployed": false,
+    "requires": "Publish the matching DapurOS backend/frontend before the portal/download listing",
+    "gerainaPublicApkPreserved": true
+  },
+  "limitations": [
+    "AOSP screen profiles do not emulate Xiaomi HyperOS or Samsung One UI",
+    "No physical printer paper output, live merchant settlement, provider message/email delivery or Play approval was performed",
+    "Restaurant QR menu preview submits authenticated table orders; the pre-existing unauthenticated public guest ordering service remains unverified",
+    "Queued recipe sales use the recipe available at synchronization and record a review warning",
+    "No customer deletion or merchant-data mutation was used for verification"
+  ],
+  "intermediateFailures": [
+    "Test harness runtime classes optimized out of release were retained where needed; direct bundled decoder assertion ran in the separate debug bench",
+    "Initial recipe-inventory browser fixture omitted a schema field; fixture and robust numeric display were corrected",
+    "One browser run overlapped asset generation; all final browser checks ran against completed, stable builds",
+    "Earlier prototype candidate results are not substituted for the final installed APK checksum",
+    "MongoDB-memory-server logs an ECONNRESET during fixture shutdown after successful tests; pytest exits successfully and its temporary databases are removed"
+  ],
+  "website": {
+    "status": "passed",
+    "base": "http://127.0.0.1:8799",
+    "version": "1.0.0",
+    "checks": [
+      "Homepage Android link reaches the verified download page and fits 1440px",
+      "Homepage Android link reaches the verified download page and fits 768px",
+      "Homepage Android link reaches the verified download page and fits 393px",
+      "Homepage Android link reaches the verified download page and fits 320px",
+      "Clicking Download saves the exact verified APK bytes",
+      "Unavailable release metadata leaves download buttons safely disabled"
+    ],
+    "scope": "local Worker and browser; not published"
+  },
+  "portalUnitTests": {
+    "passed": 58,
+    "failed": 0
+  },
+  "portalBuild": {
+    "status": "passed",
+    "output": "DagangOS/dist",
+    "published": false
+  }
+}

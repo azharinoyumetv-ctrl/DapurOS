@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "@/api/client";
 import { QRCodeSVG } from "qrcode.react";
 import { QrCode, Smartphone, Printer, Download, ShoppingBag, Send, CheckCircle2, Coffee, Sparkles, Plus, Minus } from "lucide-react";
@@ -12,25 +12,18 @@ const DEFAULT_PRODUCTS = [
 ];
 
 export default function QrMenu() {
-  const [floors, setFloors] = useState([
-    { id: "fl-main", name: "Lantai 1 (Utama)" },
-    { id: "fl-vip", name: "Lantai 2 (VIP Sofa)" },
-    { id: "fl-rooftop", name: "Rooftop (Outdoor)" }
-  ]);
-  const [tables, setTables] = useState([
-    { id: "tbl-01", floor_id: "fl-main", label: "Meja 01" },
-    { id: "tbl-02", floor_id: "fl-main", label: "Meja 02" },
-    { id: "tbl-v1", floor_id: "fl-vip", label: "VIP Sofa A" },
-    { id: "tbl-r1", floor_id: "fl-rooftop", label: "Outdoor 01" }
-  ]);
-  const [selectedTableId, setSelectedTableId] = useState("tbl-01");
-  const [products, setProducts] = useState(DEFAULT_PRODUCTS);
-  
+  const [floors, setFloors] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [selectedTableId, setSelectedTableId] = useState('');
+  const [products, setProducts] = useState([]);
+
   // Customer simulator cart state
   const [cart, setCart] = useState([]);
   const [sugar, setSugar] = useState("Normal");
   const [ice, setIce] = useState("Normal");
   const [customNote, setCustomNote] = useState("");
+  const sendLock = useRef(false);
+  const orderAttempt = useRef(null);
   const [orderSentSuccess, setOrderSentSuccess] = useState(false);
 
   useEffect(() => {
@@ -40,7 +33,7 @@ export default function QrMenu() {
   }, []);
 
   const selectedTable = tables.find(t => t.id === selectedTableId) || tables[0];
-  const qrUrl = typeof window !== "undefined" ? `${window.location.origin}/dapuros/qr-order?table=${selectedTable.id}` : `https://dagangos.com/dapuros/qr-order?table=${selectedTable.id}`;
+  const qrUrl = !selectedTable?.id ? "" : typeof window !== "undefined" ? `${window.location.origin}/dapuros/qr-order?table=${selectedTable?.id}` : `https://dagangos.com/dapuros/qr-order?table=${selectedTable?.id}`;
 
   const addToCart = (prod) => {
     setCart(prev => {
@@ -64,34 +57,25 @@ export default function QrMenu() {
 
   const calculateTotal = () => {
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-    const tax = subtotal * 0.10;
-    const service = subtotal * 0.05;
+    const service = Math.round(subtotal * 0.05 * 100) / 100;
+    const tax = Math.round((subtotal + service) * 0.10 * 100) / 100;
     return { subtotal, tax, service, grandTotal: subtotal + tax + service };
   };
 
   const handleSendSelfOrder = async () => {
-    if (cart.length === 0) return;
+    if (sendLock.current || !cart.length || !selectedTable?.id) return;
+    sendLock.current = true;
     try {
-      const payload = {
-        order_type: "dine_in",
-        table_id: selectedTable.id,
-        items: cart.map(c => ({
-          product_id: c.id,
-          name: c.name,
-          price: c.price,
-          qty: c.qty,
-          notes: `Gula: ${c.sugar}, Es: ${c.ice}${c.note ? `, Catatan: ${c.note}` : ""}`
-        }))
-      };
-      await api.post("/orders", payload);
-    } catch (e) {
-      console.log("Mock order sent");
-    }
-    setOrderSentSuccess(true);
-    setTimeout(() => {
-      setOrderSentSuccess(false);
-      setCart([]);
-    }, 4000);
+      const opened = await api.post(`/tables/${selectedTable.id}/session`);
+      const sessionId = opened.data.session?.id || opened.data.id;
+      if (!sessionId) throw Error('Sesi meja belum tersedia.');
+      const payload = {session_id:sessionId,dining_option:'Dine-In',payment_method:'cash',items:cart.map(c=>({product_id:c.id,name:c.name,price:c.price,quantity:c.qty,subtotal:c.price*c.qty,note:`Gula: ${c.sugar}, Es: ${c.ice}${c.note ? ', Catatan: '+c.note : ''}`}))};
+      const fingerprint = JSON.stringify(payload);
+      if (orderAttempt.current?.fingerprint !== fingerprint) orderAttempt.current={fingerprint,key:crypto.randomUUID()};
+      await api.post('/orders',payload,{headers:{'Idempotency-Key':orderAttempt.current.key}});
+      orderAttempt.current = null;setOrderSentSuccess(true);setCart([]);
+    } catch(e) {toast.error(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'Pesanan belum terkirim. Periksa koneksi lalu coba lagi.');}
+    finally {sendLock.current = false;}
   };
 
   const fmtIDR = (val) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(val);
@@ -132,7 +116,7 @@ export default function QrMenu() {
 
             <div className="flex flex-col items-center justify-center p-6 bg-slate-900 text-white rounded-2xl border border-slate-800 text-center space-y-4">
               <span className="text-xs font-bold uppercase tracking-widest text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/20">
-                Pindai Untuk Memesan — {selectedTable.label}
+                Pindai Untuk Memesan — {selectedTable?.label}
               </span>
 
               <div className="p-4 bg-white rounded-xl shadow-xl">
@@ -140,7 +124,7 @@ export default function QrMenu() {
               </div>
 
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-300">Meja: <span className="text-white font-bold">{selectedTable.label}</span></p>
+                <p className="text-xs font-semibold text-slate-300">Meja: <span className="text-white font-bold">{selectedTable?.label}</span></p>
                 <p className="text-[10px] text-slate-400 truncate max-w-[260px] mx-auto">{qrUrl}</p>
               </div>
             </div>
@@ -173,7 +157,7 @@ export default function QrMenu() {
                 <Smartphone className="text-amber-400" size={20} />
                 <div>
                   <h3 className="font-display font-bold text-base text-slate-100">Simulasi Layar HP Tamu</h3>
-                  <p className="text-[11px] text-slate-400">Tampilan seluler saat tamu memindai QR {selectedTable.label}</p>
+                  <p className="text-[11px] text-slate-400">Tampilan seluler saat tamu memindai QR {selectedTable?.label}</p>
                 </div>
               </div>
               <span className="pill bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] px-2.5 py-1 font-mono">Live Demo</span>
@@ -186,7 +170,7 @@ export default function QrMenu() {
                 </div>
                 <h3 className="font-display text-xl font-bold text-white">Pesanan Terkirim ke Dapur!</h3>
                 <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
-                  Pesanan untuk <strong className="text-amber-400">{selectedTable.label}</strong> telah masuk ke layar monitor KDS Dapur Utama secara otomatis.
+                  Pesanan untuk <strong className="text-amber-400">{selectedTable?.label}</strong> telah masuk ke layar monitor KDS Dapur Utama secara otomatis.
                 </p>
               </div>
             ) : (
@@ -257,7 +241,7 @@ export default function QrMenu() {
                   <div className="bg-slate-900 border border-amber-500/40 p-4 rounded-xl space-y-3 animate-fadein">
                     <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                       <span className="font-bold text-xs text-amber-400 flex items-center gap-1.5">
-                        <ShoppingBag size={14} /> Pesanan Tamu ({selectedTable.label})
+                        <ShoppingBag size={14} /> Pesanan Tamu ({selectedTable?.label})
                       </span>
                       <span className="text-[10px] text-slate-400">{cart.reduce((s, i) => s + i.qty, 0)} Item</span>
                     </div>

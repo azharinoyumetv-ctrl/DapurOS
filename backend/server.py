@@ -34,6 +34,9 @@ from routes_reports import router as reports_router
 from routes_printer import router as printer_router
 from routes_edc import router as edc_router
 from routes_devices import router as devices_router
+from routes_records import router as records_router
+from routes_offline import router as offline_router
+from routes_support import router as support_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("geraina")
@@ -172,3 +175,8 @@ async def _ensure_indexes():
 @app.on_event("shutdown")
 async def _shutdown():
     close_db()
+
+app.include_router(offline_router)
+app.include_router(support_router)
+
+app.include_router(records_router)

@@ -1,8 +1,11 @@
+import { safeAppReturn } from "@/auth/appReturn";
 import { useEffect, useState } from "react";
 import { checkoutReturn, checkoutAuthLink } from "@/auth/checkoutReturn";
-import { Link, useNavigate, Navigate } from "react-router-dom";
+import { Link, useNavigate, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { ArrowRight } from "lucide-react";
+import PasswordInput from "@/components/PasswordInput";
+import { firstAllowedPath } from "@/auth/permissions";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -10,22 +13,24 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
+  const location = useLocation();
+  const appNext = safeAppReturn(new URLSearchParams(location.search).get("returnTo"));
   const next = checkoutReturn("dapuros");
   const { user, login } = useAuth();
 
-  useEffect(() => { if (user && next) window.location.replace(next); }, [user, next]);
-  if (user && next) return <p role="status">Melanjutkan ke pembayaran…</p>;
-  if (user) return <Navigate to="/dapuros/app/dashboard" replace />;
+  useEffect(() => { if (user && !user.must_change_password && next) window.location.replace(next); }, [user, next]);
+  if (user && !user.must_change_password && next) return <p role="status">Melanjutkan ke pembayaran…</p>;
+  if (user) return <Navigate to={appNext || firstAllowedPath(user.role)} replace />;
 
   const submit = async (event) => {
     event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
-      if (!next) nav("/dapuros/app/dashboard");
+      const signedIn = await login(email, password);
+      if (!next || signedIn.must_change_password) nav(appNext || firstAllowedPath(signedIn.role));
     } catch (requestError) {
-      setError(requestError?.response?.data?.detail || "Email atau kata sandi tidak valid.");
+      setError(requestError?.response?.data?.detail || requestError.message || "Email atau kata sandi tidak valid.");
     } finally {
       setLoading(false);
     }
@@ -36,7 +41,7 @@ export default function Login() {
       <header className="auth-header">
         <Link to="/dapuros" className="auth-brand">
           <img src="/assets/brand/dapuros-icon.png" alt="" />
-          <b>DapurOS</b>
+          <b>DapurOS POS</b>
           <small>by DagangOS</small>
         </Link>
         <nav aria-label="Navigasi akun DapurOS">
@@ -47,33 +52,36 @@ export default function Login() {
 
       <main className="auth-main">
         <section className="auth-story" aria-labelledby="dapuros-login-story">
-          <span className="auth-kicker">DapurOS · Restaurant operations</span>
-          <h2 id="dapuros-login-story">Kembali ke ritme layanan Anda.</h2>
-          <p>Pesanan, meja, layar dapur, resep, bahan, pembayaran, dan laporan bergerak dalam satu alur operasional.</p>
+          <span className="auth-kicker">DapurOS · Retail operations</span>
+          <h2 id="dapuros-login-story">Masuk kembali ke alur toko Anda.</h2>
+          <p>Kasir, inventori, pembelian, supplier, pelanggan, dan laporan tetap berada dalam satu ruang kerja yang terhubung.</p>
           <div className="auth-scene" aria-hidden="true">
-            <div className="auth-device auth-device--kitchen">
-              <div className="auth-device__bar"><b>DapurOS · KDS</b><span>3 pesanan</span></div>
-              <div className="auth-device__tickets"><i><small>MEJA 04</small><b>00:08</b></i><i><small>TAKEAWAY</small><b>00:12</b></i><i><small>MEJA 11</small><b>00:17</b></i></div>
+            <div className="auth-device auth-device--retail">
+              <div className="auth-device__bar"><b>DapurOS POS</b><span>Kasir aktif</span></div>
+              <div className="auth-device__body">
+                <div className="auth-device__catalog"><i /><i /><i /><i /></div>
+                <div className="auth-device__total"><small>Total</small><b>Rp 29.000</b><span>Bayar</span></div>
+              </div>
             </div>
             <span className="auth-node">POS</span>
-            <span className="auth-node">KDS</span>
-            <span className="auth-node">BOM</span>
+            <span className="auth-node">STK</span>
+            <span className="auth-node">RPT</span>
           </div>
         </section>
 
         <section className="auth-form-wrap">
           <form onSubmit={submit} className="auth-form" data-testid="login-form">
-            <h1>Masuk ke DapurOS</h1>
-            <p>Gunakan akun DagangOS yang terhubung dengan restoran Anda.</p>
+            <h1>Masuk ke DapurOS POS</h1>
+            <p>Gunakan akun DagangOS yang terhubung dengan toko Anda.</p>
 
             <div className="auth-field">
               <label htmlFor="dapuros-login-email" data-testid="login-email-label">Alamat email</label>
-              <input id="dapuros-login-email" type="email" name="email" autoComplete="email" required data-testid="login-email-input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nama@restoran.com" />
+              <input id="dapuros-login-email" type="email" name="email" autoComplete="email" required data-testid="login-email-input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nama@toko.com" />
             </div>
 
             <div className="auth-field">
               <label htmlFor="dapuros-login-password" data-testid="login-password-label">Kata sandi</label>
-              <input id="dapuros-login-password" type="password" name="password" autoComplete="current-password" required data-testid="login-password-input" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" />
+              <PasswordInput id="dapuros-login-password" toggleTestId="login-password-toggle" name="password" autoComplete="current-password" required data-testid="login-password-input" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" />
             </div>
 
             {error && <p className="auth-error" role="alert" data-testid="login-error">{error}</p>}
@@ -82,13 +90,13 @@ export default function Login() {
               {loading ? "Memproses…" : next ? "Masuk & Lanjut Bayar" : "Masuk"} {!loading && <ArrowRight size={17} />}
             </button>
 
-            <p className="auth-switch">Belum punya restoran? <Link to={checkoutAuthLink("dapuros", "register")} data-testid="login-to-register-link">Daftar gratis</Link></p>
+            <p className="auth-switch">Belum punya toko? <Link to={checkoutAuthLink("dapuros", "register")} data-testid="login-to-register-link">Daftar gratis</Link></p>
           </form>
         </section>
       </main>
 
       <footer className="public-contact-footer">
-        <span>© 2026 DapurOS · PT DagangOS Digital Indonesia</span>
+        <span>© 2026 DapurOS POS · PT DagangOS Digital Indonesia</span>
         <nav aria-label="Tautan perusahaan"><a href="/sumber-daya">Kontak</a><a href="/">DagangOS</a></nav>
       </footer>
     </div>

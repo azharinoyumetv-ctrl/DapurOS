@@ -169,54 +169,6 @@ async def list_my_addons(user: dict = Depends(get_billing_user)):
     return await cursor.to_list(length=100)
 
 
-@router.post("/addons/purchase")
+@router.post('/addons/purchase')
 async def purchase_addon(payload: dict, user: dict = Depends(require_billing_admin)):
-    """No subscription payment gateway is wired to this app's own billing (only to in-store
-    POS transactions via Xendit/DOKU/EDC), so this records a pending request for manual
-    activation by DagangOS staff after payment is confirmed offline -- same reasoning as
-    GerainaOS's addon endpoint (mirrored here; DapurOS's own /upgrade above just rejects paid
-    tiers outright with no record kept, which is fine for the tier-change UI's "hubungi sales"
-    messaging but not good enough for a purchase flow meant to actually be fulfilled later).
-
-    Once a request is flipped to status="active" (manually, in the DB, by staff), it takes
-    effect automatically -- plan_limits.py's check_capacity()/check_outlet_capacity() read
-    active addon_purchases and add the bonus capacity on top of the plan's base caps. See
-    _active_addon_counts()/_addon_bonus() there. No separate "apply the addon" step needed.
-
-    Uses require_billing_admin (not require_admin) so this stays reachable on an expired
-    trial -- though in practice plan != "pro"/"business" below already rejects an expired
-    account from buying an addon anyway; they have to /upgrade first regardless."""
-    addon_id = payload.get("addon_id")
-    addon = next((a for a in ADDONS if a["id"] == addon_id), None)
-    if not addon:
-        raise HTTPException(status_code=400, detail="Add-on tidak valid")
-
-    plan = user.get("plan")
-    if addon_id == "extra_device" and plan != "pro":
-        raise HTTPException(status_code=400, detail="Add-on device tambahan khusus untuk paket Pro.")
-    if addon_id == "extra_outlet" and plan != "business":
-        raise HTTPException(status_code=400, detail="Add-on outlet tambahan khusus untuk paket Business.")
-
-    db = get_db()
-    if addon_id == "extra_device":
-        existing = await db.addon_purchases.count_documents({
-            "store_id": user["store_id"], "addon_id": "extra_device", "status": {"$in": ["pending", "active"]},
-        })
-        if existing >= 2:
-            raise HTTPException(status_code=400, detail="Maksimal 2 device tambahan per toko (sudah tercapai).")
-
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "addon_id": addon_id,
-        "requested_by": user["id"],
-        "requested_by_email": user.get("email"),
-        "status": "pending",
-        "created_at": utcnow().isoformat(),
-    }
-    await db.addon_purchases.insert_one(doc)
-    return {
-        "ok": True,
-        "status": "pending_manual_activation",
-        "message": f"Permintaan add-on \"{addon['name']}\" tercatat. Tim kami akan mengaktifkannya secara manual setelah pembayaran dikonfirmasi.",
-    }
+    raise HTTPException(409, 'Pembelian add-on melalui checkout terverifikasi. Buka Langganan & Tagihan untuk melanjutkan.')

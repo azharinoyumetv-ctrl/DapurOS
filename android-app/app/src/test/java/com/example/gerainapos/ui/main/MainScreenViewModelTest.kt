@@ -1,6 +1,6 @@
-package com.example.gerainapos.ui.main
+package com.example.dapurospos.ui.main
 
-import com.example.gerainapos.data.DataRepository
+import com.example.dapurospos.data.DataRepository
 import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first

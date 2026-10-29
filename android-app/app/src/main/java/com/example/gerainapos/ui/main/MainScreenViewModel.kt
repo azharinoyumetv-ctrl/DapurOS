@@ -1,9 +1,9 @@
-package com.example.gerainapos.ui.main
+package com.example.dapurospos.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.gerainapos.data.DataRepository
-import com.example.gerainapos.ui.main.MainScreenUiState.Success
+import com.example.dapurospos.data.DataRepository
+import com.example.dapurospos.ui.main.MainScreenUiState.Success
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch

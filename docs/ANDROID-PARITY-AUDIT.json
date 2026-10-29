@@ -1,0 +1,602 @@
+{
+  "date": "2026-10-29",
+  "baseline": "b5059b4",
+  "reference": "Geraina 1.2.16 / build 21",
+  "protected": [
+    "erasure_guard.py",
+    "database.py",
+    "restaurant POS/table/KDS/QR/BOM files"
+  ],
+  "ported": [
+    {
+      "path": "frontend/src/auth/AuthContext.jsx",
+      "beforeSha256": "73e2f6c1ce496706c2c9c9071bcb98ea7cf61461a923ce04647d3ac2921b6e32",
+      "referenceSha256": "76aeabe7d81c9a1fd247fcab52236975987a2db6b79dde6470379fcc52f2895d"
+    },
+    {
+      "path": "frontend/src/auth/PasswordSetup.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "14c024ce0a40d5748cfdbc4b18907c30ce5584c2c56cf17ef17497bba1cd9296"
+    },
+    {
+      "path": "frontend/src/auth/permissions.js",
+      "beforeSha256": null,
+      "referenceSha256": "947dc21be527125a00b5fe4d057be4a5ef96922a59a5a302f4c6a85967519a49"
+    },
+    {
+      "path": "frontend/src/auth/appReturn.js",
+      "beforeSha256": null,
+      "referenceSha256": "e6fde1da1b1b985d54f53dcce3c9d94e9cd46760af51b13b5f21afee2e14679b"
+    },
+    {
+      "path": "frontend/src/auth/checkoutReturn.js",
+      "beforeSha256": "637559aea94f92c3dee4488f51db7b9e6a4d5671ba128f7d948eca2a0baa4134",
+      "referenceSha256": "08ff5c4c77d0842cc523e5fdda3c6db108583aa28c0acea8064c59ef5da061e2"
+    },
+    {
+      "path": "frontend/src/auth/subscriptionState.js",
+      "beforeSha256": null,
+      "referenceSha256": "b85e9e68f0134687a8b0eba46c42871849f6fff5526113f4e386bdc7766ee3a8"
+    },
+    {
+      "path": "frontend/src/auth/subscriptionPurchases.js",
+      "beforeSha256": null,
+      "referenceSha256": "823f2d077faf2f5974b100624e71bf54f70292ec52c10aec5513935cce037769"
+    },
+    {
+      "path": "frontend/src/components/RoleGuard.jsx",
+      "beforeSha256": "9b512736f82561f887b5dbb51f7f53b5a82fc3d0b5313143b64a5d81ef120b9e",
+      "referenceSha256": "8be0297f2bfda5fd0553df6bc65ea80ab39687f01aa08aac3591f3ac24da9a78"
+    },
+    {
+      "path": "frontend/src/components/PasswordInput.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "07b7108693b3eb038df99ddd4baadbc1460139fd13a2d4c549aa9bb3f1444b46"
+    },
+    {
+      "path": "frontend/src/components/ReadState.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "abfc2d6d9afffe258e012728664f9d0d800db09eec9fd3a14de6e0491feee9fc"
+    },
+    {
+      "path": "frontend/src/navigation/DeferredPage.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "d41fb037e5a2af0fe143e922f1d4b4f825d4f47e686ebaab0b7ae0f01d04f334"
+    },
+    {
+      "path": "frontend/src/navigation/AppPageNotFound.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "b5628d06d9c94543dc5a8fc9d061e5021817854efe3fdedf9c9abf5cfd093979"
+    },
+    {
+      "path": "frontend/src/navigation/SectionNavigation.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "f9b1457eb5189eab4fc4fa4a299f278ecf6231b7d9a27be164adda80e781d003"
+    },
+    {
+      "path": "frontend/src/navigation/sections.js",
+      "beforeSha256": null,
+      "referenceSha256": "512dfe532e4126816155e3683101d1946664e624bc7044c5662ad453c618a5fa"
+    },
+    {
+      "path": "frontend/src/offline/posStore.js",
+      "beforeSha256": null,
+      "referenceSha256": "b6476f3599955c44a7e8e5c2e7009dc27f0a4ff62b429436049929926ff848d8"
+    },
+    {
+      "path": "frontend/src/offline/OfflineStatus.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "3cc4daa641caccb22817980585505c876e29026d3f4daf839c9403b2e6a9f201"
+    },
+    {
+      "path": "frontend/src/api/records.js",
+      "beforeSha256": null,
+      "referenceSha256": "69acc7ceab83d370f366345f551fafb5ba7d9ed6da42712cf9d0e36073141d26"
+    },
+    {
+      "path": "frontend/src/api/catalogue.js",
+      "beforeSha256": null,
+      "referenceSha256": "663044d58b98f766fad95d54588280f1c011ed34864c7629c3ff9751cb191a3c"
+    },
+    {
+      "path": "frontend/src/hooks/usePaymentOptions.js",
+      "beforeSha256": null,
+      "referenceSha256": "8f56967262fce6f0ecf33d52851fe08bb72634609c25d7287c3e62fbad179c23"
+    },
+    {
+      "path": "frontend/src/pages/Login.jsx",
+      "beforeSha256": "ff4aa37c962dcb6e826835354bb1c60556b960b698169d375a213f4c1458860f",
+      "referenceSha256": "20cfbc3356d6a304a790e875d722b1a0ca7bf763e32315bc69d83b2420403b6b"
+    },
+    {
+      "path": "frontend/src/pages/Register.jsx",
+      "beforeSha256": "c188a36d4784bb37700fba5918ed8837ff3f73cac2572a5983fc400ce6a51dca",
+      "referenceSha256": "0402d7596fa833d5212d1b6294f75c9bfdf190769fca132c5436b8a40b219723"
+    },
+    {
+      "path": "frontend/src/pages/About.jsx",
+      "beforeSha256": "22d8ec5dda64f9f136b3d3669bda56d9cc0140fe7700305b9982c3930245d1ac",
+      "referenceSha256": "b541fc06b6710fc6d2d5ae34a37b4459a684e9a3a85b6cd35f516af75a1b6fa7"
+    },
+    {
+      "path": "frontend/src/layouts/AppLayout.jsx",
+      "beforeSha256": "9cae139abe40ef766cbccfea5a9bb8879e537faca7e8f18d8536da351c2b5d29",
+      "referenceSha256": "63d5be2d2e69fdee513c0e26542b790b267332ff50f261429a4fb0b75ff9ddcd"
+    },
+    {
+      "path": "frontend/src/pages/products/Categories.jsx",
+      "beforeSha256": "7586f01fc31b874fd8e4413292e18d9c8993b2d758de096f86150e49986ad7b8",
+      "referenceSha256": "6029499d4e6560d0dc7e266677903499d123cafa24c55a8e125d962ab766e84d"
+    },
+    {
+      "path": "frontend/src/pages/products/Brands.jsx",
+      "beforeSha256": "73d23efcf2fcffc41f61987ab907bfa1a1e4b738882da2038473f3f10a284453",
+      "referenceSha256": "885e2e8913d6046e9960ea7aecfe79a0c5af3bb5009f5981eca01d813511799e"
+    },
+    {
+      "path": "frontend/src/pages/products/Units.jsx",
+      "beforeSha256": "01a8d8899c9dfbf8d13ff28479eac88cc6b25bdc3a41b43df40b7dacfede197d",
+      "referenceSha256": "92dccbf84baa8a7a39cd11feb8d0e094f487e4aa07a4dadc49c845395269eabd"
+    },
+    {
+      "path": "frontend/src/pages/settings/Settings.jsx",
+      "beforeSha256": "4caf7bb1172994d25a0264c05e430b145843f11e3cf23e3246cbd5351a7e6bbc",
+      "referenceSha256": "188d83c2fa1f5029331bcf75f97d57a5ee531c1feea08d1d5ab66eafe31f8fe9"
+    },
+    {
+      "path": "frontend/src/pages/settings/SubscriptionSettings.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "25cbe56e0e01891cb2b61f9012033512ba8c2c8ca6343a3b14332cf0eee12f9e"
+    },
+    {
+      "path": "frontend/src/pages/settings/AddonManagement.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "614df9b156b73dcf45474c91abe60b591500d1ba3787264e650f4afcc30c9788"
+    },
+    {
+      "path": "frontend/src/pages/integrations/Integrations.jsx",
+      "beforeSha256": "6eb4c00b6297e173cee796e267716219caa1b93fcb998938e5c2f7b9059c3838",
+      "referenceSha256": "0ce35e4a764dde8deafc3953ac3db911447f936fc556ca38db45412de5c7e05f"
+    },
+    {
+      "path": "frontend/src/pages/payments/BankQrisSettings.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "162427508df2de0762e998508c78fd10a84c67cb6615de656de5cfe23f1e0712"
+    },
+    {
+      "path": "frontend/src/payments/BankQrisPayment.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "7025e7473cc9e61ed1751d9c7ceafa92803c212a1a11dc102f1ee1b38fc84648"
+    },
+    {
+      "path": "frontend/src/payments/bankQris.js",
+      "beforeSha256": null,
+      "referenceSha256": "3b9c7952382ab2449d512d2ab0cb0088d2dce3964a0bd9d7e1463b5250ce21ac"
+    },
+    {
+      "path": "frontend/src/pages/staff/StaffManagement.jsx",
+      "beforeSha256": "f96dc9b35c8f956b321f6dd2af0aca36fd2b65363e76dbba757f06ea859ad3ee",
+      "referenceSha256": "acc5f9c8131652e68ee62da3f5f01f01be2bb44552751f54761d3bccedfe4783"
+    },
+    {
+      "path": "frontend/src/pages/staff/Attendance.jsx",
+      "beforeSha256": "8658f38d6c7f7e98e789991b28a1f5b574c2b29356684cc15518cf70410194d2",
+      "referenceSha256": "aaa46285ed1c6c2a4819c315195b171af156e0dc103f22ad45d36d1bcbb8d8ba"
+    },
+    {
+      "path": "frontend/src/pages/staff/AttendanceWorkspace.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "4e166ae2ff662381596b7f7a8e380b78cd05c3fb9ae854ad85ee162361ef177d"
+    },
+    {
+      "path": "frontend/src/support/SupportContact.jsx",
+      "beforeSha256": null,
+      "referenceSha256": "5e5bd6db551d8153e73889a6ec28deef9bcd5ce58de67c52088dca0316223ad4"
+    },
+    {
+      "path": "frontend/src/pages/payments/PaymentConfig.jsx",
+      "beforeSha256": "183a43eb01bca0484575880288c38e9ceefe15f8ceb1f2daac98fc41d7f91891",
+      "referenceSha256": "62e1dd92675e68c063aef174544aa17d6f67b4b61a376d4d849a896440bbc80d"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\AndroidManifest.xml",
+      "beforeSha256": "4ad35b12c14f64f11c4b4407da8c571ba54eca637d3611a0afc1ac4f0d2cffb5",
+      "referenceSha256": "03f49715fc5239bf7744256185ee55963cc2d890bbf42656750ac0678d4d5358"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\assets\\android-bridge.js",
+      "beforeSha256": null,
+      "referenceSha256": "2b909711964f972b8847732318e0ce70e69bd90b6af4153d60e000660d207064"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\assets\\device-features.js",
+      "beforeSha256": null,
+      "referenceSha256": "e4ced2d64d090ee1e0e488773686742652c3cca2bf9b7e36fc1e71b840df6500"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\assets\\mobile-support.css",
+      "beforeSha256": null,
+      "referenceSha256": "d62e0ecb31fa4d678dbd6fe0c04a3d1406475c66ffa1288708f9d82977f02206"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\assets\\mobile-support.js",
+      "beforeSha256": null,
+      "referenceSha256": "adbbd7391b499225e4dd0d992f0d821672f17005575845f3a1559da2f2cf139f"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\assets\\mobile-ui.css",
+      "beforeSha256": null,
+      "referenceSha256": "7266a95a95b07786b6cc6a6932f03448f58c0439c7d1e884182e5c1ce07909a0"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\assets\\mobile-ui.js",
+      "beforeSha256": null,
+      "referenceSha256": "9a18832f24bca91ac6c553077214075b8b6a115811a95eeb201ec955fd8dff9d"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\BarcodeScannerActivity.kt",
+      "beforeSha256": null,
+      "referenceSha256": "fee975cec8c8fd61e181d653c3901cfda5b18adfd912cb9ea2fcaa434ab23c23"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\BarcodeScanPolicy.kt",
+      "beforeSha256": null,
+      "referenceSha256": "d25825c0969cbc449a9b0d404bf7cd63fe012ccf56b32b95f8bcbf4b86d31455"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\BundledFrontend.kt",
+      "beforeSha256": null,
+      "referenceSha256": "064ba205c9e0d790142f56010b9e8391185108c5aa1f421fa33881db577a30a8"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\data\\DataRepository.kt",
+      "beforeSha256": "b7f6f3008015c00cafbb3ad2dc929c5597607ad69da78e7473ae18d0524ef650",
+      "referenceSha256": "b7f6f3008015c00cafbb3ad2dc929c5597607ad69da78e7473ae18d0524ef650"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\FilePickerPolicy.kt",
+      "beforeSha256": null,
+      "referenceSha256": "589484ea58a06701892969657163163e806d5c7cad411bc9a83b44341025ff5d"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\GerainaIconDrawable.kt",
+      "beforeSha256": null,
+      "referenceSha256": "ca5802d09111e745986b0869c19978864974ac7b608cf8958d1e0a673321354c"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\InsetBackgroundDrawable.kt",
+      "beforeSha256": null,
+      "referenceSha256": "94ec9052cdc3456fab114584e4ae5faf1056565d32cfb61928c01d4e55363f1a"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\MainActivity.kt",
+      "beforeSha256": "0b3e40d2e46cc94a90f3efc792d0443e0adf6be781ba080ae899a8b90716db33",
+      "referenceSha256": "ab4e94953d881bf129020bcb8c1415b1a978f94af2d9ecfc4638bf6a3e694c16"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\Navigation.kt",
+      "beforeSha256": "54d21233514e8cf229d75454e999dcd42cfcdf39ee11417ca03f56832ddd468e",
+      "referenceSha256": "54d21233514e8cf229d75454e999dcd42cfcdf39ee11417ca03f56832ddd468e"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\NavigationKeys.kt",
+      "beforeSha256": "a63b4eec9b484fb2ab21f0f69a6936b930ff4c772313d6b434bee3f47b79ca7e",
+      "referenceSha256": "a63b4eec9b484fb2ab21f0f69a6936b930ff4c772313d6b434bee3f47b79ca7e"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\NavigationPolicy.kt",
+      "beforeSha256": null,
+      "referenceSha256": "57143f246b184e6bd6c0a960eaa14b6ce899fb34676ddc77b2f63fefb24de7e3"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\ReceiptEncoder.kt",
+      "beforeSha256": null,
+      "referenceSha256": "829b7b6de6922424137296549075371b662572e123ef65bb4f84c41b91cd2382"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\theme\\Color.kt",
+      "beforeSha256": "71ebe9c4cf83e03f2c8927a6d7a6936a142c418fe6e3be74cbf46442db7dc4bf",
+      "referenceSha256": "71ebe9c4cf83e03f2c8927a6d7a6936a142c418fe6e3be74cbf46442db7dc4bf"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\theme\\Theme.kt",
+      "beforeSha256": "967a53ca45cad9f12b0a908441bfa38fc3e5a47a7abe3840d5cb3ed4d1ec9ed0",
+      "referenceSha256": "967a53ca45cad9f12b0a908441bfa38fc3e5a47a7abe3840d5cb3ed4d1ec9ed0"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\theme\\Type.kt",
+      "beforeSha256": "c87d2220d798303cdc14f522123019af0d8e9359101123013f05063cbe58bc0f",
+      "referenceSha256": "c87d2220d798303cdc14f522123019af0d8e9359101123013f05063cbe58bc0f"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\ThermalPrinterController.kt",
+      "beforeSha256": null,
+      "referenceSha256": "953f9b3e03bfc9b3bbdf86e1a962bd24e8686795659273e0db3deb345a8a2e17"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\ui\\main\\MainScreen.kt",
+      "beforeSha256": "db0e9474b1850a7b380fc024d0997b4493d915135a53487a09f5215781c39fa6",
+      "referenceSha256": "db0e9474b1850a7b380fc024d0997b4493d915135a53487a09f5215781c39fa6"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\ui\\main\\MainScreenViewModel.kt",
+      "beforeSha256": "08a28d32ee4151d6b2c5429b93cd65d12a580b927a4c22d5127b22ce8504cfe6",
+      "referenceSha256": "08a28d32ee4151d6b2c5429b93cd65d12a580b927a4c22d5127b22ce8504cfe6"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\java\\com\\example\\gerainapos\\UpdatePolicy.kt",
+      "beforeSha256": null,
+      "referenceSha256": "17134be28fda0de281d6ce9315293f9febc2ef97d86960beb0b3a4b81152718a"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\drawable\\geraina_launcher_background.xml",
+      "beforeSha256": null,
+      "referenceSha256": "3630ecffe05fc305f6fc40c517f4a0974a27af668f07a138aa1bfcc423d765fa"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\drawable\\geraina_launcher_foreground.xml",
+      "beforeSha256": null,
+      "referenceSha256": "767b829da86a88d3218120e9c324a252b0320e359a621fc205e0f1aaf6c95fd9"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\drawable\\geraina_launcher_monochrome.xml",
+      "beforeSha256": null,
+      "referenceSha256": "8b1ebf8534d11a1e6468e118f8c56480859cebcc6aac80a2d124c371326aed62"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\drawable\\ic_launcher_background.xml",
+      "beforeSha256": "ed423c73a6f40a4d2909f0901e60527b3a807cd59e1b5593bcaae1808b1c6321",
+      "referenceSha256": "ed423c73a6f40a4d2909f0901e60527b3a807cd59e1b5593bcaae1808b1c6321"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\drawable\\ic_launcher_foreground.xml",
+      "beforeSha256": "01d1a6a6c1234eb7fe270d097eb283d72b9c95ae5118886f1b6573aad280f1f7",
+      "referenceSha256": "01d1a6a6c1234eb7fe270d097eb283d72b9c95ae5118886f1b6573aad280f1f7"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\mipmap-anydpi\\ic_launcher.xml",
+      "beforeSha256": null,
+      "referenceSha256": "1392c56e020cb2de78a2adccd44ca3eecc59707dd9fae468d3ee1952ba9c5581"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\mipmap-anydpi\\ic_launcher_round.xml",
+      "beforeSha256": null,
+      "referenceSha256": "1392c56e020cb2de78a2adccd44ca3eecc59707dd9fae468d3ee1952ba9c5581"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\mipmap-anydpi-v26\\ic_launcher.xml",
+      "beforeSha256": "88f7653499ef524126ea5018a99baf9cc3269e7e584d6205dfdd76db39f39cc0",
+      "referenceSha256": "483bcc9eaa4536e57c2e37622af5135558cbf0cd5a6929c2de3c34b1389d114a"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\mipmap-anydpi-v26\\ic_launcher_round.xml",
+      "beforeSha256": "88f7653499ef524126ea5018a99baf9cc3269e7e584d6205dfdd76db39f39cc0",
+      "referenceSha256": "483bcc9eaa4536e57c2e37622af5135558cbf0cd5a6929c2de3c34b1389d114a"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\values\\strings.xml",
+      "beforeSha256": "e182b77004382ce9cd786509f065b57be6d114de37be3ebf56d2c37e13d560e3",
+      "referenceSha256": "e182b77004382ce9cd786509f065b57be6d114de37be3ebf56d2c37e13d560e3"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\values\\themes.xml",
+      "beforeSha256": "20f7ba3f2dfe001b1a27d9dabebe158b78602f122b6a12ed77f5761c10f299df",
+      "referenceSha256": "531b988b0cc97a807815d38f84decf7f2b5d68b4cebfe6ed40243851ef713feb"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\xml\\backup_rules.xml",
+      "beforeSha256": "6cf1a27e6807b1d24e41d3fbe7ddc1bfe1f42226027964f6eaf477d71b43b283",
+      "referenceSha256": "6cf1a27e6807b1d24e41d3fbe7ddc1bfe1f42226027964f6eaf477d71b43b283"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\xml\\data_extraction_rules.xml",
+      "beforeSha256": "cb1fc47ab4a984530ed60e0e6ee638929c3038290e7e7e0b4b03a3a30fbe7381",
+      "referenceSha256": "c1648248f5da1d4a14636eb7e3d5917b07f41686222ab1f22a8e8c7b09b00e4b"
+    },
+    {
+      "path": "android-app\\app\\src\\main\\res\\xml\\update_paths.xml",
+      "beforeSha256": null,
+      "referenceSha256": "ab5166f9067d9c76489b6bfb0cccb1b5669f9be2b26e3bf762685ab1fcf92e79"
+    },
+    {
+      "path": "android-app\\app\\src\\website\\AndroidManifest.xml",
+      "beforeSha256": null,
+      "referenceSha256": "bcf9dca5b7850822fd97eccd1a9804066082da48f8f49416a220f4a439298ad7"
+    },
+    {
+      "path": "android-app\\app\\src\\website\\java\\com\\example\\gerainapos\\AppUpdater.kt",
+      "beforeSha256": null,
+      "referenceSha256": "c8379ebb26c7a3f5d8ffc1326c479dd6925d3f4e6effb18395ccc6c4464cc914"
+    },
+    {
+      "path": "android-app\\app\\src\\play\\AndroidManifest.xml",
+      "beforeSha256": null,
+      "referenceSha256": "c8fe08b06e479efc7e3d00476fffe693a3e943e2b874b3c6a1ba5156fc180751"
+    },
+    {
+      "path": "android-app\\app\\src\\play\\java\\com\\example\\gerainapos\\AppUpdater.kt",
+      "beforeSha256": null,
+      "referenceSha256": "5882e38a6dddaddf36eae953ea96a3055ef03aac8065e71ca632229edbf0e9f7"
+    },
+    {
+      "path": "android-app\\app\\src\\test\\java\\com\\example\\gerainapos\\BarcodeScanPolicyTest.kt",
+      "beforeSha256": null,
+      "referenceSha256": "323eefb994cde979abafdace35ef1a4a7f5077c074dd639a89015b3bbc31ddeb"
+    },
+    {
+      "path": "android-app\\app\\src\\test\\java\\com\\example\\gerainapos\\FilePickerPolicyTest.kt",
+      "beforeSha256": null,
+      "referenceSha256": "526abb44c3d9d615e3c4bca2ec6e9e5ce86747da742299de76032b9927eb48e6"
+    },
+    {
+      "path": "android-app\\app\\src\\test\\java\\com\\example\\gerainapos\\NavigationPolicyTest.kt",
+      "beforeSha256": null,
+      "referenceSha256": "a4d1abc1c674ddaeb1e36db4ba17b45a377acab596754ccf40ee38f3118e2038"
+    },
+    {
+      "path": "android-app\\app\\src\\test\\java\\com\\example\\gerainapos\\ReceiptEncoderTest.kt",
+      "beforeSha256": null,
+      "referenceSha256": "cb1e741bca4917c1f1c61338679f323beceb7d368a8bb46d689448337b6b0a25"
+    },
+    {
+      "path": "android-app\\app\\src\\test\\java\\com\\example\\gerainapos\\ui\\main\\MainScreenViewModelTest.kt",
+      "beforeSha256": "04b4e06e73eaac950e214a8a372ba3fd1fee923599c312cd900cc56551e8f34c",
+      "referenceSha256": "04b4e06e73eaac950e214a8a372ba3fd1fee923599c312cd900cc56551e8f34c"
+    },
+    {
+      "path": "android-app\\app\\src\\test\\java\\com\\example\\gerainapos\\UpdatePolicyTest.kt",
+      "beforeSha256": null,
+      "referenceSha256": "1ae79f5135c691ea263d325d75eb22c53b944c6328541950faae48e4bdeebbb8"
+    },
+    {
+      "path": "android-app\\app\\src\\androidTest\\java\\com\\example\\gerainapos\\BarcodeDecoderTest.kt",
+      "beforeSha256": null,
+      "referenceSha256": "101f5337db44f8f6b701d039e926ffbc261ca9a9f77407aa1aa845dc1d2312b7"
+    },
+    {
+      "path": "android-app\\app\\src\\androidTest\\java\\com\\example\\gerainapos\\ui\\main\\MainScreenTest.kt",
+      "beforeSha256": "b150d8160767448d7ab55a172431251132869b1534bf12c499aacf51413959ff",
+      "referenceSha256": "b150d8160767448d7ab55a172431251132869b1534bf12c499aacf51413959ff"
+    },
+    {
+      "path": "android-app/app/build.gradle.kts",
+      "beforeSha256": "0587757610a380bd9a40bca77bfac8349987896d654527cc733d08427cff5254",
+      "referenceSha256": "c37f8104bc3fe44c849452fe8a047ee044b5931ddc043dfa3b319669ee5d1b4a"
+    },
+    {
+      "path": "android-app/app/proguard-rules.pro",
+      "beforeSha256": null,
+      "referenceSha256": "ed62b27532a0913b1ec2ee4ae120e8ea9d1165d283f955803051915ce3622642"
+    },
+    {
+      "path": "android-app/gradle/libs.versions.toml",
+      "beforeSha256": "ffab4611cc9f796271f26f81862402741eac40199a2da3d2ce87f5ef0fc9189e",
+      "referenceSha256": "ffab4611cc9f796271f26f81862402741eac40199a2da3d2ce87f5ef0fc9189e"
+    },
+    {
+      "path": "android-app/scripts/bundle-frontend.cjs",
+      "beforeSha256": null,
+      "referenceSha256": "52ad8eeea120083c36ec631182a90d472846cd17de2a1fbbd064d7bee2c64d1c"
+    },
+    {
+      "path": "android-app/scripts/Build-Release.ps1",
+      "beforeSha256": null,
+      "referenceSha256": "3e4216024bde3a2a2197decd2fd9e0f3b8ceac630ffb1244ef51f0fdfebdd497"
+    },
+    {
+      "path": "android-app/scripts/Verify-Distribution.ps1",
+      "beforeSha256": null,
+      "referenceSha256": "d5aabc951f277ed27f2a49944d856d28d04f90b42bfdbdd9ad10a214a2409d75"
+    },
+    {
+      "path": "android-app/scripts/Prepare-UploadKey.ps1",
+      "beforeSha256": null,
+      "referenceSha256": "08cddddd9e94f22423adf9e23f6c335523841fe29f2a6c83b7e5df8927fcf66f"
+    },
+    {
+      "path": "android-app/scripts/verify-native-alignment.py",
+      "beforeSha256": null,
+      "referenceSha256": "7a7ba3282fcbf2319f85ff16aedbb5d3b5a48f5560b1e606ffff7b4a34136ef8"
+    },
+    {
+      "path": "android-app/scripts/android-device-profiles.json",
+      "beforeSha256": null,
+      "referenceSha256": "b9a2a3e1fe90020fc3af071fc1be50bded48cb987d944352b1ad37b6a0122ef9"
+    },
+    {
+      "path": "backend/permissions.py",
+      "beforeSha256": null,
+      "referenceSha256": "26e734dfe9812620f2313dc7ba7abb6eaa5f04109e1afc6cbc66939cfb4124c4"
+    },
+    {
+      "path": "backend/bank_qris.py",
+      "beforeSha256": null,
+      "referenceSha256": "7c68e4f19a950994ce794ef663465b97aae76eda9ec61825b36311f46e227cc1"
+    },
+    {
+      "path": "backend/merchant_checkout.py",
+      "beforeSha256": null,
+      "referenceSha256": "239fbf14615922d4ae0da93f3ba87ada94356a37118ae43f4a471b6c9503e04e"
+    },
+    {
+      "path": "backend/payment_options.py",
+      "beforeSha256": null,
+      "referenceSha256": "d1be0e0a1bf404f6d5938fc6d873a4830dabe9ed7400f6856faabb3e399b1e07"
+    },
+    {
+      "path": "backend/payment_state.py",
+      "beforeSha256": null,
+      "referenceSha256": "ccc14afc54d67acfe6146dbbb883f290494f625471f49aedde1bdaa49300a52e"
+    },
+    {
+      "path": "backend/payment_labels.py",
+      "beforeSha256": null,
+      "referenceSha256": "8079e5deb61da233ba934f5c2365f9044082d24d4d3d93c723c5f09726642fbb"
+    },
+    {
+      "path": "backend/transactions.py",
+      "beforeSha256": null,
+      "referenceSha256": "192ce43a155ccb44028ecd1987c99ac2de183603102707c113fe79c21d40fb81"
+    },
+    {
+      "path": "backend/stock_ledger.py",
+      "beforeSha256": null,
+      "referenceSha256": "00d1be861b0f3aebcd7b54cdfa6a395abc5b7ad015f0d6d0bddec7cdf12797b8"
+    },
+    {
+      "path": "backend/sale_effects.py",
+      "beforeSha256": null,
+      "referenceSha256": "58e52bf5b0d337a8939820a460dd69f89d4ca964807c6ef55585b9ba1b866b6a"
+    },
+    {
+      "path": "backend/routes_offline.py",
+      "beforeSha256": null,
+      "referenceSha256": "3c367c42cdad29a1a54c75a7aace002fd92e5dca5f9c6a7fd3e5084b2125736a"
+    },
+    {
+      "path": "backend/routes_support.py",
+      "beforeSha256": null,
+      "referenceSha256": "1b100448b79540ffe59a82397f18ae1ee7220b37457f457f0d41b239564f95db"
+    },
+    {
+      "path": "backend/routes_staff.py",
+      "beforeSha256": "33877d818c9f35da9cf784fce29b575711e7aaca7df7d4ca188820ff853f5aae",
+      "referenceSha256": "eb6ea577a61f3ae1d4a4ae3ab30fe2cda669e8a9e63961f24519f840b8ac41bc"
+    },
+    {
+      "path": "backend/routes_settings.py",
+      "beforeSha256": "00a3d41ba946a71b1b8deb0edfa5bfa477adfcf88e06c7ff27d0745e8c7da516",
+      "referenceSha256": "51f96e7aa2d00949c6724cb56aa66e6390486693d97445e3061018f025010850"
+    },
+    {
+      "path": "backend/routes_subscriptions.py",
+      "beforeSha256": "30773dbd98585e6bfd0e4de382be0e09d8d21df122ad04b19d44de7fe7c0ea5b",
+      "referenceSha256": "ec87beb1c944bce042e26d9b2198d272432f2b8f98496b11e96b29c34d34b676"
+    },
+    {
+      "path": "backend/addon_billing.py",
+      "beforeSha256": null,
+      "referenceSha256": "013ee18055c3fcfcfcbde5c07aab8eddcc3d76271e872af8c7f48c54e6245133"
+    },
+    {
+      "path": "backend/addon_catalog.py",
+      "beforeSha256": null,
+      "referenceSha256": "5ea83b9e69bc9c29335fe2294fc3cc9c89da60f01d01139dd2f600c2daf534a9"
+    },
+    {
+      "path": "backend/billing_subscriptions.py",
+      "beforeSha256": "0ca290da7a04b2def1ad0dec095d0a750fd3d130100e24435475ef7db9b3e9ba",
+      "referenceSha256": "7d2cd20f34d020f37710428398134e083575961cfb495f9021971ddf14cf482a"
+    },
+    {
+      "path": "backend/subscription_state.py",
+      "beforeSha256": "bc34a427d86d8eb55f7a3cd50b5e8965c932116b0c155cfa61f4aaa1b58c3345",
+      "referenceSha256": "245d5f087754fc4ea35543af4e76c11f08bf0a050d37e325f8fdcb036f72d471"
+    },
+    {
+      "path": "backend/routes_webhooks.py",
+      "beforeSha256": "8b6ddb48915fddf8a2a92f78fe8df32518387890d60f00beaacebc6fee1f142f",
+      "referenceSha256": "767bcd13c24f7241d98f8b9225c7089a505882dc14a2497718c53a92f4c6057c"
+    }
+  ]
+}

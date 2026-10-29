@@ -1,4 +1,4 @@
-package com.example.gerainapos.theme
+package com.example.dapurospos.theme
 
 import androidx.compose.ui.graphics.Color
 

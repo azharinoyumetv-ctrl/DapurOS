@@ -1,4 +1,4 @@
-package com.example.gerainapos.data
+package com.example.dapurospos.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow

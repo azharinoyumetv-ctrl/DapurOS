@@ -39,6 +39,7 @@ dist
 *credentials.json*
 
 # Logs and debug files
+/debug.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -85,3 +86,5 @@ memory/test_credentials.md
 android-sdk/
 # Private verified deletion cases (never commit customer evidence)
 .private-erasure/
+
+/tmp/

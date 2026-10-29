@@ -1,14 +1,12 @@
 """Xendit API client -- BYO per-tenant credentials, v3 Payment Request API.
 
-Ported from GerainaOS/backend/xendit_client.py.
-
 HISTORY (credentials): this used to read a single global XENDIT_SECRET_KEY env
 var, shared across every store, while the Settings > Integrasi UI told
 merchants "use your own Xendit key -- transactions go to your own account."
 Those two things were both true and incompatible: a merchant's own key, once
 saved, was written to integrations.xendit.secret_key and then never read by
 anything -- the actual charge calls only ever consulted the env var. Converted
-to the same per-store BYO pattern as doku_client.py/WhatsApp: credentials
+to the same per-store BYO pattern as doku_client.py/EDC/WhatsApp: credentials
 come from the calling store's own integrations.xendit config.
 
 HISTORY (API version): this used to call Xendit's older, separate /qr_codes
@@ -16,13 +14,13 @@ and /ewallets/charges endpoints. Confirmed against Xendit's own current
 OpenAPI spec (Payments v3) that neither endpoint appears there at all --
 the current, documented integration path is the unified Payment Request API
 (POST /v3/payment_requests, one shape for every channel via channel_code).
-Migrated to that (mirrors GerainaOS's own migration). Per-channel details
-(channel_code strings, channel_properties fields, response action descriptor)
-confirmed against docs.xendit.co's individual channel pages (QRIS, OVO,
-LinkAja) rather than assuming the old codes/shapes still applied -- e.g.
-e-wallet channel codes dropped their "ID_" prefix (OVO not ID_OVO), and OVO
-no longer needs a mobile_number in channel_properties (v3 OVO is
-REDIRECT/SKIP like the other e-wallets, not the old phone-linked flow).
+Migrated to that. Confirmed per-channel details (channel_code strings,
+channel_properties fields, response action descriptor) against
+docs.xendit.co's individual channel pages (QRIS, OVO, LinkAja) rather than
+assuming the old codes/shapes still applied -- e.g. e-wallet channel codes
+dropped their "ID_" prefix (OVO not ID_OVO), and OVO no longer needs a
+mobile_number in channel_properties (v3 OVO is REDIRECT/SKIP like the other
+e-wallets, not the old phone-linked flow).
 """
 import os
 import uuid
@@ -72,7 +70,8 @@ async def _create_payment_request(cfg: Dict[str, Any], payload: Dict[str, Any]) 
 def _first_action_value(res: Dict[str, Any], descriptor: str) -> Optional[str]:
     """v3 responses carry the QR string / redirect URL inside an actions[] array,
     e.g. [{"type": "PRESENT_TO_CUSTOMER", "descriptor": "QR_STRING", "value": "..."}].
-    Defensive: an unexpected/missing shape returns None rather than raising."""
+    Defensive: an unexpected/missing shape returns None rather than raising --
+    same lesson as the DOKU response-parsing incident earlier this session."""
     try:
         for action in res.get("actions") or []:
             if isinstance(action, dict) and action.get("descriptor") == descriptor:
@@ -85,6 +84,8 @@ def _first_action_value(res: Dict[str, Any], descriptor: str) -> Optional[str]:
 # ---------- QRIS (dynamic, single-use) ----------
 async def create_qris(cfg: Dict[str, Any], external_id: str, amount: int, currency: str = "IDR") -> Dict[str, Any]:
     """cfg = the store's integrations.xendit dict: {is_active, secret_key, webhook_token}."""
+    if type(amount) is not int or not 0 < amount <= 10_000_000 or currency != "IDR":
+        raise PaymentNotConfiguredError("Nominal QRIS harus dalam Rupiah, lebih dari nol dan maksimal Rp10.000.000.")
     if _is_mock_mode(cfg):
         # Mock for demo when no real key set
         mock_res = {
@@ -98,7 +99,7 @@ async def create_qris(cfg: Dict[str, Any], external_id: str, amount: int, curren
                 "descriptor": "QR_STRING",
                 "value": (
                     f"00020101021226680014ID.CO.QRIS.WWW0118ID{uuid.uuid4().hex[:18].upper()}0303UMI"
-                    f"5204481253033605802ID5910DapurOS POS6007Jakarta61051234062260722MOCK{external_id[:8]}"
+                    f"5204481253033605802ID5910DapurOS6007Jakarta61051234062260722MOCK{external_id[:8]}"
                 ),
             }],
             "_mock": True,
@@ -123,7 +124,11 @@ async def create_qris(cfg: Dict[str, Any], external_id: str, amount: int, curren
         },
     }
     res = await _create_payment_request(cfg, payload)
-    res.setdefault("qr_string", _first_action_value(res, "QR_STRING"))
+    qr = _first_action_value(res, "QR_STRING")
+    if (not isinstance(res, dict) or not res.get("payment_request_id") or
+            not isinstance(qr, str) or not qr.strip()):
+        raise PaymentNotConfiguredError("Xendit tidak mengembalikan kode QR pembayaran. Periksa aktivasi kanal QRIS.")
+    res["qr_string"] = qr
     return res
 
 

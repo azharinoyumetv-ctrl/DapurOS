@@ -1,11 +1,11 @@
+import SectionNavigation from "@/navigation/SectionNavigation";
+import PasswordInput from "@/components/PasswordInput";
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Navigate, Link } from "react-router-dom";
 import api from "@/api/client";
-import { Save, Link2, FlaskConical } from "lucide-react";
+import { Save, Link2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
-import { useAuth } from "@/auth/AuthContext";
 
-import { Link } from "react-router-dom";
 
 export default function Integrations() {
   const params = useParams();
@@ -13,38 +13,55 @@ export default function Integrations() {
   const rawType = params.type || pathPart || "xendit";
   const type = (rawType === "integrations" || !rawType) ? "xendit" : rawType.toLowerCase();
 
-  const { user } = useAuth();
-
   // Empty by default — each store brings its own (BYO) payment/notification credentials.
   const [integrations, setIntegrations] = useState({
     xendit: { is_active: false, secret_key: "", webhook_token: "" },
-    midtrans: { is_active: false, client_key: "", server_key: "" },
-    stripe: { is_active: false, publishable_key: "", secret_key: "" },
+    midtrans: { is_active: false, client_key: "", server_key: "", environment: "sandbox" },
     qris: { is_active: false, nmid: "", merchant_name: "" },
     whatsapp: { is_active: false, phone_number_id: "", access_token: "", app_secret: "", webhook_verify_token: "", template_receipt: "dagangos_order_receipt", template_receipt_lang: "id", template_po: "dagangos_po_notify", template_po_lang: "id" },
-    telegram: { is_active: false, bot_token: "", chat_id: "" },
-    email: { is_active: false, smtp_host: "", smtp_port: 587, smtp_user: "" },
     doku: { is_active: false, client_id: "", shared_key: "", environment: "sandbox", preferred_channel: "all" }
   });
-
-  // Same unsequenced-GET race fixed in GerainaOS's Integrations.jsx: this effect re-fires on
-  // every subtab switch, so a slow GET from an earlier tab can resolve after a newer one and
-  // overwrite it with stale data.
+  // Same unsequenced-GET race already fixed in Attendance.jsx/Products.jsx/SupplierList.jsx/
+  // PaymentConfig.jsx: this effect re-fires on every subtab switch, so a slow GET from an
+  // earlier tab could in principle resolve after a newer one. Guarded the same way.
   const reqIdRef = useRef(0);
-  useEffect(() => {
+  const defaultsRef = useRef(integrations);
+  const saveRef = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const loadIntegrations = () => {
     const reqId = ++reqIdRef.current;
+    setLoading(true); setLoadError("");
     api.get("/integrations").then((r) => {
-      if (r.data && reqId === reqIdRef.current) setIntegrations(r.data);
-    }).catch(() => {});
+      if (reqId !== reqIdRef.current) return;
+      const data = r.data;
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid integration settings");
+      setIntegrations(Object.fromEntries(Object.entries(defaultsRef.current).map(([key, defaults]) => [key,
+        { ...defaults, ...(data[key] && typeof data[key] === "object" && !Array.isArray(data[key]) ? data[key] : {}) }
+      ])));
+    }).catch(error => {
+      if (reqId === reqIdRef.current) setLoadError(typeof error?.response?.data?.detail === "string" ? error.response.data.detail : "Konfigurasi belum dapat dimuat. Periksa koneksi dan coba lagi.");
+    }).finally(() => { if (reqId === reqIdRef.current) setLoading(false); });
+  };
+  useEffect(() => {
+    loadIntegrations();
+    return () => { reqIdRef.current++; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    api.post("/integrations", integrations).then(() => {
-      toast.success(`Konfigurasi integrasi ${(type || 'midtrans').toUpperCase()} berhasil disimpan!`);
-    }).catch(() => {
-      toast.error(`Gagal menyimpan konfigurasi ${(type || 'midtrans').toUpperCase()}.`);
-    });
+    if (loading || loadError || saveRef.current || !["xendit", "midtrans", "doku", "whatsapp"].includes(type)) return;
+    saveRef.current = true; setSaving(true);
+    try {
+      // The API merges provider keys. Never resubmit unrelated providers or retired credentials.
+      await api.post("/integrations", { [type]: integrations[type] });
+      toast.success(`Konfigurasi ${type.toUpperCase()} tersimpan. Lakukan uji transaksi/pesan untuk memastikan layanan bekerja.`);
+    } catch (error) {
+      toast.error(typeof error?.response?.data?.detail === "string" ? error.response.data.detail : `Gagal menyimpan konfigurasi ${type.toUpperCase()}.`);
+    } finally { saveRef.current = false; setSaving(false); }
   };
 
   const [waTestNum, setWaTestNum] = useState("");
@@ -71,87 +88,19 @@ export default function Integrations() {
     }
   };
 
-  // ---------- Webhook simulator (dev/testing only) ----------
-  // Server-gated behind ALLOW_WEBHOOK_SIMULATE -- disabled by default in production, so a real
-  // merchant's store can't be poked with fake payment/message events. Lets a developer (or an
-  // automated test) verify the webhook -> order/message pipeline end-to-end without needing a
-  // real gateway callback, instead of there being no way to exercise it at all. Ported from
-  // GerainaOS's Integrations.jsx.
-  const storeId = user?.store_id;
-  const [xenditSim, setXenditSim] = useState({ reference_id: "", status: "SUCCEEDED" });
-  const [xenditSimBusy, setXenditSimBusy] = useState(false);
-  const [xenditSimResult, setXenditSimResult] = useState(null);
-  const sendXenditSim = async () => {
-    if (!xenditSim.reference_id.trim()) { toast.error("Isi Order No (reference_id) dulu."); return; }
-    setXenditSimBusy(true);
-    setXenditSimResult(null);
-    try {
-      await api.post(`/webhooks/xendit/simulate?store_id=${encodeURIComponent(storeId || "")}`, {
-        reference_id: xenditSim.reference_id.trim(),
-        status: xenditSim.status,
-      });
-      setXenditSimResult({ ok: true, msg: `Terkirim. Order ${xenditSim.reference_id} akan ter-update ke status ${xenditSim.status === "SUCCEEDED" ? "paid" : xenditSim.status.toLowerCase()}.` });
-    } catch (e2) {
-      setXenditSimResult({ ok: false, msg: e2?.response?.data?.detail || "Gagal mengirim simulasi." });
-    } finally {
-      setXenditSimBusy(false);
-    }
-  };
-
-  const [dokuSim, setDokuSim] = useState({ invoice_number: "", status: "SUCCESS" });
-  const [dokuSimBusy, setDokuSimBusy] = useState(false);
-  const [dokuSimResult, setDokuSimResult] = useState(null);
-  const sendDokuSim = async () => {
-    if (!dokuSim.invoice_number.trim()) { toast.error("Isi Invoice Number dulu."); return; }
-    setDokuSimBusy(true);
-    setDokuSimResult(null);
-    try {
-      await api.post(`/webhooks/doku/simulate?store_id=${encodeURIComponent(storeId || "")}`, {
-        invoice_number: dokuSim.invoice_number.trim(),
-        status: dokuSim.status,
-      });
-      setDokuSimResult({ ok: true, msg: `Terkirim. Order ${dokuSim.invoice_number} akan ter-update ke status ${dokuSim.status === "SUCCESS" ? "paid" : dokuSim.status.toLowerCase()}.` });
-    } catch (e2) {
-      setDokuSimResult({ ok: false, msg: e2?.response?.data?.detail || "Gagal mengirim simulasi." });
-    } finally {
-      setDokuSimBusy(false);
-    }
-  };
-
-  const [waSim, setWaSim] = useState({ from: "", text: "" });
-  const [waSimBusy, setWaSimBusy] = useState(false);
-  const [waSimResult, setWaSimResult] = useState(null);
   const [waInbound, setWaInbound] = useState([]);
   const [waInboundLoading, setWaInboundLoading] = useState(false);
   const loadWaInbound = () => {
     setWaInboundLoading(true);
     api.get("/webhooks/whatsapp/inbound").then((r) => setWaInbound(r.data || [])).catch(() => {}).finally(() => setWaInboundLoading(false));
   };
-  const sendWaSim = async () => {
-    if (!waSim.from.trim() || !waSim.text.trim()) { toast.error("Isi nomor pengirim dan isi pesan dulu."); return; }
-    setWaSimBusy(true);
-    setWaSimResult(null);
-    try {
-      await api.post(`/webhooks/whatsapp/simulate?store_id=${encodeURIComponent(storeId || "")}`, {
-        entry: [{ changes: [{ value: {
-          metadata: { phone_number_id: integrations.whatsapp?.phone_number_id || "simulated" },
-          messages: [{ from: waSim.from.trim(), type: "text", text: { body: waSim.text.trim() } }],
-        } }] }],
-      });
-      setWaSimResult({ ok: true, msg: "Pesan simulasi diterima." });
-      loadWaInbound();
-    } catch (e2) {
-      setWaSimResult({ ok: false, msg: e2?.response?.data?.detail || "Gagal mengirim simulasi." });
-    } finally {
-      setWaSimBusy(false);
-    }
-  };
   useEffect(() => {
     if (type === "whatsapp") loadWaInbound();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
 
-  if (!integrations) return <div className="p-8 text-center text-xs text-[hsl(var(--muted))]">Memuat data integrasi...</div>;
+  if (["stripe", "telegram", "email", "qris"].includes(type)) return <Navigate to="/dapuros/app/integrations/qris" replace />;
+  if (!integrations) return <div className="p-4 sm:p-6 lg:p-8 text-center text-xs text-[hsl(var(--muted))]">Memuat data integrasi...</div>;
 
   const renderForm = () => {
     switch (type) {
@@ -169,8 +118,8 @@ export default function Integrations() {
             </div>
             <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Xendit Secret API Key</label>
-              <input
-                type="password"
+              <PasswordInput
+
                 value={integrations.xendit.secret_key}
                 placeholder="xnd_production_..."
                 onChange={(e) => setIntegrations({ ...integrations, xendit: { ...integrations.xendit, secret_key: e.target.value } })}
@@ -183,121 +132,86 @@ export default function Integrations() {
                 type="text"
                 value={integrations.xendit.webhook_token}
                 onChange={(e) => setIntegrations({ ...integrations, xendit: { ...integrations.xendit, webhook_token: e.target.value } })}
-                placeholder="String bebas pilihan Anda sendiri — harus unik, tak boleh sama dengan toko lain"
+                placeholder="Token verifikasi dari pengaturan webhook Xendit"
                 className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
               />
               <p className="text-[11px] text-[hsl(var(--muted))]">
-                Daftarkan callback URL <code className="font-mono">https://api.dagangos.com/api/webhooks/xendit</code> di Xendit Dashboard Anda dengan Verification Token yang sama persis dengan yang diisi di sini.
+                Salin Verification Token dari pengaturan webhook Xendit. Daftarkan notifikasi Payment Request dan Payment Session ke callback URL <code className="font-mono break-all">https://dapuros-os.vercel.app/api/webhooks/xendit</code> di dashboard akun Xendit toko Anda. Token harus sama dan tidak dipakai toko lain.
               </p>
             </div>
-            <p className="text-[11px] text-[hsl(var(--muted))]">Gunakan API key Xendit milik toko Anda sendiri. Transaksi pelanggan masuk langsung ke akun Xendit Anda.</p>
+            <p className="text-[11px] text-[hsl(var(--muted))]">Gunakan API key Xendit milik toko Anda sendiri. Transaksi pelanggan diproses pada akun Xendit Anda; biaya penyedia menjadi tanggung jawab toko sesuai perjanjian Xendit. Akun ini terpisah dari akun pembayaran langganan DagangOS.</p>
 
-            {/* Simulator webhook -- dev/testing only, lihat catatan di sendXenditSim */}
-            <div className="border-t border-[hsl(var(--border))] pt-3">
-              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase flex items-center gap-1.5">
-                <FlaskConical size={13} /> Simulator Webhook (Khusus Testing/Development)
-              </label>
-              <p className="text-[11px] text-[hsl(var(--muted))] mt-1 mb-2">
-                Kirim callback Xendit palsu ke order yang sudah ada, untuk memverifikasi alur webhook → status order tanpa transaksi nyata. Hanya aktif jika server diset <code className="font-mono">ALLOW_WEBHOOK_SIMULATE=true</code> — di produksi biasanya nonaktif.
-              </p>
-              <div className="flex flex-wrap gap-2 items-end">
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Order No</label>
-                  <input type="text" value={xenditSim.reference_id} onChange={(e) => setXenditSim({ ...xenditSim, reference_id: e.target.value })}
-                    placeholder="DP-20260720-0001" className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-xs font-mono w-44" data-testid="xendit-sim-ref" />
-                </div>
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Status</label>
-                  <select value={xenditSim.status} onChange={(e) => setXenditSim({ ...xenditSim, status: e.target.value })}
-                    className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-xs" data-testid="xendit-sim-status">
-                    <option value="SUCCEEDED">SUCCEEDED (paid)</option>
-                    <option value="FAILED">FAILED</option>
-                    <option value="EXPIRED">EXPIRED</option>
-                  </select>
-                </div>
-                <button type="button" disabled={xenditSimBusy} onClick={sendXenditSim}
-                  className="btn-outline px-4 py-1.5 text-xs font-bold disabled:opacity-60" data-testid="xendit-sim-send">
-                  {xenditSimBusy ? "Mengirim…" : "Kirim Simulasi"}
-                </button>
-              </div>
-              {xenditSimResult && (
-                <p className={`text-xs mt-2 font-semibold ${xenditSimResult.ok ? "text-emerald-600" : "text-red-600"}`} data-testid="xendit-sim-result">{xenditSimResult.msg}</p>
-              )}
+
+          </div>
+        );
+
+      case "doku":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold">Aktifkan DOKU Gateway</label>
+              <input
+                type="checkbox"
+                checked={integrations.doku.is_active}
+                onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, is_active: e.target.checked } })}
+                className="rounded border-[hsl(var(--border))]"
+              />
             </div>
+            <p className="text-[11px] text-[hsl(var(--muted))]">
+              Gunakan Client ID dan Shared Key DOKU milik toko Anda sendiri. Pilih metode yang ditampilkan di Kasir melalui menu Pembayaran. Kanal juga perlu aktif pada akun merchant DOKU.
+            </p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Client ID</label>
+                <input
+                  type="text"
+                  value={integrations.doku.client_id}
+                  placeholder="BRN-0218-..."
+                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, client_id: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Shared Key (Secret Key)</label>
+                <PasswordInput
+
+                  value={integrations.doku.shared_key}
+                  placeholder="SK-..."
+                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, shared_key: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Environment</label>
+                <select
+                  value={integrations.doku.environment}
+                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, environment: e.target.value } })}
+                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
+                >
+                  <option value="sandbox">Sandbox (Uji Coba)</option>
+                  <option value="production">Production (Transaksi Nyata)</option>
+                </select>
+              </div>
+              <div className="flex flex-col justify-center gap-2 text-sm"><p>Atur pilihan kasir dan kanal melalui menu Pembayaran.</p><Link className="btn-outline" to="/dapuros/app/payments/va">Atur metode kasir</Link></div>
+            </div>
+            <p className="text-[11px] text-[hsl(var(--muted))]">
+              Daftarkan webhook notifikasi <code className="font-mono">https://dapuros-os.vercel.app/api/webhooks/doku</code> di DOKU Dashboard &gt; Developer &gt; Notification URL agar status pembayaran ter-update otomatis.
+            </p>
+
+
           </div>
         );
 
       case "midtrans":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Aktifkan Midtrans Gateway</label>
-              <input
-                type="checkbox"
-                checked={integrations.midtrans.is_active}
-                onChange={(e) => setIntegrations({ ...integrations, midtrans: { ...integrations.midtrans, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Client Key</label>
-                <input
-                  type="text"
-                  value={integrations.midtrans.client_key}
-                  onChange={(e) => setIntegrations({ ...integrations, midtrans: { ...integrations.midtrans, client_key: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Server Key</label>
-                <input
-                  type="password"
-                  value={integrations.midtrans.server_key}
-                  onChange={(e) => setIntegrations({ ...integrations, midtrans: { ...integrations.midtrans, server_key: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-            </div>
-            <p className="text-[11px] text-[hsl(var(--muted))]">Gunakan kredensial Midtrans milik toko Anda sendiri.</p>
-          </div>
-        );
-
-      case "stripe":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Aktifkan Stripe Payments</label>
-              <input
-                type="checkbox"
-                checked={integrations.stripe.is_active}
-                onChange={(e) => setIntegrations({ ...integrations, stripe: { ...integrations.stripe, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Stripe Publishable Key</label>
-                <input
-                  type="text"
-                  value={integrations.stripe.publishable_key}
-                  onChange={(e) => setIntegrations({ ...integrations, stripe: { ...integrations.stripe, publishable_key: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Stripe Secret Key</label>
-                <input
-                  type="password"
-                  value={integrations.stripe.secret_key}
-                  onChange={(e) => setIntegrations({ ...integrations, stripe: { ...integrations.stripe, secret_key: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-            </div>
-            <p className="text-[11px] text-[hsl(var(--muted))]">Gunakan kredensial Stripe milik toko Anda sendiri.</p>
-          </div>
-        );
+        return <div className="space-y-4" data-testid="midtrans-settings">
+          <label className="flex items-center justify-between gap-3 text-sm font-semibold">Aktifkan Midtrans Gateway<input type="checkbox" checked={integrations.midtrans.is_active} onChange={e => setIntegrations({ ...integrations, midtrans: { ...integrations.midtrans, is_active: e.target.checked } })} /></label>
+          <p className="text-sm">Gunakan akun Midtrans milik toko. Pilih Virtual Account, E-Wallet atau Kartu Kredit yang ditampilkan di Kasir melalui menu Pembayaran.</p>
+          <label className="block text-sm font-semibold">Server Key<PasswordInput data-testid="midtrans-server-key" value={integrations.midtrans.server_key} onChange={e => setIntegrations({ ...integrations, midtrans: { ...integrations.midtrans, server_key: e.target.value } })} className="input-field mt-2" /></label>
+          <label className="block text-sm font-semibold">Lingkungan<select className="input-field mt-2" value={integrations.midtrans.environment || 'sandbox'} onChange={e => setIntegrations({ ...integrations, midtrans: { ...integrations.midtrans, environment: e.target.value } })}><option value="sandbox">Sandbox (Uji Coba)</option><option value="production">Production (Transaksi Nyata)</option></select></label>
+          <p className="text-xs break-words">Daftarkan Payment Notification URL <code>https://dapuros-os.vercel.app/api/webhooks/midtrans</code> di akun merchant Midtrans toko Anda.</p>
+        </div>;
 
       case "whatsapp":
         return (
@@ -325,8 +239,8 @@ export default function Integrations() {
             </div>
             <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Access Token (system user, permanen)</label>
-              <input
-                type="password"
+              <PasswordInput
+
                 value={integrations.whatsapp.access_token}
                 onChange={(e) => setIntegrations({ ...integrations, whatsapp: { ...integrations.whatsapp, access_token: e.target.value } })}
                 className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
@@ -342,13 +256,13 @@ export default function Integrations() {
                 className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
               />
               <p className="text-[11px] text-[hsl(var(--muted))]">
-                Daftarkan callback URL <code className="font-mono">https://api.dagangos.com/api/webhooks/whatsapp</code> di App Meta Anda dengan verify token yang sama persis dengan yang diisi di sini.
+                Daftarkan callback URL <code className="font-mono">https://dapuros-os.vercel.app/api/webhooks/whatsapp</code> di App Meta Anda dengan verify token yang sama persis dengan yang diisi di sini.
               </p>
             </div>
             <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">App Secret</label>
-              <input
-                type="password"
+              <PasswordInput
+
                 value={integrations.whatsapp.app_secret}
                 onChange={(e) => setIntegrations({ ...integrations, whatsapp: { ...integrations.whatsapp, app_secret: e.target.value } })}
                 className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
@@ -411,36 +325,7 @@ export default function Integrations() {
               <p className="text-[11px] text-[hsl(var(--muted))] mt-1">Isi Phone Number ID + Access Token di atas, lalu kirim tes ke nomor Anda sendiri untuk memastikan koneksi.</p>
             </div>
 
-            {/* Simulator webhook masuk -- dev/testing only. "Kirim Tes" di atas menguji arah
-                KELUAR (toko -> pelanggan); ini menguji arah MASUK (pelanggan -> toko), yang
-                sebelumnya tidak punya cara untuk diuji sama sekali tanpa Meta App nyata. */}
             <div className="border-t border-[hsl(var(--border))] pt-3">
-              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase flex items-center gap-1.5">
-                <FlaskConical size={13} /> Simulator Pesan Masuk (Khusus Testing/Development)
-              </label>
-              <p className="text-[11px] text-[hsl(var(--muted))] mt-1 mb-2">
-                Simulasikan balasan pelanggan masuk lewat WhatsApp, tanpa perlu App Meta nyata. Hanya aktif jika server diset <code className="font-mono">ALLOW_WEBHOOK_SIMULATE=true</code>.
-              </p>
-              <div className="flex flex-wrap gap-2 items-end">
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Nomor Pengirim</label>
-                  <input type="text" value={waSim.from} onChange={(e) => setWaSim({ ...waSim, from: e.target.value })}
-                    placeholder="628123456789" className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-xs font-mono w-40" data-testid="wa-sim-from" />
-                </div>
-                <div className="flex flex-col space-y-1 flex-1 min-w-[160px]">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Isi Pesan</label>
-                  <input type="text" value={waSim.text} onChange={(e) => setWaSim({ ...waSim, text: e.target.value })}
-                    placeholder="Halo, pesanan saya sudah sampai mana?" className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-xs" data-testid="wa-sim-text" />
-                </div>
-                <button type="button" disabled={waSimBusy} onClick={sendWaSim}
-                  className="btn-outline px-4 py-1.5 text-xs font-bold disabled:opacity-60" data-testid="wa-sim-send">
-                  {waSimBusy ? "Mengirim…" : "Kirim Simulasi"}
-                </button>
-              </div>
-              {waSimResult && (
-                <p className={`text-xs mt-2 font-semibold ${waSimResult.ok ? "text-emerald-600" : "text-red-600"}`} data-testid="wa-sim-result">{waSimResult.msg}</p>
-              )}
-
               <div className="mt-3">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Pesan Masuk Terakhir</label>
@@ -449,7 +334,7 @@ export default function Integrations() {
                   </button>
                 </div>
                 {waInbound.length === 0 ? (
-                  <p className="text-[11px] text-[hsl(var(--muted))] mt-1" data-testid="wa-inbound-empty">Belum ada pesan masuk (nyata atau simulasi).</p>
+                  <p className="text-[11px] text-[hsl(var(--muted))] mt-1" data-testid="wa-inbound-empty">Belum ada pesan masuk.</p>
                 ) : (
                   <ul className="mt-1 space-y-1" data-testid="wa-inbound-list">
                     {waInbound.map((m, i) => (
@@ -466,223 +351,25 @@ export default function Integrations() {
           </div>
         );
 
-      case "doku":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Aktifkan DOKU Gateway</label>
-              <input
-                type="checkbox"
-                checked={integrations.doku?.is_active || false}
-                onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Client ID</label>
-                <input
-                  type="text"
-                  value={integrations.doku?.client_id || ""}
-                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, client_id: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Shared Key</label>
-                <input
-                  type="password"
-                  value={integrations.doku?.shared_key || ""}
-                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, shared_key: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Environment</label>
-                <select
-                  value={integrations.doku?.environment || "sandbox"}
-                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, environment: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                >
-                  <option value="sandbox">Sandbox (Uji Coba)</option>
-                  <option value="production">Production (Live)</option>
-                </select>
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Saluran Pembayaran</label>
-                <select
-                  value={integrations.doku?.preferred_channel || "all"}
-                  onChange={(e) => setIntegrations({ ...integrations, doku: { ...integrations.doku, preferred_channel: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                >
-                  <option value="all">Semua Saluran</option>
-                  <option value="va">Virtual Account Saja</option>
-                  <option value="ewallet">E-Wallet Saja</option>
-                  <option value="minimart">Minimarket Saja</option>
-                </select>
-              </div>
-            </div>
-            <p className="text-[11px] text-[hsl(var(--muted))]">Gunakan kredensial DOKU milik toko Anda sendiri (Client ID &amp; Shared Key dari DOKU Merchant Dashboard). Webhook callback: <code>https://api.dagangos.com/api/webhooks/doku</code>.</p>
-
-            {/* Simulator webhook -- dev/testing only */}
-            <div className="border-t border-[hsl(var(--border))] pt-3">
-              <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase flex items-center gap-1.5">
-                <FlaskConical size={13} /> Simulator Webhook (Khusus Testing/Development)
-              </label>
-              <p className="text-[11px] text-[hsl(var(--muted))] mt-1 mb-2">
-                Kirim notifikasi DOKU palsu ke order yang sudah ada. Hanya aktif jika server diset <code className="font-mono">ALLOW_WEBHOOK_SIMULATE=true</code>.
-              </p>
-              <div className="flex flex-wrap gap-2 items-end">
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Invoice Number</label>
-                  <input type="text" value={dokuSim.invoice_number} onChange={(e) => setDokuSim({ ...dokuSim, invoice_number: e.target.value })}
-                    placeholder="DP-20260720-0001" className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-xs font-mono w-44" data-testid="doku-sim-invoice" />
-                </div>
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Status</label>
-                  <select value={dokuSim.status} onChange={(e) => setDokuSim({ ...dokuSim, status: e.target.value })}
-                    className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-xs" data-testid="doku-sim-status">
-                    <option value="SUCCESS">SUCCESS (paid)</option>
-                    <option value="FAILED">FAILED</option>
-                    <option value="CANCEL">CANCEL (voided)</option>
-                  </select>
-                </div>
-                <button type="button" disabled={dokuSimBusy} onClick={sendDokuSim}
-                  className="btn-outline px-4 py-1.5 text-xs font-bold disabled:opacity-60" data-testid="doku-sim-send">
-                  {dokuSimBusy ? "Mengirim…" : "Kirim Simulasi"}
-                </button>
-              </div>
-              {dokuSimResult && (
-                <p className={`text-xs mt-2 font-semibold ${dokuSimResult.ok ? "text-emerald-600" : "text-red-600"}`} data-testid="doku-sim-result">{dokuSimResult.msg}</p>
-              )}
-            </div>
-          </div>
-        );
-
-      case "telegram":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Aktifkan Notifikasi Telegram</label>
-              <input
-                type="checkbox"
-                checked={integrations.telegram.is_active}
-                onChange={(e) => setIntegrations({ ...integrations, telegram: { ...integrations.telegram, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Bot API Token</label>
-                <input
-                  type="password"
-                  value={integrations.telegram.bot_token}
-                  onChange={(e) => setIntegrations({ ...integrations, telegram: { ...integrations.telegram, bot_token: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Target Chat ID / Channel</label>
-                <input
-                  type="text"
-                  value={integrations.telegram.chat_id}
-                  onChange={(e) => setIntegrations({ ...integrations, telegram: { ...integrations.telegram, chat_id: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case "email":
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Kirim Struk/Invoice via Email</label>
-              <input
-                type="checkbox"
-                checked={integrations.email.is_active}
-                onChange={(e) => setIntegrations({ ...integrations, email: { ...integrations.email, is_active: e.target.checked } })}
-                className="rounded border-[hsl(var(--border))]"
-              />
-            </div>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">SMTP Host</label>
-                <input
-                  type="text"
-                  value={integrations.email.smtp_host}
-                  onChange={(e) => setIntegrations({ ...integrations, email: { ...integrations.email, smtp_host: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                />
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">SMTP Port</label>
-                <input
-                  type="number"
-                  value={integrations.email.smtp_port}
-                  onChange={(e) => setIntegrations({ ...integrations, email: { ...integrations.email, smtp_port: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm font-mono"
-                />
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">SMTP Username</label>
-                <input
-                  type="text"
-                  value={integrations.email.smtp_user}
-                  onChange={(e) => setIntegrations({ ...integrations, email: { ...integrations.email, smtp_user: e.target.value } })}
-                  className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-sm"
-                />
-              </div>
-            </div>
-          </div>
-        );
-
       default:
         return <p className="text-sm text-[hsl(var(--muted))]">Kanal integrasi tidak ditemukan.</p>;
     }
   };
 
-  const subtabs = [
-    { id: "xendit", label: "Xendit", path: "/dapuros/app/integrations/xendit" },
-    { id: "midtrans", label: "Midtrans", path: "/dapuros/app/integrations/midtrans" },
-    { id: "stripe", label: "Stripe", path: "/dapuros/app/integrations/stripe" },
-    { id: "qris", label: "QRIS", path: "/dapuros/app/integrations/qris" },
-    { id: "doku", label: "DOKU", path: "/dapuros/app/integrations/doku" },
-    { id: "whatsapp", label: "WhatsApp", path: "/dapuros/app/integrations/whatsapp" },
-    { id: "telegram", label: "Telegram", path: "/dapuros/app/integrations/telegram" },
-    { id: "email", label: "Email SMTP", path: "/dapuros/app/integrations/email" }
-  ];
 
   return (
-    <div className="p-8 space-y-6 text-left" data-testid="integrations-page">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 text-left" data-testid="integrations-page">
       <div className="flex items-center justify-between">
         <div>
           <span className="label-tiny">Integrasi</span>
           <h1 className="font-display text-3xl font-bold mt-1 capitalize">Kanal Integrasi ({type})</h1>
         </div>
         <div className="flex items-center gap-2 text-xs font-semibold text-[hsl(var(--primary))] bg-[hsl(var(--primary))]/8 px-3 py-1 rounded border border-[hsl(var(--primary))]/20">
-          <Link2 size={14} /> Terhubung Layanan Cloud
+          <Link2 size={14} /> Pengaturan layanan
         </div>
       </div>
 
-      {/* Subtab Navigation Bar */}
-      <div className="flex flex-wrap gap-2 border-b border-[hsl(var(--border))] pb-3">
-        {subtabs.map((tab) => {
-          const isActive = type === tab.id;
-          return (
-            <Link
-              key={tab.id}
-              to={tab.path}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isActive ? "bg-[hsl(var(--primary))] text-white shadow-md" : "bg-[hsl(var(--surface))] border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"}`}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </div>
+      <SectionNavigation section="integrations" active={type} />
 
       <div className="max-w-3xl card-surface p-6">
         <form onSubmit={handleSave} className="space-y-6">
@@ -690,13 +377,17 @@ export default function Integrations() {
             Integrasi Layanan {type}
           </h2>
 
-          {renderForm()}
+          {loading ? <p role="status">Memuat konfigurasi…</p> : loadError ? (
+            <div role="alert" className="space-y-3" data-testid="integrations-load-error">
+              <p>{loadError}</p><button type="button" className="btn-outline" onClick={loadIntegrations}>Coba lagi</button>
+            </div>
+          ) : <fieldset disabled={saving} className="space-y-4">{renderForm()}</fieldset>}
 
-          <div className="border-t border-[hsl(var(--border))] pt-4 flex justify-end">
-            <button type="submit" className="btn-primary py-2 px-6 flex items-center gap-2 text-sm font-semibold">
-              <Save size={16} /> Simpan Integrasi
+          {type !== "qris" && <div className="border-t border-[hsl(var(--border))] pt-4 flex justify-end">
+            <button type="submit" disabled={loading || !!loadError || saving} className="btn-primary py-2 px-6 flex items-center gap-2 text-sm font-semibold disabled:opacity-50">
+              <Save size={16} /> {saving ? "Menyimpan…" : "Simpan Integrasi"}
             </button>
-          </div>
+          </div>}
         </form>
       </div>
     </div>

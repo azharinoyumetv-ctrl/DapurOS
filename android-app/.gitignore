@@ -13,3 +13,14 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+/signing/
+/keystore.properties
+/app/build/
+/.kotlin/
+/releases/*.apk
+/releases/*.aab
+/releases/*-mapping.txt
+/releases/play/*.apk
+/releases/play/*.aab
+/releases/play/*-mapping.txt

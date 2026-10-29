@@ -1,85 +1,99 @@
+import "@/styles/android-restaurant.css";
+import { useEffect } from "react";
+import PasswordSetup from "@/auth/PasswordSetup";
+import { firstAllowedPath } from "@/auth/permissions";
+import { deferred } from "@/navigation/DeferredPage";
 import "@/index.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
 
-import DagangOS from "@/pages/DagangOS";
-import DapurOS from "@/pages/DapurOS";
-import Pricing from "@/pages/Pricing";
+const DagangOS = deferred(() => import("@/pages/DagangOS"));
+const DapurOS = deferred(() => import("@/pages/DapurOS"));
+const Pricing = deferred(() => import("@/pages/Pricing"));
 import Login from "@/pages/Login";
-import Register from "@/pages/Register";
+const Register = deferred(() => import("@/pages/Register"));
 import AppLayout from "@/layouts/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Products from "@/pages/Products";
 import POS from "@/pages/POS";
-import Sales from "@/pages/Sales";
-import About from "@/pages/About";
-import LicenseDevices from "@/pages/LicenseDevices";
+const Sales = deferred(() => import("@/pages/Sales"));
+const About = deferred(() => import("@/pages/About"));
+const LicenseDevices = deferred(() => import("@/pages/LicenseDevices"));
 
 // Submodules
-import Categories from "@/pages/products/Categories";
-import Brands from "@/pages/products/Brands";
-import Units from "@/pages/products/Units";
-import StockAdjustment from "@/pages/products/StockAdjustment";
-import StockTransfer from "@/pages/products/StockTransfer";
-import Ingredients from "@/pages/products/Ingredients";
+const Categories = deferred(() => import("@/pages/products/Categories"));
+const Brands = deferred(() => import("@/pages/products/Brands"));
+const Units = deferred(() => import("@/pages/products/Units"));
+const StockAdjustment = deferred(() => import("@/pages/products/StockAdjustment"));
+const StockTransfer = deferred(() => import("@/pages/products/StockTransfer"));
+const Ingredients = deferred(() => import("@/pages/products/Ingredients"));
 
-import StockOverview from "@/pages/inventory/StockOverview";
-import StockMovement from "@/pages/inventory/StockMovement";
-import InventoryValuation from "@/pages/inventory/InventoryValuation";
-import LowStock from "@/pages/inventory/LowStock";
-import DeadStock from "@/pages/inventory/DeadStock";
+const StockOverview = deferred(() => import("@/pages/inventory/StockOverview"));
+const StockMovement = deferred(() => import("@/pages/inventory/StockMovement"));
+const InventoryValuation = deferred(() => import("@/pages/inventory/InventoryValuation"));
+const LowStock = deferred(() => import("@/pages/inventory/LowStock"));
+const DeadStock = deferred(() => import("@/pages/inventory/DeadStock"));
 
-import PurchaseOrder from "@/pages/purchase/PurchaseOrder";
-import GoodsReceiving from "@/pages/purchase/GoodsReceiving";
-import SupplierInvoice from "@/pages/purchase/SupplierInvoice";
+const PurchaseOrder = deferred(() => import("@/pages/purchase/PurchaseOrder"));
+const GoodsReceiving = deferred(() => import("@/pages/purchase/GoodsReceiving"));
+const SupplierInvoice = deferred(() => import("@/pages/purchase/SupplierInvoice"));
 
-import SupplierList from "@/pages/supplier/SupplierList";
+const SupplierList = deferred(() => import("@/pages/supplier/SupplierList"));
 
-import CustomerList from "@/pages/customer/CustomerList";
-import Membership from "@/pages/customer/Membership";
-import LoyaltyPoints from "@/pages/customer/LoyaltyPoints";
+const CustomerList = deferred(() => import("@/pages/customer/CustomerList"));
+const Membership = deferred(() => import("@/pages/customer/Membership"));
+const LoyaltyPoints = deferred(() => import("@/pages/customer/LoyaltyPoints"));
 
-import AccountsReceivable from "@/pages/debt/AccountsReceivable";
-import AccountsPayable from "@/pages/debt/AccountsPayable";
+const AccountsReceivable = deferred(() => import("@/pages/debt/AccountsReceivable"));
+const AccountsPayable = deferred(() => import("@/pages/debt/AccountsPayable"));
 
-import PaymentConfig from "@/pages/payments/PaymentConfig";
-import Reports from "@/pages/reports/Reports";
+const PaymentConfig = deferred(() => import("@/pages/payments/PaymentConfig"));
+const Reports = deferred(() => import("@/pages/reports/Reports"));
 
-import StaffManagement from "@/pages/staff/StaffManagement";
-import Roles from "@/pages/staff/Roles";
-import Permissions from "@/pages/staff/Permissions";
-import Attendance from "@/pages/staff/Attendance";
+const StaffManagement = deferred(() => import("@/pages/staff/StaffManagement"));
+const Roles = deferred(() => import("@/pages/staff/Roles"));
+const Permissions = deferred(() => import("@/pages/staff/Permissions"));
+const Attendance = deferred(() => import("@/pages/staff/Attendance"));
 
-import BranchManagement from "@/pages/branches/BranchManagement";
-import Integrations from "@/pages/integrations/Integrations";
-import Settings from "@/pages/settings/Settings";
+const BranchManagement = deferred(() => import("@/pages/branches/BranchManagement"));
+const Integrations = deferred(() => import("@/pages/integrations/Integrations"));
+const Settings = deferred(() => import("@/pages/settings/Settings"));
 
 import RoleGuard from "@/components/RoleGuard";
-import KdsScreen from "@/pages/KdsScreen";
-import QrMenu from "@/pages/products/QrMenu";
-import Activate from "@/pages/Activate";
+const KdsScreen = deferred(() => import("@/pages/KdsScreen"));
+const QrMenu = deferred(() => import("@/pages/products/QrMenu"));
+const Activate = deferred(() => import("@/pages/Activate"));
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="p-10 text-sm text-center text-[hsl(var(--muted))]" data-testid="auth-loading">Memuat sesi…</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/dapuros/login" replace />;
+  if (user.must_change_password) return <PasswordSetup />;
   return children;
+}
+
+function AndroidRouterBridge() {
+ const navigate = useNavigate();
+ useEffect(() => {
+  const router = { navigate: href => { const url = new URL(href, location.origin); if (url.origin !== location.origin || !url.pathname.startsWith('/dapuros/app/')) return false; navigate(url.pathname + url.search + url.hash); return true; } };
+  window.DapurOSRouter = router; return () => { if (window.DapurOSRouter === router) delete window.DapurOSRouter; };
+ }, [navigate]); return null;
 }
 
 function RootComponent() {
   const { user, loading } = useAuth();
   const token = typeof window !== "undefined" ? (localStorage.getItem("dagangos_token") || localStorage.getItem("geraina_token") || localStorage.getItem("dapuros_token")) : null;
-  console.log('[RootComponent] loading:', loading, 'user:', !!user, 'token:', !!token, 'location:', window.location.pathname);
+
   if (loading) return <div className="p-10 text-sm text-center text-[hsl(var(--muted))]" data-testid="root-loading">Memuat…</div>;
   if (user || token) {
-    return <Navigate to="/dapuros/app/dashboard" replace />;
+    return <Navigate to={firstAllowedPath(user?.role)} replace />;
   }
   return <DapurOS />;
 }
 
 function IndexRedirect() {
-  console.log('[IndexRedirect] Triggered! Redirecting to dashboard from index route, location:', window.location.pathname);
+
   return <Navigate to="dashboard" replace />;
 }
 
@@ -87,6 +101,7 @@ function getAppSubRoutes() {
   return [
     <Route key="idx" index element={<IndexRedirect />} />,
     
+    <Route key="r-attendance-self" path="attendance" element={<RoleGuard><Attendance /></RoleGuard>} />,
     /* General Routes */
     <Route key="r-dash" path="dashboard" element={<RoleGuard><Dashboard /></RoleGuard>} />,
     <Route key="r-pos" path="pos" element={<RoleGuard><POS /></RoleGuard>} />,
@@ -186,6 +201,7 @@ export default function App() {
           mounted anywhere before this. Mirrors GerainaOS's App.js. */}
       <Toaster position="top-center" richColors closeButton />
       <BrowserRouter>
+        <AndroidRouterBridge />
         <Routes>
           {/* Direct Auth Top-level & Full URL Mappings */}
           <Route path="/" element={<RootComponent />} />
