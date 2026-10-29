@@ -133,31 +133,15 @@ async def list_addons():
 
 # Paket yang boleh diaktifkan mandiri tanpa pembayaran (gratis).
 # Paket berbayar dikunci sampai gateway pembayaran (Xendit/Midtrans) aktif.
-FREE_SELF_SERVE_TIERS = {"trial"}
+FREE_SELF_SERVE_TIERS = set()
 
 
 @router.post("/upgrade")
 async def upgrade_plan(payload: dict, user: dict = Depends(require_billing_admin)):
-    tier_id = payload.get("tier_id")
-    if not tier_id or tier_id not in [t["id"] for t in TIERS]:
-        raise HTTPException(status_code=400, detail="Paket tidak valid")
-    if tier_id not in FREE_SELF_SERVE_TIERS:
-        raise HTTPException(
-            status_code=403,
-            detail="Aktivasi paket berbayar belum tersedia. Pembayaran sedang disiapkan — silakan hubungi sales untuk aktivasi manual.",
-        )
-
-    db = get_db()
-    await db.users.find_one_and_update(
-        {"id": user["id"]},
-        {"$set": {"plan": tier_id}}
-    )
-    await db.stores.find_one_and_update(
-        {"id": user["store_id"]},
-        {"$set": {"plan": tier_id}}
-    )
-    return {"ok": True, "plan": tier_id}
-
+    """Trials begin once at product activation; paid plans need verified checkout."""
+    if payload.get("tier_id") not in {tier["id"] for tier in TIERS}:
+        raise HTTPException(400, "Paket tidak valid")
+    raise HTTPException(409, "Trial hanya dimulai saat aktivasi produk. Pilih paket berbayar melalui Langganan & Tagihan atau halaman Harga.")
 
 @router.get("/addons/my")
 async def list_my_addons(user: dict = Depends(get_billing_user)):
