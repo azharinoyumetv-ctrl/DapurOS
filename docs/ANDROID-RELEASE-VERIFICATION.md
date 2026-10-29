@@ -1,6 +1,6 @@
 # DapurOS Android release verification
 
-**DapurOS 1.0.0, build 2 is a signed, locally verified release candidate.** The matching restaurant backend, web interface and download listing are prepared locally. They have not been deployed, committed or pushed. Publish the matching backend before distributing this APK.
+**DapurOS 1.0.0, build 2 is published and verified on the live website.** The matching restaurant backend was deployed before the website and APK. Open [DapurOS](https://dagangos.com/dapuros), choose Android, then [download the signed APK](https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.0.apk). Publication evidence is recorded in [ANDROID-PUBLICATION.json](ANDROID-PUBLICATION.json).
 
 Verified on 29 October 2026. The starting DapurOS revision was `b5059b4`. Changes were made in the existing checkout without creating another project copy. The machine-readable evidence is [ANDROID-RELEASE-VERIFICATION.json](ANDROID-RELEASE-VERIFICATION.json); the reference-file audit is [ANDROID-PARITY-AUDIT.json](ANDROID-PARITY-AUDIT.json).
 
@@ -79,7 +79,9 @@ The build/test entry points are described in the Android README. `android-app/sc
 
 ## Limits and publication status
 
-**The matching backend and portal have not been deployed.** DapurOS now follows Geraina's existing public-site structure: an Android navigation link and platform section on `/dapuros` lead to `/dapuros/android`, where download buttons use the signed release under `/downloads/dapuros/`. The Android page uses the Geraina layout adapted to DapurOS branding, restaurant copy and screenshots. The original DapurOS homepage hero remains intact. The portal deployment checks out product repositories from their published branches, so the matching DapurOS backend/frontend must land before the portal/download release. Publishing is awaiting explicit approval after automatic approval review rejected the attempted live publication.
+**The matching backend and portal are deployed.** DapurOS follows Geraina's existing public-site structure: an Android navigation link and platform section on `/dapuros` lead to `/dapuros/android`, where download buttons use the signed release under `/downloads/dapuros/`. The Android page uses the Geraina layout adapted to DapurOS branding, restaurant copy and screenshots. The original DapurOS homepage hero remains intact. Backend release commit `8a78a3d887f12f98d498e513cfb1ef5d54363a7b` deployed successfully before portal release commit `cad1a0d3b7054fc9b443c5af48db4d6c5af4032e`. [The deployment workflow](https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/40852207448) passed deployment, zone audit and public accessibility checks. Unrelated live Geraina write tests were skipped for this DapurOS-only release.
+
+All six website checks also passed against `https://dagangos.com`, including navigation from the homepage at four screen widths and downloading the actual APK. Its SHA-256 equals the signed release above. The live DapurOS backend reports the expected erasure-fence implementation hash with its write protection enabled. These production checks were read-only. A navigation timing issue in the browser harness was corrected by waiting for the new document's download element before inspecting its metadata; it required no website runtime change.
 
 The pre-existing public guest URL `/dapuros/qr-order` has no verified unauthenticated ordering service. This release verifies authenticated QR menu preview orders; it does not certify public guest self-ordering.
 

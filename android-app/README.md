@@ -28,6 +28,6 @@ The full report is `../docs/ANDROID-RELEASE-VERIFICATION.json`, with a readable 
 
 The published account-closure write fence and database adapter were retained unchanged. See the existing shared-identity account-erasure runbook/evidence in GerainaOS; this release does not repeat or undo that work.
 
-Deploy the matching DapurOS backend before distributing the new APK, then the portal/frontend/download changes. The root portal build checks out product repositories from their published branches, so product changes must land before the portal release. Until publication, the APK and listing are reviewable local candidates. Geraina's APK, signing key, customer state and unrelated working changes are preserved.
+The matching DapurOS backend and portal/frontend/download changes are published. Open https://dagangos.com/dapuros and choose Android, or use https://dagangos.com/dapuros/android. The live download matches the exact signed APK checksum; publication evidence is in `../docs/ANDROID-PUBLICATION.json`. Future releases must deploy their matching backend before the portal because the portal build checks out product repositories from their published branches. Geraina's APK, signing key, customer state and unrelated working changes are preserved.
 
 `signing/` and `keystore.properties` are private and ignored. Back them up securely; future updates must retain this key. Do not publish them, the test APK, test account settings or mapping files.

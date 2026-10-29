@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "status": "passed-candidate",
-  "verifiedAt": "2026-10-29T06:41:34.717Z",
+  "status": "passed-published",
+  "verifiedAt": "2026-10-29T09:51:11.579Z",
   "sourceBaseline": "b5059b4",
-  "sourceState": "reviewable local changes; not committed or published",
+  "sourceState": "release source committed and published; read-only live verification passed",
   "package": {
     "applicationId": "com.dagangos.dapuros",
     "version": "1.0.0",
@@ -205,11 +205,65 @@
     "releaseNativeCameraPreviewAndPermissionRecovery": "passed on the exact release APK"
   },
   "publication": {
-    "status": "prepared-not-deployed",
-    "backendDeployed": false,
-    "portalDeployed": false,
-    "requires": "Publish the matching DapurOS backend/frontend before the portal/download listing",
-    "gerainaPublicApkPreserved": true
+    "status": "published",
+    "verifiedAt": "2026-10-29T09:51:11.373Z",
+    "backendDeployed": true,
+    "portalDeployed": true,
+    "backendSourceCommit": "8a78a3d887f12f98d498e513cfb1ef5d54363a7b",
+    "backendDeployment": {
+      "context": "Vercel",
+      "state": "success",
+      "target_url": "https://vercel.com/azharinoyume/dapur-os/CciYNfxMqATfMABtMa5GvfgqbYdF"
+    },
+    "portalSourceCommit": "cad1a0d3b7054fc9b443c5af48db4d6c5af4032e",
+    "portalDeployment": {
+      "url": "https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/40852207448",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "conclusion": "success",
+          "name": "cloudflare-zone-audit",
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "deploy",
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "public-accessibility",
+          "status": "completed"
+        },
+        {
+          "conclusion": "skipped",
+          "name": "e2e-geraina",
+          "status": "completed"
+        }
+      ]
+    },
+    "homepageUrl": "https://dagangos.com/dapuros",
+    "downloadPageUrl": "https://dagangos.com/dapuros/android",
+    "downloadUrl": "https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.0.apk",
+    "apkSha256": "42361087c60939d3f8733e3ccf3b41af6e19b9d90b57619be1a2937d11b2fc58",
+    "apkBytes": 19201066,
+    "liveWebsite": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "version": "1.0.0",
+      "checks": [
+        "Homepage Android link reaches the verified download page and fits 1440px",
+        "Homepage Android link reaches the verified download page and fits 768px",
+        "Homepage Android link reaches the verified download page and fits 393px",
+        "Homepage Android link reaches the verified download page and fits 320px",
+        "Clicking Download saves the exact verified APK bytes",
+        "Unavailable release metadata leaves download buttons safely disabled"
+      ]
+    },
+    "erasureWriteFenceEnabled": true,
+    "erasureImplementationSha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+    "gerainaPublicApkPreserved": true,
+    "verificationProductionWrites": 0
   },
   "limitations": [
     "AOSP screen profiles do not emulate Xiaomi HyperOS or Samsung One UI",
@@ -227,7 +281,7 @@
   ],
   "website": {
     "status": "passed",
-    "base": "http://127.0.0.1:8799",
+    "base": "https://dagangos.com",
     "version": "1.0.0",
     "checks": [
       "Homepage Android link reaches the verified download page and fits 1440px",
@@ -237,7 +291,7 @@
       "Clicking Download saves the exact verified APK bytes",
       "Unavailable release metadata leaves download buttons safely disabled"
     ],
-    "scope": "local Worker and browser; not published"
+    "scope": "read-only live website and download verification"
   },
   "portalUnitTests": {
     "passed": 58,
@@ -246,6 +300,6 @@
   "portalBuild": {
     "status": "passed",
     "output": "DagangOS/dist",
-    "published": false
+    "published": true
   }
 }
