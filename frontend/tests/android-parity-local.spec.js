@@ -1,5 +1,6 @@
 const {test,expect} = require('@playwright/test');
 const fs=require('node:fs'),path=require('node:path');
+const {pathToFileURL}=require('node:url');
 const root=path.resolve(__dirname,'../..'),origin='https://dagangos.com';
 const assets=path.join(root,'android-app/app/src/main/assets');
 const css=['mobile-ui.css','mobile-support.css'].map(f=>fs.readFileSync(path.join(assets,f),'utf8')).join('\n');
@@ -40,6 +41,16 @@ async function fixture(page,context,{role='Owner',delay=0,offlineFail=false,plan
       }
       return route.fulfill({status,json:body});
     }
+    if(url.pathname==='/dapuros/pricing'){
+      const worker=(await import(pathToFileURL(path.join(root,'../src/index.js')).href)).default;
+      const response=await worker.fetch(new Request(url.href),{ASSETS:{fetch:async request=>{
+        const file=path.join(root,'../public',new URL(request.url).pathname);
+        return fs.existsSync(file)?new Response(fs.readFileSync(file)):new Response('Missing',{status:404});
+      }}},{});
+      return route.fulfill({status:response.status,contentType:'text/html',body:await response.text()});
+    }
+    const publicFile=path.join(root,'../public',url.pathname);
+    if(!url.pathname.startsWith('/dapuros/static/')&&fs.existsSync(publicFile)&&fs.statSync(publicFile).isFile())return route.fulfill({path:publicFile});
     const rel=url.pathname.startsWith('/dapuros/static/')?url.pathname.slice('/dapuros/'.length):url.pathname.startsWith('/assets/')?url.pathname.slice(1):'index.html';
     const target=path.resolve(root,'frontend/build',rel);
     if(!target.startsWith(path.resolve(root,'frontend/build')+path.sep))return route.abort();
@@ -122,6 +133,26 @@ for(const layout of [{name:'phone',width:393,height:852},{name:'xiaomi-pad',widt
     await f.go('about');await expect(page.locator('.route-stage')).toContainText('1.0.0');
     await expect(page.locator('.route-stage')).toContainText('Business');
     expect(f.writes).toEqual([]);expect(f.errors).toEqual([]);
+  });
+  test('trial upgrade shows three paid plans with a consistent DapurOS theme',async({page,context})=>{
+    const f=await fixture(page,context,{plan:'trial'});await f.enter('settings/billing');
+    await expect(page.getByTestId('subscription-status-badge')).toHaveText('TRIAL');
+    const brand=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='hsl(var(--primary))';document.body.append(probe);const color=getComputedStyle(probe).color;probe.remove();return color;});
+    expect(await page.getByTestId('view-pricing-matrix-link').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(brand);
+    await page.getByTestId('view-pricing-matrix-link').click();
+    await expect(page.locator('.price-card')).toHaveCount(3);
+    await expect(page.locator('.price-card h2')).toHaveText(['Starter','Pro','Business']);
+    await expect(page.locator('a[href="/dapuros/register"]')).toHaveCount(0);
+    await expect(page.locator('.price-card')).not.toContainText(['Free Trial','Mulai Trial','Beli Trial']);
+    expect(await page.locator('.pricing-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(layout.width>980?3:layout.width>640?2:1);
+    expect(f.writes).toEqual([]);expect(f.errors).toEqual([]);
+  });
+  test('a shared Geraina session cannot supply a cached DapurOS paid account',async({page,context})=>{
+    const f=await fixture(page,context);
+    await context.route('**/api/auth/me',route=>route.fulfill({status:503,json:{detail:'Isolated unavailable identity'}}));
+    await context.addInitScript(()=>{localStorage.setItem('dagangos_token','cross-product-fixture-token');localStorage.setItem('dagangos_user',JSON.stringify({id:'geraina-only',store_id:'geraina-store',role:'Owner',plan:'business',current_module:'geraina'}));localStorage.removeItem('dapuros_user');});
+    await page.goto(origin+'/dapuros/app/dashboard');await expect(page.getByTestId('login-submit-btn')).toBeVisible();
+    await expect(page.getByTestId('app-layout')).toHaveCount(0);expect(f.writes).toEqual([]);
   });
   test('cashier cannot elevate using stored selected roles or owner-only URLs',async({page,context})=>{
     const f=await fixture(page,context,{role:'Cashier'});await page.addInitScript(()=>localStorage.setItem('dapuros_selected_role','Owner'));

@@ -6,7 +6,7 @@ import { canonicalRole } from "./permissions";
 const AuthCtx = createContext(null);
 const sessionToken = () => localStorage.getItem("dapuros_token") || localStorage.getItem("dagangos_token") || localStorage.getItem("geraina_token");
 const clearSession = () => { for (const prefix of ["dapuros", "dagangos", "geraina"]) { localStorage.removeItem(`${prefix}_token`); localStorage.removeItem(`${prefix}_user`); } localStorage.removeItem("dapuros_selected_role"); };
-const serverUser = value => value?.id && canonicalRole(value.role) ? { ...value, role: canonicalRole(value.role) } : null;
+const serverUser = value => value?.id && (!value.current_module || value.current_module === "dapuros") && canonicalRole(value.role) ? { ...value, current_module: "dapuros", role: canonicalRole(value.role) } : null;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -67,7 +67,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const t = sessionToken();
     localStorage.removeItem("dapuros_selected_role");
-    const savedUserStr = localStorage.getItem("dapuros_user") || localStorage.getItem("dagangos_user") || localStorage.getItem("dapuros_user");
+    const savedUserStr = localStorage.getItem("dapuros_user");
     let savedUser = null;
     if (savedUserStr) {
       try { savedUser = JSON.parse(savedUserStr); } catch (e) {}
@@ -114,7 +114,7 @@ export function AuthProvider({ children }) {
   }, []);
   useEffect(() => {
     const changed = event => {
-      if (!event.key || !/^(dapuros|dagangos|dapuros)_(token|user)$/.test(event.key)) return;
+      if (!event.key || !/^(dapuros|dagangos|geraina)_(token|user)$/.test(event.key)) return;
       const expected = sessionToken();
       sessionAttempt.current++; setUser(null);
       if (!expected) { setLoading(false); return; }
