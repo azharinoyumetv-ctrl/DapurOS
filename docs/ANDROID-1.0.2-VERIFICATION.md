@@ -1,6 +1,6 @@
 # DapurOS 1.0.2: companion switching and session recovery
 
-Status: tested release candidate. Package com.dagangos.dapuros, build 4, Android 14 or newer.
+Status: published and verified on the live website. [Download 1.0.2](https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.2.apk). Package com.dagangos.dapuros, build 4, Android 14 or newer.
 
 - Open the installed companion app through its fixed Android package; no credential or entitlement handoff.
 - Do not infer companion activation from an incomplete or cached store list.

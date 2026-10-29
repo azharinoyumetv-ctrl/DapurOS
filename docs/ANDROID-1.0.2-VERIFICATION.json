@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "passed-candidate",
+  "status": "passed-published",
   "verifiedAt": "2026-10-29T14:19:40.952Z",
   "companionSwitching": [
     {
@@ -226,5 +226,76 @@
       "apkSha256": "5de138329347cb420103ff4abe198ab6a5538512350de9868e1f64d7c4d1f8d5",
       "installedApkSha256": "5de138329347cb420103ff4abe198ab6a5538512350de9868e1f64d7c4d1f8d5"
     }
-  ]
+  ],
+  "publication": {
+    "status": "published",
+    "verifiedAt": "2026-10-29T14:46:46.404Z",
+    "downloadUrl": "https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.2.apk",
+    "portalRevision": "b33296a7fc2dde57eb03ba5a8d1a9783783a2260",
+    "workflow": {
+      "conclusion": "success",
+      "headSha": "b33296a7fc2dde57eb03ba5a8d1a9783783a2260",
+      "status": "completed",
+      "url": "https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/40890802709"
+    },
+    "website": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "version": "1.0.2",
+      "checks": [
+        "Homepage Android link reaches the verified download page and fits 1440px",
+        "Homepage Android link reaches the verified download page and fits 768px",
+        "Homepage Android link reaches the verified download page and fits 393px",
+        "Homepage Android link reaches the verified download page and fits 320px",
+        "Clicking Download saves the exact verified APK bytes",
+        "Unavailable release metadata leaves download buttons safely disabled"
+      ]
+    },
+    "metadata": {
+      "version": "1.0.2",
+      "versionCode": 4,
+      "applicationId": "com.dagangos.dapuros",
+      "downloadUrl": "/downloads/dapuros/DapurOS-POS-1.0.2.apk",
+      "bytes": 19201590,
+      "sha256": "5de138329347cb420103ff4abe198ab6a5538512350de9868e1f64d7c4d1f8d5",
+      "minimumAndroid": "14.0",
+      "minimumSdk": 34,
+      "supportedAbis": [
+        "arm64-v8a",
+        "x86_64"
+      ],
+      "verifiedAt": "2026-10-29T14:19:40.952Z",
+      "signingCertificateSha256": "fced7b77d88c3477bd991d97e4a224567e775a633c2e16a280ad03991f2c914a"
+    },
+    "services": [
+      {
+        "origin": "https://dapuros.vercel.app",
+        "health": {
+          "ok": true
+        },
+        "fence": {
+          "module": "dapuros",
+          "protocol": "dagangos-erasure-fence-v1",
+          "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+          "write_fence_enabled": true
+        }
+      },
+      {
+        "origin": "https://geraina-os.vercel.app",
+        "health": {
+          "ok": true
+        },
+        "fence": {
+          "module": "geraina",
+          "protocol": "dagangos-erasure-fence-v1",
+          "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+          "write_fence_enabled": true
+        }
+      }
+    ],
+    "customerWrites": 0,
+    "realPayments": 0,
+    "realEmails": 0
+  },
+  "environmentNote": "The isolated emulator was restarted after an Android HWUI renderer stall; the final Samsung restaurant/profile checks then passed on the same APK bytes."
 }
