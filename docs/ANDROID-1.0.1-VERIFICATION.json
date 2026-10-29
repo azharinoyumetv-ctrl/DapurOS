@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "status": "passed-candidate",
+  "verifiedAt": "2026-10-29T11:33:30.178Z",
+  "nativeEvidenceDirectory": "1.0.1-native",
+  "package": {
+    "applicationId": "com.dagangos.dapuros",
+    "version": "1.0.1",
+    "versionCode": 3,
+    "minimumSdk": 34,
+    "supportedAbis": [
+      "arm64-v8a",
+      "x86_64"
+    ],
+    "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+    "apkBytes": 19201050,
+    "aabSha256": "c81bf6aee77210d636c15d2d6952a446d6017b0496ea144682e7c25396a396a1",
+    "signingCertificateSha256": "fced7b77d88c3477bd991d97e4a224567e775a633c2e16a280ad03991f2c914a",
+    "unitTests": 27,
+    "lintErrors": 0,
+    "lintWarnings": 69,
+    "privateCredentialScan": "passed",
+    "frontendManifestEntriesVerified": 92
+  },
+  "backend": {
+    "contractsPassed": 237,
+    "gerainaProductIsolationPassed": 22,
+    "realTransactionPassed": 12,
+    "failed": 0,
+    "realPayments": 0,
+    "realEmailsSent": 0,
+    "customerRecordsErased": 0,
+    "writeFencePreserved": true,
+    "normalizedWriteFenceSha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1"
+  },
+  "browser": {
+    "passed": 33,
+    "failed": 0,
+    "flaky": 0
+  },
+  "installed": [
+    {
+      "status": "passed",
+      "profile": "phone",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "installedApkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        1080,
+        2400
+      ],
+      "density": 420
+    },
+    {
+      "status": "passed",
+      "profile": "xiaomi-landscape",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "installedApkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        2032,
+        3048
+      ],
+      "density": 320
+    },
+    {
+      "status": "passed",
+      "profile": "samsung-landscape",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "installedApkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        1848,
+        2960
+      ],
+      "density": 240
+    }
+  ],
+  "subscriptionTheme": [
+    {
+      "status": "passed",
+      "profile": "phone-billing",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "DapurOS trial billing uses its own orange brand theme",
+        "Trial upgrade offers only the three paid DapurOS plans"
+      ],
+      "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "installedApkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f"
+    },
+    {
+      "status": "passed",
+      "profile": "xiaomi-landscape-billing",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "DapurOS trial billing uses its own orange brand theme",
+        "Trial upgrade offers only the three paid DapurOS plans"
+      ],
+      "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "installedApkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f"
+    },
+    {
+      "status": "passed",
+      "profile": "samsung-landscape-billing",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "DapurOS trial billing uses its own orange brand theme",
+        "Trial upgrade offers only the three paid DapurOS plans"
+      ],
+      "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+      "installedApkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f"
+    }
+  ],
+  "upgrade": {
+    "status": "passed",
+    "baselineVersion": "1.0.0",
+    "finalVersion": "1.0.1",
+    "baselineReceipt": "OFF-86F13D299EAD44CD",
+    "pendingSaleId": "86f13d29-9ead-44cd-b0a2-8466d95cae75",
+    "pendingAmount": 11000,
+    "baselineScreenshot": "tmp/1.0.1-upgrade-seed.png",
+    "finalInstalledApkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+    "evidence": {
+      "status": "passed",
+      "profile": "final-pending-retention-1.0.1",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Released 1.0.0 pending cash sale survives final signed 1.0.1 update"
+      ]
+    }
+  },
+  "fixes": [
+    "Each product resolves its own paid subscription, trial clock and store membership",
+    "Legacy global plans apply only to the original positively bound store; ambiguous unlabelled stores require verification",
+    "Legacy trial/upgrade endpoint cannot rewrite shared account entitlements",
+    "Cached account details must carry the current product before offline reuse",
+    "DapurOS uses its own colors in WebView UI, native controls and system bar background",
+    "Trial upgrade offers Starter, Pro and Business without a second free-trial card"
+  ],
+  "limitations": [
+    "No customer records were migrated or rewritten to infer ownership of an ambiguous legacy store",
+    "The first launch after upgrading an unstamped legacy session requires online revalidation; pending IndexedDB sales remain stored",
+    "Screen profiles are AOSP emulators, not physical Xiaomi/Samsung firmware",
+    "No live charge, settlement, email delivery or physical printer output was performed",
+    "The pre-existing unauthenticated public guest QR ordering service remains unverified"
+  ],
+  "verificationRepairs": [
+    "The original upgrade harness used a missing localStorage test marker; the exact pre-upgrade receipt UUID and amount were verified in final IndexedDB instead",
+    "Native assertions now wait for the new login document and loaded payment settings; screenshot capture waits for rendering only when the WebView is focused",
+    "Theme assertions compare the resolved CSS brand color, avoiding a one-channel RGB rounding assumption"
+  ]
+}

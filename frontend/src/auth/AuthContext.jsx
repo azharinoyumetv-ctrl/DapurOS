@@ -72,7 +72,7 @@ export function AuthProvider({ children }) {
     if (savedUserStr) {
       try { savedUser = JSON.parse(savedUserStr); } catch (e) {}
     }
-    if (!savedUser?.id || !savedUser?.store_id) savedUser = null;
+    if (!savedUser?.id || !savedUser?.store_id || savedUser.current_module !== "dapuros") savedUser = null;
 
     if (!t || t === "mock_master_token") {
       // Tanpa token valid: pengguna wajib login

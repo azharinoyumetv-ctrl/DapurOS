@@ -22,8 +22,8 @@ android {
         minSdk = 34
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         targetSdk = 36
-        versionCode = providers.gradleProperty("dapurosVersionCode").orElse("2").get().toInt()
-        versionName = providers.gradleProperty("dapurosVersionName").orElse("1.0.0").get()
+        versionCode = providers.gradleProperty("dapurosVersionCode").orElse("3").get().toInt()
+        versionName = providers.gradleProperty("dapurosVersionName").orElse("1.0.1").get()
         buildConfigField("boolean", "WEB_SUBSCRIPTIONS_ENABLED", (distribution == "website").toString())
         buildConfigField("String", "DISTRIBUTION", "\"$distribution\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -61,6 +61,7 @@ android {
         buildConfig = true
     }
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/frontend-assets").get().asFile)
+    sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("generated/pricing-test-assets").get().asFile)
     sourceSets.getByName("main").kotlin.srcDir("src/$distribution/java")
     for (variant in listOf("debug", "release")) {
         sourceSets.getByName(variant).manifest.srcFile("src/$distribution/AndroidManifest.xml")
@@ -77,6 +78,11 @@ val bundleFrontend by tasks.registering(Exec::class) {
     commandLine("node", rootProject.file("scripts/bundle-frontend.cjs").absolutePath)
 }
 tasks.named("preBuild").configure { dependsOn(bundleFrontend) }
+
+val preparePricingFixture by tasks.registering(Exec::class) {
+    commandLine("node", rootProject.file("scripts/prepare-pricing-fixture.cjs").absolutePath)
+}
+tasks.matching { it.name == "preReleaseAndroidTestBuild" }.configureEach { dependsOn(preparePricingFixture) }
 
 kotlin { jvmToolchain(17) }
 

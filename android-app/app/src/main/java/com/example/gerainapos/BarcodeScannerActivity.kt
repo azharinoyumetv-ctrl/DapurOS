@@ -41,7 +41,7 @@ class BarcodeScannerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.rgb(20,36,27)), navigationBarStyle = SystemBarStyle.dark(Color.rgb(20,36,27)))
         fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(20, 36, 27)) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(36, 27, 20)) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets -> val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()); view.setPadding(bars.left + dp(16), bars.top + dp(8), bars.right + dp(16), bars.bottom + dp(12)); insets }
         status = TextView(this).apply { text = "Arahkan kamera ke barcode produk"; textSize = 18f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(8, 16, 8, 16) }
         root.addView(status)

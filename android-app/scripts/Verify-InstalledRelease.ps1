@@ -1,4 +1,4 @@
-param([ValidateSet('phone','xiaomi-landscape','samsung-landscape')][string]$Profile='phone',[string]$Serial='emulator-5570',[ValidateSet('website','play')][string]$Distribution='website')
+param([ValidateSet('phone','xiaomi-landscape','samsung-landscape')][string]$Profile='phone',[string]$Serial='emulator-5570',[ValidateSet('website','play')][string]$Distribution='website',[string]$VersionName='1.0.0',[string]$EvidencePrefix='final-native')
 $ErrorActionPreference='Stop'
 if ($Serial -notmatch '^emulator-\d+$') { throw 'This fixture bench only targets an isolated emulator.' }
 $root=Split-Path -Parent $PSScriptRoot
@@ -8,8 +8,8 @@ $settings=@{phone=@(1080,2400,420,0);'xiaomi-landscape'=@(2032,3048,320,1);'sams
 & $adb -s $Serial shell wm density $settings[2]
 & $adb -s $Serial shell settings put system accelerometer_rotation 0
 & $adb -s $Serial shell settings put system user_rotation $settings[3]
-$apk=Join-Path $root 'releases/DapurOS-POS-1.0.0.apk'
-if ($Distribution -eq 'play') { $apk=Join-Path $root 'releases/play/DapurOS-POS-1.0.0.apk' }
+$apk=Join-Path $root "releases/DapurOS-POS-$VersionName.apk"
+if ($Distribution -eq 'play') { $apk=Join-Path $root "releases/play/DapurOS-POS-$VersionName.apk" }
 $expectedHash=(Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLower()
 & $adb -s $Serial install -r $apk
 if ($LASTEXITCODE -ne 0) { throw 'Signed APK installation failed.' }
@@ -18,7 +18,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Signed test package installation failed.' }
 & $adb -s $Serial shell pm revoke com.dagangos.dapuros android.permission.CAMERA 2>$null
 & $adb -s $Serial shell pm clear-permission-flags com.dagangos.dapuros android.permission.CAMERA user-set user-fixed
 $output=& $adb -s $Serial shell am instrument -w -r -e class 'com.example.dapurospos.DapurOSReleaseFlowTest#restaurantReleaseFlow' -e profile $Profile -e distribution $Distribution com.dagangos.dapuros.test/androidx.test.runner.AndroidJUnitRunner
-$reportKind=if ($Distribution -eq 'play') { 'final-native-play' } else { 'final-native' }
+$reportKind=if ($Distribution -eq 'play') { "$EvidencePrefix-play" } else { $EvidencePrefix }
 $report=Join-Path $root "app/build/reports/$reportKind/$Profile"
 New-Item -ItemType Directory -Path $report -Force | Out-Null
 $output | Set-Content -LiteralPath (Join-Path $report 'instrumentation.txt')

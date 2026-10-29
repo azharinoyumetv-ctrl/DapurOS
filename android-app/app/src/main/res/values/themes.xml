@@ -3,8 +3,8 @@
 
     <style name="Theme.DapurOSPOS" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
-        <item name="android:colorAccent">#356443</item>
+        <item name="android:colorAccent">#BD4E12</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowBackground">#F6F8F5</item>
+        <item name="android:windowBackground">#FFFAF5</item>
     </style>
 </resources>

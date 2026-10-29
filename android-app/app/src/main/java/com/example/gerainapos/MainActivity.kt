@@ -184,7 +184,7 @@ class MainActivity : ComponentActivity() {
             contentDescription = "Buka navigasi"
             isClickable = true; isFocusable = true; visibility = View.GONE
             addView(ImageView(this@MainActivity).apply {
-                setImageDrawable(DapurOSIconDrawable("drawer", Color.rgb(53, 100, 67)))
+                setImageDrawable(DapurOSIconDrawable("drawer", Color.rgb(151, 65, 20)))
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
             setOnClickListener { exitBackAt = 0L; webView.evaluateJavascript("window.DapurOSMobile?.openMenu?.()", null) }
@@ -199,14 +199,14 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(8), 0, 0, 0)
             pageTitle = TextView(this@MainActivity).apply {
-                text = "DapurOS"; textSize = 22f; setTextColor(Color.rgb(32, 71, 50))
+                text = "DapurOS"; textSize = 22f; setTextColor(Color.rgb(92, 45, 18))
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 letterSpacing = -0.03f
                 maxLines = 1; ellipsize = TextUtils.TruncateAt.END
             }
             addView(pageTitle)
             subtitle = TextView(this@MainActivity).apply {
-                text = "Kasir & operasional restoran"; textSize = 11f; setTextColor(Color.rgb(100, 116, 92))
+                text = "Kasir & operasional restoran"; textSize = 11f; setTextColor(Color.rgb(130, 100, 80))
                 maxLines = 1; ellipsize = TextUtils.TruncateAt.END
             }
             addView(subtitle)
@@ -215,29 +215,29 @@ class MainActivity : ComponentActivity() {
         toolbar.addView(FrameLayout(this).apply {
             contentDescription = "Menu aplikasi"
             isClickable = true; isFocusable = true
-            background = rounded(Color.rgb(236, 242, 232), 24)
+            background = rounded(Color.rgb(255, 240, 229), 24)
             addView(ImageView(this@MainActivity).apply {
-                setImageDrawable(DapurOSIconDrawable("more", Color.rgb(53, 100, 67)))
+                setImageDrawable(DapurOSIconDrawable("more", Color.rgb(151, 65, 20)))
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
             setOnClickListener { exitBackAt = 0L; showMenu(it) }
         }, LinearLayout.LayoutParams(dp(44), dp(44)))
         root.addView(toolbar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(62)))
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100; progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(77, 122, 65))
+            max = 100; progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(189, 78, 18))
         }
         root.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)))
         root.addView(appUpdater.banner, LinearLayout.LayoutParams(-1, -2))
-        val content = FrameLayout(this).apply { setBackgroundColor(Color.rgb(246, 248, 245)) }
-        webView = WebView(this).apply { setBackgroundColor(Color.rgb(246, 248, 245)) }
+        val content = FrameLayout(this).apply { setBackgroundColor(Color.rgb(255, 250, 245)) }
+        webView = WebView(this).apply { setBackgroundColor(Color.rgb(255, 250, 245)) }
         content.addView(webView, FrameLayout.LayoutParams(-1, -1))
         errorPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             setPadding(dp(28), dp(28), dp(28), dp(28))
-            setBackgroundColor(Color.rgb(246, 248, 245)); visibility = View.GONE
+            setBackgroundColor(Color.rgb(255, 250, 245)); visibility = View.GONE
             addView(TextView(this@MainActivity).apply {
                 text = "DapurOS belum dapat dibuka"; textSize = 23f; gravity = Gravity.CENTER
-                setTextColor(Color.rgb(32, 71, 50)); setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.rgb(92, 45, 18)); setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(this@MainActivity).apply {
                 tag = "message"; textSize = 15f; gravity = Gravity.CENTER
@@ -245,7 +245,7 @@ class MainActivity : ComponentActivity() {
             })
             addView(Button(this@MainActivity).apply {
                 text = "Coba lagi"; isAllCaps = false; textSize = 15f
-                setTextColor(Color.WHITE); background = rounded(Color.rgb(36, 82, 56), 16)
+                setTextColor(Color.WHITE); background = rounded(Color.rgb(189, 78, 18), 16)
                 setOnClickListener { navigate(lastPage, forceReload = true) }
             }, LinearLayout.LayoutParams(dp(180), dp(50)))
         }
@@ -262,14 +262,14 @@ class MainActivity : ComponentActivity() {
             }
             val iconFrame = FrameLayout(this).apply {
                 addView(ImageView(this@MainActivity).apply {
-                    setImageDrawable(DapurOSIconDrawable(route, Color.rgb(151, 163, 144)))
+                    setImageDrawable(DapurOSIconDrawable(route, Color.rgb(151, 126, 110)))
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 }, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
             }
             item.addView(iconFrame, LinearLayout.LayoutParams(dp(48), dp(30)))
             val labelView = TextView(this).apply {
                 text = label; textSize = 10f; gravity = Gravity.CENTER
-                setTextColor(Color.rgb(137, 151, 130))
+                setTextColor(Color.rgb(151, 126, 110))
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
             item.addView(labelView, LinearLayout.LayoutParams(-1, dp(20)))
@@ -313,8 +313,8 @@ class MainActivity : ComponentActivity() {
         navigationBar.visibility = if (authenticatedScreen && !keyboardVisible && !wideNavigation) View.VISIBLE else View.GONE
         for ((route, views) in navigationItems) {
             val selected = section == route || (route == "reports" && section == "sales")
-            val color = if (selected) Color.rgb(56, 105, 59) else Color.rgb(100, 116, 92)
-            views.first.background = if (selected) rounded(Color.rgb(231, 240, 223), 12) else null
+            val color = if (selected) Color.rgb(189, 78, 18) else Color.rgb(130, 100, 80)
+            views.first.background = if (selected) rounded(Color.rgb(255, 235, 216), 12) else null
             (views.first.getChildAt(0) as ImageView).setImageDrawable(DapurOSIconDrawable(route, color))
             views.second.setTextColor(color)
             views.second.setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)

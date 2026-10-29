@@ -11,7 +11,7 @@ import android.graphics.drawable.Drawable
 class InsetBackgroundDrawable : Drawable() {
     var bottomInset = 0
         set(value) { field = value; invalidateSelf() }
-    private val paint = Paint().apply { color = Color.rgb(21, 63, 48) }
+    private val paint = Paint().apply { color = Color.rgb(81, 41, 18) }
     override fun draw(canvas: Canvas) {
         canvas.drawColor(Color.WHITE)
         if (bottomInset > 0) canvas.drawRect(bounds.left.toFloat(), (bounds.bottom - bottomInset).toFloat(),

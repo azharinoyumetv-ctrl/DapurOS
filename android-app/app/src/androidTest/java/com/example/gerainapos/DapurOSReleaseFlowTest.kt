@@ -31,7 +31,8 @@ class DapurOSReleaseFlowTest {
     private lateinit var web: WebView
     private val checks = JSONArray()
     private val profile = InstrumentationRegistry.getArguments().getString("profile") ?: "phone"
-    private val user = """{"id":"android-fixture-owner","store_id":"android-fixture-store","email":"android-fixture@example.invalid","role":"Owner","store_name":"DapurOS Test Restaurant","plan":"business","trial_ends_at":"2099-01-01T00:00:00Z","stores":[{"module":"dapuros","store_id":"android-fixture-store"}]}"""
+    @Volatile private var trialFixture = false
+    private val user get() = """{"id":"android-fixture-owner","store_id":"android-fixture-store","email":"android-fixture@example.invalid","role":"Owner","store_name":"DapurOS Test Restaurant","plan":"business","trial_ends_at":"2099-01-01T00:00:00Z","stores":[{"module":"dapuros","store_id":"android-fixture-store"}]}""" .let { if (trialFixture) it.replace("\"plan\":\"business\"", "\"plan\":\"trial\"") else it }
     private val products = """[{"id":"coffee","name":"Kopi Resep Fixture","sku":"899TEST","price":10000,"stock":40,"category":"Minuman","unit":"pcs","recipe":[{"ingredient_id":"beans","quantity":15}]}]"""
     @Volatile private var replay: String? = null
 
@@ -47,6 +48,11 @@ class DapurOSReleaseFlowTest {
             val original = web.webViewClient
             web.webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                    if (trialFixture && request.url.host == "dagangos.com" && !request.url.path.orEmpty().startsWith("/api/")) {
+                        val asset = if (request.url.path == "/dapuros/pricing") "public/pricing.html" else "public" + request.url.path
+                        val mime = when { asset.endsWith(".html") -> "text/html"; asset.endsWith(".js") -> "application/javascript"; asset.endsWith(".css") -> "text/css"; else -> "image/png" }
+                        runCatching { instrumentation.context.assets.open(asset) }.getOrNull()?.let { return WebResourceResponse(mime, "UTF-8", it) }
+                    }
                     if (request.url.host == "dagangos.com" && request.url.path.orEmpty().startsWith("/api/")) {
                         val path = request.url.path!!
                         val body = when {
@@ -61,6 +67,7 @@ class DapurOSReleaseFlowTest {
                             path == "/api/payments/options" -> """{"methods":{"cash":{"enabled":true,"displayed":true},"qris_bank":{"enabled":false},"ewallet":{"enabled":false},"va":{"enabled":false},"credit_card":{"enabled":false},"doku":{"enabled":false}},"ewallet_channels":[]}"""
                             path == "/api/orders/stats" -> """{"today_sales":10000,"today_orders":1,"week_sales":10000,"month_sales":10000,"product_count":1}"""
                             path == "/api/support/context" -> """{"customer_email":"android-fixture@example.invalid","store_name":"DapurOS Test Restaurant","recipient":"contact@dagangos.com","delivery_ready":false}"""
+                            path == "/api/subscriptions/current" && trialFixture -> """{"billing_model":"prepaid","auto_renew":false,"can_manage":true,"plan":"trial","trial_ends_at":"2099-01-01T00:00:00Z","subscription":null,"addons":{"catalog":[],"items":[]}}"""
                             path == "/api/subscriptions/current" -> """{"billing_model":"prepaid","auto_renew":false,"can_manage":true,"plan":"business","subscription":{"tier":"business","status":"active","active":true,"expires_at":"2099-01-01T00:00:00Z"},"addons":{"catalog":[],"items":[]}}"""
                             path == "/api/settings" -> """{"general":{"store_name":"DapurOS Test Restaurant","timezone":"Asia/Jakarta"},"receipt":{"footer_text":"Fixture only"},"printer":{"mode":"local","paper_size":"80mm"}}"""
                             path == "/api/offline/orders" && replay != null -> replay!!
@@ -117,7 +124,16 @@ class DapurOSReleaseFlowTest {
     private fun fill(selector: String, value: String) { tap(selector); instrumentation.sendStringSync(value); until("document.querySelector(" + JSONObject.quote(selector) + ").value === " + JSONObject.quote(value)) }
 
     private fun go(route: String) { js("window.DapurOSRouter.navigate(location.origin+'/dapuros/app/$route')"); until("location.pathname.endsWith('/$route') && !document.querySelector('[data-testid=route-loading]')") }
-    private fun checkStep(name: String) { checks.put(name); save("running"); screenshot(name.replace(Regex("[^a-zA-Z0-9]+"), "-").take(65)) }
+    private fun checkStep(name: String) {
+        var webFocused = false
+        instrumentation.runOnMainSync { webFocused = web.hasWindowFocus() }
+        if (webFocused) {
+            js("window.__verificationFrameReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__verificationFrameReady=true));true")
+            until("window.__verificationFrameReady===true")
+        }
+        instrumentation.waitForIdleSync();SystemClock.sleep(450)
+        checks.put(name);save("running");screenshot(name.replace(Regex("[^a-zA-Z0-9]+"), "-").take(65))
+    }
     private fun output(): File = File(instrumentation.targetContext.getExternalFilesDir(null), "release-verification/$profile").apply { mkdirs() }
     private fun save(status: String) { File(output(), "verification.json").writeText(JSONObject().put("status",status).put("profile",profile).put("applicationId",instrumentation.targetContext.packageName).put("signedRelease",true).put("fixtureNetworkOnly",true).put("checks",checks).toString(2)) }
     private fun screenshot(name: String) { instrumentation.uiAutomation.takeScreenshot()?.let { image -> File(output(), "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG,100,it) }; image.recycle() } }
@@ -150,9 +166,9 @@ class DapurOSReleaseFlowTest {
             until("!!document.body")
             val saved = js("localStorage.getItem('dapuros_user')")
             check(saved == null || saved == JSONObject.NULL || saved.toString().contains("android-fixture@example.invalid")) { "Refusing to replace a non-fixture session" }
-            js("localStorage.clear();sessionStorage.clear();true")
+            js("localStorage.clear();sessionStorage.clear();window.__fixtureResetDocument=true;true")
             scenario.onActivity { web.loadUrl(NavigationPolicy.START_URL) }
-            until("!!document.querySelector('[data-testid=login-email-input]') && !!window.DapurOSDevice")
+            until("window.__fixtureResetDocument!==true && !!document.querySelector('[data-testid=login-email-input]') && !!window.DapurOSDevice")
             fill("[data-testid=login-email-input]", "android-fixture@example.invalid")
             fill("[data-testid=login-password-input]", "fixturePassword123")
             tap("[data-testid=login-password-toggle]")
@@ -166,7 +182,7 @@ class DapurOSReleaseFlowTest {
             js("Array.from(document.querySelectorAll('button')).find(e=>e.innerText.includes('Langsung Takeaway')).click()")
             until("!!document.querySelector('[data-testid=pos-product-coffee]')")
             assertTrue(js("document.documentElement.scrollWidth <= innerWidth+2") == true)
-            assertEquals(1, (js("document.querySelectorAll('[data-testid=pm-cash]').length") as Number).toInt())
+            until("document.querySelectorAll('[data-testid=pm-cash]').length===1")
             assertEquals(0, (js("document.querySelectorAll('[data-testid=pm-va],[data-testid=pm-ewallet],[data-testid=pm-credit_card]').length") as Number).toInt())
             checkStep("Restaurant catalogue responsive with configured cash only")
             js("document.querySelector('[data-testid=pos-product-coffee]').click()")
@@ -199,7 +215,7 @@ class DapurOSReleaseFlowTest {
             assertEquals(distribution, js("window.DapurOSDevice.appInfo.updateChannel"))
             if (distribution == "play") assertEquals(0, (js("document.querySelectorAll('a[href*=\"/dapuros/pricing\"]').length") as Number).toInt())
             go("about")
-            until("document.body.innerText.includes('1.0.0') && document.body.innerText.includes('Business')")
+            until("document.body.innerText.includes('${BuildConfig.VERSION_NAME}') && document.body.innerText.includes('Business')")
             assertTrue(js("document.body.innerText.includes('DapurOS')") == true)
             checkStep("Installed identity subscription expiry and support entry agree")
             go("products")
@@ -230,6 +246,36 @@ class DapurOSReleaseFlowTest {
         finally { scenario.close() }
     }
 
+    @Test fun trialUpgradeAndTheme() {
+        trialFixture = true
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            attach(); until("!!window.DapurOSDevice")
+            val saved = js("localStorage.getItem('dapuros_user')")
+            check(saved == null || saved == JSONObject.NULL || saved.toString().contains("android-fixture@example.invalid")) { "Refusing to replace a non-fixture session" }
+            js("localStorage.clear();sessionStorage.clear();window.__fixtureResetDocument=true;true")
+            scenario.onActivity { web.loadUrl(NavigationPolicy.START_URL) }
+            until("window.__fixtureResetDocument!==true && !!document.querySelector('[data-testid=login-email-input]')")
+            fill("[data-testid=login-email-input]", "android-fixture@example.invalid")
+            fill("[data-testid=login-password-input]", "fixturePassword123")
+            tap("[data-testid=login-submit-btn]")
+            until("!!window.DapurOSRouter && !!document.querySelector('[data-testid=app-layout]')")
+            go("settings/billing")
+            until("document.querySelector('[data-testid=subscription-status-badge]')?.textContent==='TRIAL'")
+            assertEquals("21 83% 41%",js("getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()"))
+            assertTrue(js("(()=>{const probe=document.createElement('span');probe.style.color='hsl(var(--primary))';document.body.append(probe);const color=getComputedStyle(probe).color;probe.remove();return getComputedStyle(document.querySelector('[data-testid=view-pricing-matrix-link]')).backgroundColor===color})()") == true)
+            checkStep("DapurOS trial billing uses its own orange brand theme")
+            tap("[data-testid=view-pricing-matrix-link]")
+            until("document.querySelectorAll('.price-card').length===3")
+            assertEquals("Starter,Pro,Business",js("[...document.querySelectorAll('.price-card h2')].map(x=>x.textContent).join(',')"))
+            until("document.querySelectorAll('.price-card').length===3 && document.readyState==='complete' && !document.querySelector('a[href=\"/dapuros/register\"]')")
+            js("document.querySelector('.pricing-grid').scrollIntoView({block:'center'});true")
+            assertFalse(js("document.body.innerText.includes('Mulai Trial')") == true)
+            checkStep("Trial upgrade offers only the three paid DapurOS plans")
+            save("passed")
+        } finally { scenario.close() }
+    }
+
     @Test fun seedPendingSaleForUpgrade() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
@@ -241,8 +287,9 @@ class DapurOSReleaseFlowTest {
             js("document.querySelector('[data-testid=pos-product-coffee]').click();document.querySelector('[data-testid=mobile-cart-open]').click()")
             fill("[data-testid=cart-cash-received]", "20000"); tap("[data-testid=checkout-btn]")
             until("!!document.querySelector('[data-testid=receipt-pending-sync]')")
-            js("window.__upgradeSale=null;let r=indexedDB.open('dapuros-pos-offline-v1',1);r.onsuccess=()=>{let q=r.result.transaction('sales').objectStore('sales').getAll();q.onsuccess=()=>{let row=q.result.filter(x=>x.status!=='synced').at(-1);if(row){localStorage.setItem('dapuros_upgrade_sale',row.body.client_order_id);localStorage.setItem('dapuros_upgrade_retention','retained-fixture');window.__upgradeSale=row.body.client_order_id;}}};true")
+            js("window.__upgradeSale=null;let r=indexedDB.open('dapuros-pos-offline-v1',1);r.onsuccess=()=>{let q=r.result.transaction('sales').objectStore('sales').getAll();q.onsuccess=()=>{let ref=document.querySelector('[data-testid=receipt-order-no]').textContent;let row=q.result.find(x=>x.order.order_no===ref&&x.status!=='synced');if(row){localStorage.setItem('dapuros_upgrade_sale',row.body.client_order_id);localStorage.setItem('dapuros_upgrade_retention','retained-fixture');window.__upgradeSale=row.body.client_order_id;}}};true")
             until("!!window.__upgradeSale")
+            File(output(),"seed-sale.json").writeText(JSONObject().put("client_order_id",js("window.__upgradeSale")).put("receipt",js("document.querySelector(\"[data-testid=receipt-order-no]\").textContent")).toString(2))
             checkStep("Pending cash sale and preference committed before signed upgrade");save("passed")
         } finally { scenario.close() }
     }
@@ -253,10 +300,28 @@ class DapurOSReleaseFlowTest {
             attach(); until("!!window.DapurOSRouter && !!document.querySelector('[data-testid=app-layout]')")
             assertEquals("retained-fixture",js("localStorage.getItem('dapuros_upgrade_retention')"))
             assertTrue(js("localStorage.getItem('dapuros_user')").toString().contains("android-fixture@example.invalid"))
-            js("window.__upgradeRetained=false;let r=indexedDB.open('dapuros-pos-offline-v1',1);r.onsuccess=()=>{let q=r.result.transaction('sales').objectStore('sales').getAll();q.onsuccess=()=>window.__upgradeRetained=q.result.some(x=>x.body.client_order_id===localStorage.getItem('dapuros_upgrade_sale')&&x.status!=='synced')};true")
-            until("window.__upgradeRetained===true")
-            assertEquals("1.0.0",js("window.DapurOSDevice.appInfo.versionName"))
+            val expectedSale = InstrumentationRegistry.getArguments().getString("expectedSaleId") ?: js("localStorage.getItem('dapuros_upgrade_sale')").toString()
+            check(expectedSale.matches(Regex("[a-f0-9-]{36}"))) { "Missing externally recorded baseline sale ID" }
+            js("window.__expectedUpgradeSale="+JSONObject.quote(expectedSale))
+            js("window.__upgradeReadDone=false;let r=indexedDB.open('dapuros-pos-offline-v1',1);r.onerror=()=>{window.__upgradeRows=String(r.error);window.__upgradeReadDone=true};r.onsuccess=()=>{try{let q=r.result.transaction('sales').objectStore('sales').getAll();q.onsuccess=()=>{window.__upgradeRows=q.result.map(x=>({id:x.body?.client_order_id,status:x.status}));window.__upgradeRetained=q.result.some(x=>x.body.client_order_id===window.__expectedUpgradeSale&&x.status!=='synced'&&x.order.total===11000&&x.body.expected_store_id==='android-fixture-store');window.__upgradeReadDone=true}}catch(e){window.__upgradeRows=String(e);window.__upgradeReadDone=true}};true")
+            until("window.__upgradeReadDone===true")
+            assertTrue("Expected sale="+expectedSale+"; records="+js("JSON.stringify(window.__upgradeRows)"),js("window.__upgradeRetained") == true)
+            assertEquals(BuildConfig.VERSION_NAME,js("window.DapurOSDevice.appInfo.versionName"))
             checkStep("Signed upgrade retains account preferences and pending cash sale");save("passed")
+        } finally { scenario.close() }
+    }
+
+    @Test fun releasedPendingSaleSurvivesFinalUpdate() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            attach();until("!!window.DapurOSDevice && !!document.querySelector('[data-testid=app-layout]')")
+            val expectedSale = InstrumentationRegistry.getArguments().getString("expectedSaleId") ?: error("External baseline sale ID required")
+            check(expectedSale.matches(Regex("[a-f0-9-]{36}")))
+            js("window.__baselineSaleId="+JSONObject.quote(expectedSale))
+            js("window.__baselineSaleRead=false;let r=indexedDB.open('dapuros-pos-offline-v1',1);r.onsuccess=()=>{let q=r.result.transaction('sales').objectStore('sales').getAll();q.onsuccess=()=>{let row=q.result.find(x=>x.body.client_order_id===window.__baselineSaleId);window.__baselineSaleOk=!!row&&row.status!=='synced'&&row.order.total===11000&&row.body.expected_store_id==='android-fixture-store';window.__baselineSaleRead=true}};true")
+            until("window.__baselineSaleRead===true");assertTrue(js("window.__baselineSaleOk") == true)
+            assertEquals(BuildConfig.VERSION_NAME,js("window.DapurOSDevice.appInfo.versionName"))
+            checkStep("Released 1.0.0 pending cash sale survives final signed 1.0.1 update");save("passed")
         } finally { scenario.close() }
     }
 

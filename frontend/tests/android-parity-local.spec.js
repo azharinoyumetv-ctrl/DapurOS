@@ -154,6 +154,13 @@ for(const layout of [{name:'phone',width:393,height:852},{name:'xiaomi-pad',widt
     await page.goto(origin+'/dapuros/app/dashboard');await expect(page.getByTestId('login-submit-btn')).toBeVisible();
     await expect(page.getByTestId('app-layout')).toHaveCount(0);expect(f.writes).toEqual([]);
   });
+  test('an old unstamped DapurOS paid cache requires product revalidation',async({page,context})=>{
+    const f=await fixture(page,context);
+    await context.route('**/api/auth/me',route=>route.fulfill({status:503,json:{detail:'Isolated unavailable identity'}}));
+    await context.addInitScript(()=>{localStorage.setItem('dapuros_token','legacy-fixture-token');localStorage.setItem('dapuros_user',JSON.stringify({id:'legacy-owner',store_id:'legacy-store',role:'Owner',plan:'business'}));});
+    await page.goto(origin+'/dapuros/app/dashboard');await expect(page.getByTestId('login-submit-btn')).toBeVisible();
+    await expect(page.getByTestId('app-layout')).toHaveCount(0);expect(f.writes).toEqual([]);
+  });
   test('cashier cannot elevate using stored selected roles or owner-only URLs',async({page,context})=>{
     const f=await fixture(page,context,{role:'Cashier'});await page.addInitScript(()=>localStorage.setItem('dapuros_selected_role','Owner'));
     await f.enter('settings/general');await expect(page.getByTestId('access-denied-page')).toBeVisible();
