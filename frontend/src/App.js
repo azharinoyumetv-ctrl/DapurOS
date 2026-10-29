@@ -1,3 +1,4 @@
+import { sessionToken } from "@/auth/session";
 import "@/styles/android-restaurant.css";
 import { useEffect } from "react";
 import PasswordSetup from "@/auth/PasswordSetup";
@@ -83,7 +84,7 @@ function AndroidRouterBridge() {
 
 function RootComponent() {
   const { user, loading } = useAuth();
-  const token = typeof window !== "undefined" ? (localStorage.getItem("dagangos_token") || localStorage.getItem("geraina_token") || localStorage.getItem("dapuros_token")) : null;
+  const token = typeof window !== "undefined" ? sessionToken() : null;
 
   if (loading) return <div className="p-10 text-sm text-center text-[hsl(var(--muted))]" data-testid="root-loading">Memuat…</div>;
   if (user || token) {

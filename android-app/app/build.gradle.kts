@@ -22,8 +22,8 @@ android {
         minSdk = 34
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         targetSdk = 36
-        versionCode = providers.gradleProperty("dapurosVersionCode").orElse("3").get().toInt()
-        versionName = providers.gradleProperty("dapurosVersionName").orElse("1.0.1").get()
+        versionCode = providers.gradleProperty("dapurosVersionCode").orElse("4").get().toInt()
+        versionName = providers.gradleProperty("dapurosVersionName").orElse("1.0.2").get()
         buildConfigField("boolean", "WEB_SUBSCRIPTIONS_ENABLED", (distribution == "website").toString())
         buildConfigField("String", "DISTRIBUTION", "\"$distribution\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

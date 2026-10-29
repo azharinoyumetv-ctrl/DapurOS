@@ -37,6 +37,16 @@ class NavigationPolicyTest {
             assertEquals(path, INTERNAL, NavigationPolicy.classify("https://dagangos.com$path"))
         }
     }
+    @Test fun companionAppRoutesUseOnlyTheKnownInstalledPackage() {
+        assertEquals("com.dagangos.geraina", NavigationPolicy.COMPANION_PACKAGE)
+        for (path in listOf("/geraina/login", "/geraina/activate", "/geraina/app/dashboard", "/geraina/app/pos")) {
+            assertEquals(path, COMPANION, NavigationPolicy.classify("https://dagangos.com$path"))
+        }
+        for (url in listOf("https://dagangos.com/geraina", "https://dagangos.com/geraina/android", "https://evil.test/geraina/app/pos", "https://dagangos.com.evil.test/geraina/login", "http://dagangos.com/geraina/login", "https://user@dagangos.com/geraina/login", "https://dagangos.com:8443/geraina/login")) {
+            assertEquals(url, false, NavigationPolicy.isCompanionUrl(url))
+        }
+    }
+
     @Test fun exportNamesCannotEscapeTheSelectedDirectory() {
         assertEquals("invoice.pdf", NavigationPolicy.safeFilename("../../invoice.pdf"))
         assertEquals("invoice.pdf", NavigationPolicy.safeFilename("C:\\private\\invoice.pdf"))
