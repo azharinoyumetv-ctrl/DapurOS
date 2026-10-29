@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "passed-candidate",
-  "verifiedAt": "2026-10-29T11:33:30.178Z",
+  "status": "passed-published",
+  "verifiedAt": "2026-10-29T11:44:37.042Z",
   "nativeEvidenceDirectory": "1.0.1-native",
   "package": {
     "applicationId": "com.dagangos.dapuros",
@@ -192,5 +192,105 @@
     "The original upgrade harness used a missing localStorage test marker; the exact pre-upgrade receipt UUID and amount were verified in final IndexedDB instead",
     "Native assertions now wait for the new login document and loaded payment settings; screenshot capture waits for rendering only when the WebView is focused",
     "Theme assertions compare the resolved CSS brand color, avoiding a one-channel RGB rounding assumption"
-  ]
+  ],
+  "publication": {
+    "status": "published",
+    "verifiedAt": "2026-10-29T11:44:36.942Z",
+    "backendDeployments": {
+      "dapuros": {
+        "sha": "46545ce7b37a09556b4628817e19b502204832f0",
+        "state": "success",
+        "statuses": [
+          {
+            "context": "Vercel",
+            "state": "success",
+            "target_url": "https://vercel.com/azharinoyume/dapur-os/BVVSMuaQr4XxUY8U4FrHy6NXoa7Z"
+          }
+        ]
+      },
+      "geraina": {
+        "sha": "616ce09a6f201702ef48ff29d65443e85a661afa",
+        "state": "success",
+        "statuses": [
+          {
+            "context": "Vercel",
+            "state": "success",
+            "target_url": "https://vercel.com/azharinoyume/geraina-os/AHZgx8HDt8ey8nv2gCwdT9QmAnau"
+          }
+        ]
+      }
+    },
+    "portalDeployment": {
+      "conclusion": "success",
+      "headSha": "0f6fd73da0ffd5d4b327b2ddb006c8796430a176",
+      "jobs": [
+        {
+          "conclusion": "success",
+          "name": "cloudflare-zone-audit",
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "deploy",
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "public-accessibility",
+          "status": "completed"
+        },
+        {
+          "conclusion": "skipped",
+          "name": "e2e-geraina",
+          "status": "completed"
+        }
+      ],
+      "status": "completed",
+      "url": "https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/40866733794"
+    },
+    "health": [
+      {
+        "origin": "https://dapuros.vercel.app",
+        "healthy": true,
+        "erasureFenceEnabled": true,
+        "erasureImplementationSha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1"
+      },
+      {
+        "origin": "https://geraina-os.vercel.app",
+        "healthy": true,
+        "erasureFenceEnabled": true,
+        "erasureImplementationSha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1"
+      }
+    ],
+    "downloadUrl": "https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.1.apk",
+    "apkSha256": "52f2069c4ef9f4c586ab7ca6a98ef624642e6f2a93b3800134fa59e4716d102f",
+    "liveWebsite": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "version": "1.0.1",
+      "checks": [
+        "Homepage Android link reaches the verified download page and fits 1440px",
+        "Homepage Android link reaches the verified download page and fits 768px",
+        "Homepage Android link reaches the verified download page and fits 393px",
+        "Homepage Android link reaches the verified download page and fits 320px",
+        "Clicking Download saves the exact verified APK bytes",
+        "Unavailable release metadata leaves download buttons safely disabled"
+      ]
+    },
+    "trialPricingPresentation": {
+      "status": "passed",
+      "scope": "live public assets with isolated trial API responses; no live customer account or payment",
+      "checks": [
+        "geraina trial purchase page at 1440px: own prices, three paid plans, no second trial action",
+        "geraina trial purchase page at 393px: own prices, three paid plans, no second trial action",
+        "dapuros trial purchase page at 1440px: own prices, three paid plans, no second trial action",
+        "dapuros trial purchase page at 393px: own prices, three paid plans, no second trial action"
+      ]
+    },
+    "portalUnitTests": {
+      "passed": 58,
+      "failed": 0
+    },
+    "productionVerificationWrites": 0
+  }
 }
