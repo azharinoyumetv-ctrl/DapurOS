@@ -131,7 +131,9 @@ class DapurOSReleaseFlowTest {
             js("window.__verificationFrameReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__verificationFrameReady=true));true")
             until("window.__verificationFrameReady===true")
         }
-        instrumentation.waitForIdleSync();SystemClock.sleep(450)
+        // The two rendered WebView frames above are the paint barrier. Native
+        // animation idleness can wait indefinitely on landscape emulator windows.
+        SystemClock.sleep(450)
         checks.put(name);save("running");screenshot(name.replace(Regex("[^a-zA-Z0-9]+"), "-").take(65))
     }
     private fun output(): File = File(instrumentation.targetContext.getExternalFilesDir(null), "release-verification/$profile").apply { mkdirs() }

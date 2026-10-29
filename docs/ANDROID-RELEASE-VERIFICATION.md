@@ -1,6 +1,6 @@
 # DapurOS Android release verification
 
-Superseded by [DapurOS 1.0.1](ANDROID-1.0.1-VERIFICATION.md). The evidence below records the original 1.0.0 release.
+Superseded by [DapurOS 1.0.2](ANDROID-1.0.2-VERIFICATION.md). The evidence below records the original 1.0.0 release.
 
 **DapurOS 1.0.0, build 2 is published and verified on the live website.** The matching restaurant backend was deployed before the website and APK. Open [DapurOS](https://dagangos.com/dapuros), choose Android, then [download the signed APK](https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.0.apk). Publication evidence is recorded in [ANDROID-PUBLICATION.json](ANDROID-PUBLICATION.json).
 

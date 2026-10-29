@@ -1,14 +1,14 @@
-# DapurOS Android 1.0.1 (build 3)
+# DapurOS Android 1.0.2 (build 4)
 
-This correction unifies the DapurOS theme, removes trial reactivation from upgrades and isolates product entitlements for shared accounts. See `../docs/ANDROID-1.0.1-VERIFICATION.md`. Old unstamped sessions require online revalidation once; pending cash sales remain stored.
+This release opens the installed companion app, keeps product sessions independent, and offers retry when cold-start session validation is unavailable. See `../docs/ANDROID-1.0.2-VERIFICATION.md`. It preserves the 1.0.1 theme, paid-only upgrade and product entitlement corrections. Old unstamped sessions require online revalidation once; a failed check keeps the token saved without granting unverified access.
 
 The release uses `com.dagangos.dapuros`, Android 14/API 34 or newer, and ARM64/x86-64. Its signing identity is pinned in `release-identity.json` and is distinct from Geraina. The older prototype used `com.example.gerainapos` and an obsolete preview URL; no published DapurOS Android release or signing key was present in this checkout.
 
-Customer APK: `releases/DapurOS-POS-1.0.1.apk`. Website and Play packages use separate native update/purchase behavior. Only the website APK has the APK installer permission and its own `/downloads/dapuros/latest.json` updater. The historical 1.0.0 Play candidate is unpublished; this correction releases the website distribution. The Play source consumes existing entitlements and disables web subscription purchase links. No Play submission or approval is implied.
+Customer APK: `releases/DapurOS-POS-1.0.2.apk`. Website and Play packages use separate native update/purchase behavior. Only the website APK has the APK installer permission and its own `/downloads/dapuros/latest.json` updater. The historical 1.0.0 Play candidate is unpublished; this correction releases the website distribution. The Play source consumes existing entitlements and disables web subscription purchase links. No Play submission or approval is implied.
 
 ## Build and verify
 
-Use the installed JDK 17, Android SDK and frontend dependencies. Run `scripts/Build-Release.ps1 -VersionCode 3 -VersionName 1.0.1 -Distribution website`. The script builds the actual DapurOS frontend into the APK, runs release unit tests/lint, builds the APK/AAB and separate instrumentation test APK, checks distribution permissions/code, signature, credentials and 16 KB native alignment. Use `-Distribution play` for the Play package. Later published versions require a higher version code; versioned public APK bytes must never be replaced.
+Use the installed JDK 17, Android SDK and frontend dependencies. Run `scripts/Build-Release.ps1 -VersionCode 4 -VersionName 1.0.2 -Distribution website`. The script builds the actual DapurOS frontend into the APK, runs release unit tests/lint, builds the APK/AAB and separate instrumentation test APK, checks distribution permissions/code, signature, credentials and 16 KB native alignment. Use `-Distribution play` for the Play package. Later published versions require a higher version code; versioned public APK bytes must never be replaced.
 
 `scripts/Verify-InstalledRelease.ps1` runs the exact signed website APK on an isolated emulator with phone, Xiaomi Pad 6S Pro-size and Samsung Ultra-size layouts. It compares the installed `base.apk` checksum with the release file before recording a pass. Its fixture transport lives only in the separately signed test APK; WebView debugging remains disabled in the customer release. Instrumentation and fixtures are never website assets.
 
