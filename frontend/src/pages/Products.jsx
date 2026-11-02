@@ -1,6 +1,7 @@
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { fmtIDR, API_BASE, downloadBlob } from "@/api/client";
-import { Plus, Upload, Search, Edit3, Trash2, X, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ScanBarcode } from "lucide-react";
+import { Plus, Upload, Search, Edit3, Trash2, X, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ScanBarcode, Camera, Images } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from '@/auth/AuthContext';
 import { isPlanLocked } from '@/navigation/sections';
@@ -11,7 +12,7 @@ import useTablePage from '@/hooks/useTablePage';
 import TablePage from '@/components/TablePage';
 import ReadState from '@/components/ReadState';
 
-function ProductForm({ product, onClose, onSaved }) {
+function ProductForm({ product, categories, categoriesLoading, categoriesError, onRetryCategories, productUnits, unitsLoading, unitsError, onRetryUnits, onClose, onSaved }) {
   const { user } = useAuth();
   const isDapurOS = !isPlanLocked('pro', user?.plan);
   const isEdit = !!product?.id;
@@ -32,6 +33,20 @@ function ProductForm({ product, onClose, onSaved }) {
   const saveLock = useRef(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [photoProcessing, setPhotoProcessing] = useState(false);
+  const photoRequest = useRef(0);
+  const galleryInput = useRef(null);
+  const cameraInput = useRef(null);
+  const canTakePhoto = window.__dapurosAndroid || /Android|iPhone|iPad/i.test(navigator.userAgent);
+  const [customCategory, setCustomCategory] = useState(false);
+  const categoryOptions = [...new Set(["Umum", ...categories, ...(!customCategory && form.category ? [form.category] : [])])];
+  const [customUnit, setCustomUnit] = useState(false);
+  // Products store the symbol, not the registry id. Preserve older free-text
+  // values verbatim until the owner explicitly chooses a replacement.
+  const unitOptions = new Map(productUnits.map(unit => [unit.value, unit.label]));
+  if (!unitOptions.has("pcs")) unitOptions.set("pcs", "pcs");
+  if (!customUnit && form.unit && !unitOptions.has(form.unit)) unitOptions.set(form.unit, form.unit);
+  useEffect(() => () => { photoRequest.current++; }, []);
   
   const [ingredients, setIngredients] = useState([]);
   const [selectedIngredientId, setSelectedIngredientId] = useState("");
@@ -113,33 +128,59 @@ function ProductForm({ product, onClose, onSaved }) {
 
   const handleImage = (file) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) { setErr("File harus berupa gambar (JPG/PNG)."); return; }
+    const request = ++photoRequest.current;
+    const release = () => { try { window.DapurOSDevice?.releaseProductPhoto?.(file.name); } catch {} };
+    const failed = () => {
+      if (request !== photoRequest.current) return;
+      setPhotoProcessing(false); setErr("Foto tidak dapat dibaca. Pilih gambar lain atau ambil foto kembali.");
+    };
+    setErr("");
+    if (!file.type.startsWith("image/")) { release(); setPhotoProcessing(false); setErr("File harus berupa gambar (JPG/PNG/WebP)."); return; }
+    setPhotoProcessing(true);
     const reader = new FileReader();
+    reader.onloadend = release;
+    reader.onerror = failed;
+    reader.onabort = failed;
     reader.onload = (ev) => {
       const img = new Image();
+      img.onerror = failed;
       img.onload = () => {
-        const MAX = 320;
-        let { width, height } = img;
-        if (width > height && width > MAX) { height = Math.round((height * MAX) / width); width = MAX; }
-        else if (height > MAX) { width = Math.round((width * MAX) / height); height = MAX; }
-        const canvas = document.createElement("canvas");
-        canvas.width = width; canvas.height = height;
-        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-        setForm((f) => ({ ...f, image_url: canvas.toDataURL("image/jpeg", 0.72) }));
+        if (request !== photoRequest.current) return;
+        try {
+          const MAX = 320;
+          let { width, height } = img;
+          if (width > height && width > MAX) { height = Math.round((height * MAX) / width); width = MAX; }
+          else if (height > MAX) { width = Math.round((width * MAX) / height); height = MAX; }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          setForm((f) => ({ ...f, image_url: canvas.toDataURL("image/jpeg", 0.72) }));
+          setPhotoProcessing(false);
+        } catch { failed(); }
       };
       img.src = ev.target.result;
     };
-    reader.readAsDataURL(file);
+    try { reader.readAsDataURL(file); } catch { release(); failed(); }
+  };
+
+  const chooseImage = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    handleImage(file);
   };
 
   const save = async (e) => {
     e.preventDefault();
-    if (saveLock.current) return;
+    if (saveLock.current || photoProcessing) return;
+    if (!form.category.trim()) { setErr("Pilih atau isi kategori produk."); return; }
+    if (!form.unit.trim()) { setErr("Pilih atau isi satuan produk."); return; }
     saveLock.current = true;
     setSaving(true); setErr("");
     try {
       const payload = {
         ...form,
+        category: customCategory ? form.category.trim() : form.category,
+        unit: customUnit ? form.unit.trim() : form.unit,
         price: parseFloat(form.price),
         cost: parseFloat(form.cost),
         stock: parseInt(form.stock, 10) || 0,
@@ -157,9 +198,9 @@ function ProductForm({ product, onClose, onSaved }) {
     } finally { setSaving(false); saveLock.current = false; }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" onClick={onClose} data-testid="product-form-modal">
-      <form onSubmit={save} className={`card-surface bg-white p-6 w-full ${isDapurOS ? "max-w-4xl" : "max-w-xl"}`} onClick={(e) => e.stopPropagation()} data-testid="product-form">
+      <form onSubmit={save} className={`card-surface bg-white p-6 w-full ${isDapurOS ? "max-w-4xl" : "max-w-xl"} max-h-[calc(100dvh-2rem)]`} style={{overflowY:"auto"}} onClick={(e) => e.stopPropagation()} data-testid="product-form">
         <div className="flex items-center justify-between mb-5 border-b pb-3">
           <h2 className="font-display text-xl font-bold">{isEdit ? "Edit Produk" : "Produk Baru"}</h2>
           <button type="button" onClick={onClose} className="btn-ghost p-2" data-testid="product-form-close"><X size={18} /></button>
@@ -181,10 +222,24 @@ function ProductForm({ product, onClose, onSaved }) {
                 {window.DapurOSDevice?.scanBarcode && <button type="button" className="btn-outline mt-2" onClick={() => window.DapurOSDevice.scanBarcode("product")} data-testid="pf-scan-barcode"><ScanBarcode size={16}/> Scan barcode</button>}
               </div>
               <div>
-                <label className="label-tiny">Kategori</label>
-                <input className="input-field mt-1.5" value={form.category}
-                       onChange={(e) => setForm({ ...form, category: e.target.value })} data-testid="pf-category" />
-              </div>
+            <label className="label-tiny" htmlFor="product-category">Kategori</label>
+            <select id="product-category" className="input-field mt-1.5" data-testid="pf-category"
+                    value={customCategory ? "custom" : `category:${form.category}`} aria-busy={categoriesLoading}
+                    onChange={(e) => {
+                      const custom = e.target.value === "custom";
+                      setCustomCategory(custom);
+                      setForm({ ...form, category: custom ? "" : e.target.value.slice("category:".length) });
+                    }}>
+              {categoryOptions.map(name => <option key={name} value={`category:${name}`}>{name}</option>)}
+              <option value="custom">Kategori lainnya…</option>
+            </select>
+            {customCategory && <input className="input-field mt-2" required autoFocus aria-label="Nama kategori baru"
+              placeholder="Nama kategori" value={form.category} data-testid="pf-category-custom"
+              onChange={(e) => setForm({ ...form, category: e.target.value })} />}
+            {categoriesLoading && <p role="status" className="text-xs mt-1">Memuat kategori…</p>}
+            {categoriesError && <div role="alert" className="text-xs mt-1" data-testid="pf-category-error">
+              <p>{categoriesError}</p><button type="button" className="underline mt-1" onClick={onRetryCategories}>Coba lagi</button>
+            </div>}              </div>
               <div>
                 <label className="label-tiny">Harga Jual (Rp)</label>
                 <input className="input-field mt-1.5" type="number" step="0.01" required value={form.price}
@@ -201,27 +256,47 @@ function ProductForm({ product, onClose, onSaved }) {
                        onChange={(e) => setForm({ ...form, stock: e.target.value })} data-testid="pf-stock" />
               </div>
               <div>
-                <label className="label-tiny">Unit</label>
-                <input className="input-field mt-1.5" value={form.unit}
-                       onChange={(e) => setForm({ ...form, unit: e.target.value })} data-testid="pf-unit" />
-              </div>
+            <label className="label-tiny" htmlFor="product-unit">Unit</label>
+            <select id="product-unit" className="input-field mt-1.5" data-testid="pf-unit"
+                    value={customUnit ? "custom" : `unit:${form.unit}`} aria-busy={unitsLoading}
+                    onChange={(e) => {
+                      const custom = e.target.value === "custom";
+                      setCustomUnit(custom);
+                      setForm({ ...form, unit: custom ? "" : e.target.value.slice("unit:".length) });
+                    }}>
+              {[...unitOptions].map(([value, label]) => <option key={value} value={`unit:${value}`}>{label}</option>)}
+              <option value="custom">Satuan lainnya…</option>
+            </select>
+            {customUnit && <input className="input-field mt-2" required autoFocus aria-label="Satuan lainnya"
+              placeholder="Simbol satuan" value={form.unit} data-testid="pf-unit-custom"
+              onChange={(e) => setForm({ ...form, unit: e.target.value })} />}
+            {unitsLoading && <p role="status" className="text-xs mt-1">Memuat satuan…</p>}
+            {unitsError && <div role="alert" className="text-xs mt-1" data-testid="pf-unit-error">
+              <p>{unitsError}</p><button type="button" className="underline mt-1" onClick={onRetryUnits}>Coba lagi</button>
+            </div>}              </div>
             </div>
             <div>
               <label className="label-tiny block mb-1.5">Foto Produk</label>
-              {form.image_url ? (
-                <div className="relative w-full">
-                  <img src={form.image_url} alt="Pratinjau produk" className="w-full h-40 object-cover rounded-lg border border-slate-200" data-testid="pf-image-preview" />
-                  <button type="button" onClick={() => setForm({ ...form, image_url: null })} title="Hapus foto"
-                    className="absolute top-2 right-2 bg-white/90 hover:bg-white text-red-600 rounded-lg p-1.5 shadow" data-testid="pf-image-remove"><Trash2 size={16} /></button>
-                </div>
-              ) : (
-                <label htmlFor="pf-image-input" className="flex flex-col items-center justify-center gap-1 w-full h-40 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-amber-400 hover:bg-amber-50/30 transition-colors text-center" data-testid="pf-image-drop">
-                  <Upload size={22} className="text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-500">Unggah foto produk</span>
-                  <span className="text-[10px] text-slate-400">JPG/PNG · otomatis dikecilkan</span>
-                </label>
-              )}
-              <input id="pf-image-input" type="file" accept="image/*" className="hidden" onChange={(e) => handleImage(e.target.files?.[0])} data-testid="pf-image-input" />
+            {form.image_url ? (
+              <div className="relative w-full">
+                <img src={form.image_url} alt="Pratinjau produk" className="w-full h-40 object-cover rounded-lg border border-slate-200" data-testid="pf-image-preview" />
+                <button type="button" disabled={saving || photoProcessing} onClick={() => setForm({ ...form, image_url: null })} title="Hapus foto"
+                  className="absolute top-2 right-2 bg-white/90 hover:bg-white text-red-600 rounded-lg p-1.5 shadow" data-testid="pf-image-remove"><Trash2 size={16} /></button>
+              </div>
+            ) : (
+              <label htmlFor="pf-image-input" className="flex flex-col items-center justify-center gap-1 w-full h-40 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-amber-400 hover:bg-amber-50/30 transition-colors text-center" data-testid="pf-image-drop">
+                <Upload size={22} className="text-slate-400" />
+                <span className="text-xs font-semibold text-slate-500">Tambahkan foto produk</span>
+                <span className="text-[10px] text-slate-400">JPG/PNG · otomatis dikecilkan</span>
+              </label>
+            )}
+            <div className="flex gap-2 mt-2">
+              {canTakePhoto && <button type="button" disabled={saving || photoProcessing} className="btn-outline flex-1" onClick={() => cameraInput.current?.click()} data-testid="pf-photo-camera"><Camera size={16} /> Ambil foto</button>}
+              <button type="button" disabled={saving || photoProcessing} className="btn-outline flex-1" onClick={() => galleryInput.current?.click()} data-testid="pf-photo-gallery"><Images size={16} /> {canTakePhoto ? "Pilih dari galeri" : "Pilih gambar"}</button>
+            </div>
+            {photoProcessing && <p role="status" className="text-xs mt-2" data-testid="pf-photo-processing">Memproses foto…</p>}
+            <input ref={galleryInput} id="pf-image-input" type="file" accept="image/*" disabled={saving || photoProcessing} className="hidden" onChange={chooseImage} data-testid="pf-image-input" />
+            <input ref={cameraInput} id="pf-camera-input" type="file" accept="image/*" capture="environment" disabled={saving || photoProcessing} className="hidden" onChange={chooseImage} data-testid="pf-camera-input" />
             </div>
           </div>
 
@@ -329,15 +404,15 @@ function ProductForm({ product, onClose, onSaved }) {
           )}
         </div>
 
-        {err && <p className="text-sm text-[hsl(var(--destructive))] mt-3">{err}</p>}
+        {err && <p role="alert" data-testid="pf-error" className="text-sm text-[hsl(var(--destructive))] mt-3">{err}</p>}
         <div className="flex gap-2 mt-6 border-t pt-4">
-          <button type="button" onClick={onClose} className="btn-outline flex-1">Batal</button>
-          <button type="submit" disabled={saving} className="btn-primary bg-amber-600 hover:bg-amber-700 border-amber-650 flex-1 text-white" data-testid="pf-save">
+          <button type="button" onClick={onClose} className="btn-outline flex-1" data-testid="pf-cancel">Batal</button>
+          <button type="submit" disabled={saving || photoProcessing} className="btn-primary bg-amber-600 hover:bg-amber-700 border-amber-650 flex-1 text-white" data-testid="pf-save">
             {saving ? "Menyimpan…" : "Simpan Produk"}
           </button>
         </div>
       </form>
-    </div>
+    </div>, document.body
   );
 }
 
@@ -487,6 +562,9 @@ export default function Products() {
   const { user } = useAuth();
   const editable = canManageProducts(user?.role);
   const isDapurOS = true;
+  const identity = `${user?.id || ''}:${user?.store_id || ''}`;
+  const identityRef = useRef(identity); identityRef.current = identity;
+  const [dialogIdentity,setDialogIdentity] = useState('');
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -494,8 +572,21 @@ export default function Products() {
   const [showImport, setShowImport] = useState(false);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
+  const [categoriesIdentity, setCategoriesIdentity] = useState("");
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState("");
+  const [units, setUnits] = useState([]);
+  const [unitsIdentity, setUnitsIdentity] = useState("");
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [unitsError, setUnitsError] = useState("");
   const [filterCat, setFilterCat] = useState("all");
   const [loadError,setLoadError]=useState('');
+  useEffect(() => {
+    const guard=event=>{if(editable && dialogIdentity===identity && (showForm || showImport))event.preventDefault();};
+    window.addEventListener('dapuros-before-account-switch',guard);
+    return()=>window.removeEventListener('dapuros-before-account-switch',guard);
+  },[editable,dialogIdentity,identity,showForm,showImport]);
+
   const matches=useMemo(()=>items.filter(p=>(filterCat==='all'||p.category===filterCat)&&(!q.trim()||[p.name,p.sku,p.category].some(v=>String(v||'').toLocaleLowerCase('id').includes(q.trim().toLocaleLowerCase('id'))))),[items,q,filterCat]);
   const table=useTablePage(matches,25);
 
@@ -506,30 +597,71 @@ export default function Products() {
   // A monotonic reqId bumped at request-*issue* time fixes it -- only the response matching
   // the most recently issued request is ever applied.
   const loadReqIdRef = useRef(0);
+  const categoriesReqIdRef=useRef(0),unitsReqIdRef=useRef(0);
   const load = async () => {
     setLoading(true);
     const reqId = ++loadReqIdRef.current;
+    const requestIdentity=identity;
     try {
       const data = await loadCatalogue();
-      if (reqId === loadReqIdRef.current) {setItems(data);setCategories([...new Set(data.map(p=>p.category).filter(Boolean))]);setLoadError('');}
+      if (reqId === loadReqIdRef.current && identityRef.current===requestIdentity) {setItems(data);setLoadError('');}
     } catch(e) {
-      if(reqId===loadReqIdRef.current)setLoadError('Katalog belum dapat diperbarui. Periksa koneksi lalu coba lagi.');
+      if(reqId===loadReqIdRef.current && identityRef.current===requestIdentity)setLoadError('Katalog belum dapat diperbarui. Periksa koneksi lalu coba lagi.');
     } finally {
-      if (reqId === loadReqIdRef.current) setLoading(false);
+      if (reqId === loadReqIdRef.current && identityRef.current===requestIdentity) setLoading(false);
+    }
+  };
+
+  // Saved categories must be available before their first product is created.
+  // Keep legacy/imported product names too, so existing values remain selectable.
+  const loadCategories = async () => {
+    const requestIdentity = identity;
+    const requestId = ++categoriesReqIdRef.current;
+    const current = () => identityRef.current === requestIdentity && categoriesReqIdRef.current === requestId;
+    setCategoriesLoading(true); setCategoriesError("");
+    try {
+      const [saved, used] = await Promise.all([readCollection("/products/categories"), api.get("/products/category-names")]);
+      if (!Array.isArray(used.data)) throw new Error("Jawaban kategori tidak valid.");
+      const names = [...new Set([...saved.data.map(category => category.name), ...used.data]
+        .filter(name => typeof name === "string" && name.trim()))].sort((a, b) => a.localeCompare(b, "id"));
+      if (current()) { setCategories(names); setCategoriesIdentity(requestIdentity); }
+    } catch {
+      if (current()) setCategoriesError("Daftar kategori belum dapat dimuat.");
+    } finally {
+      if (current()) setCategoriesLoading(false);
+    }
+  };
+
+  const loadUnits = async () => {
+    const requestIdentity = identity;
+    const requestId = ++unitsReqIdRef.current;
+    const current = () => identityRef.current === requestIdentity && unitsReqIdRef.current === requestId;
+    setUnitsLoading(true); setUnitsError("");
+    try {
+      const saved = await readCollection("/products/units");
+      const choices = new Map();
+      for (const unit of saved.data) {
+        const value = typeof unit.short_name === "string" ? unit.short_name.trim() : "";
+        const name = typeof unit.name === "string" ? unit.name.trim() : "";
+        if (value && !choices.has(value)) choices.set(value, { value, label: name && name !== value ? `${name} (${value})` : value });
+      }
+      if (current()) { setUnits([...choices.values()]); setUnitsIdentity(requestIdentity); }
+    } catch {
+      if (current()) setUnitsError("Daftar satuan belum dapat dimuat.");
+    } finally {
+      if (current()) setUnitsLoading(false);
     }
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    setItems([]);setShowForm(false);setShowImport(false);
-    load();
-    // /products/categories pointed at a separate, user-managed Kategori collection that starts
-    // empty -- not the actual category values on real products. Same bug already fixed in
-    // GerainaOS (task tracked as "Fix category filter dropdown not populated"): the correct
-    // source is /products/category-names, distinct values straight off the products
-    // themselves, same endpoint POS already uses correctly for its filter chips.
-    return()=>{loadReqIdRef.current++;};
-  }, [user?.id,user?.store_id]);
+    setItems([]);setCategories([]);setCategoriesIdentity('');setUnits([]);setUnitsIdentity('');
+    setCategoriesError('');setUnitsError('');setUnitsLoading(false);setQ('');setFilterCat('all');
+    setShowForm(false);setShowImport(false);setEditing(null);load();loadCategories();
+    return()=>{loadReqIdRef.current++;categoriesReqIdRef.current++;unitsReqIdRef.current++;};
+  },[identity]);
+  const visibleCategories=categoriesIdentity===identity?categories:[];
+  const visibleUnits=unitsIdentity===identity?units:[];
 
   const remove = async (p) => {
     if (!window.confirm(`Hapus "${p.name}"?`)) return;
@@ -545,10 +677,10 @@ export default function Products() {
           <h1 className="font-display text-3xl font-bold mt-1">Produk</h1>
         </div>
         {editable && <div className="flex gap-2">
-          <button onClick={() => setShowImport(true)} className="btn-outline" data-testid="open-import-btn">
+          <button onClick={() => {setDialogIdentity(identity);setShowImport(true);}} className="btn-outline" data-testid="open-import-btn">
             <Upload size={16} /> Impor Excel/CSV
           </button>
-          <button onClick={() => { setEditing(null); setShowForm(true); }} className="btn-primary" data-testid="new-product-btn">
+          <button onClick={() => { setDialogIdentity(identity); setEditing(null); setShowForm(true); loadCategories(); loadUnits(); }} className="btn-primary" data-testid="new-product-btn">
             <Plus size={16} /> Produk Baru
           </button>
         </div>}
@@ -573,7 +705,7 @@ export default function Products() {
             data-testid="products-category-filter"
           >
             <option value="all">Semua Kategori</option>
-            {categories.map((c) => {
+            {visibleCategories.map((c) => {
               const name = typeof c === "string" ? c : c.name;
               return <option key={name} value={name}>{name}</option>;
             })}
@@ -621,7 +753,7 @@ export default function Products() {
                 <td className="px-5 py-3 text-right font-display font-bold num-display">{fmtIDR(p.price)}</td>
                 <td className="px-5 py-3 text-right num-display">{p.stock} <span className="text-xs text-[hsl(var(--muted))]">{p.unit}</span></td>
                 <td className="px-5 py-3 text-right">
-                  {editable&&<><button onClick={() => { setEditing(p); setShowForm(true); }} className="btn-ghost p-1.5" data-testid={`edit-product-${p.id}`}><Edit3 size={15} /></button>
+                  {editable&&<><button onClick={() => { setDialogIdentity(identity); setEditing(p); setShowForm(true); loadCategories(); loadUnits(); }} className="btn-ghost p-1.5" data-testid={`edit-product-${p.id}`}><Edit3 size={15} /></button>
                   <button onClick={() => remove(p)} className="btn-ghost p-1.5 text-[hsl(var(--destructive))]" data-testid={`delete-product-${p.id}`}><Trash2 size={15} /></button></>}
                 </td>
               </tr>
@@ -631,8 +763,8 @@ export default function Products() {
       </div>
 
       {!loading&&!loadError&&<TablePage value={table} label="menu"/>}
-      {editable && showForm && <ProductForm product={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
-      {editable && showImport && <ImportDialog onClose={() => setShowImport(false)} onDone={load} />}
+      {editable && showForm && dialogIdentity===identity && <ProductForm key={dialogIdentity} product={editing} categories={visibleCategories} categoriesLoading={categoriesLoading} categoriesError={categoriesError} onRetryCategories={loadCategories} productUnits={visibleUnits} unitsLoading={unitsLoading} unitsError={unitsError} onRetryUnits={loadUnits} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); loadCategories(); }} />}
+      {editable && showImport && dialogIdentity===identity && <ImportDialog onClose={() => setShowImport(false)} onDone={load} />}
     </div>
   );
 }

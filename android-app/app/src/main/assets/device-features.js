@@ -10,6 +10,9 @@
     appInfo: window.__dapurosAppInfo ? Object.freeze({ ...window.__dapurosAppInfo }) : null,
     checkForUpdates: () => send('checkForUpdates'),
     scanBarcode: (target = 'pos') => send('scanBarcode', { target }),
+    // FileReader completion is asynchronous, after the original user activation.
+    // Native code accepts only generated camera-cache basenames for this cleanup.
+    releaseProductPhoto: name => window.DapurOSNative.postMessage(JSON.stringify({ type: 'releaseProductPhoto', name })),
     configurePrinter: () => send('configurePrinter'),
     testPrinter: () => send('testPrinter'),
     printReceipt: order => send('printReceipt', { order })

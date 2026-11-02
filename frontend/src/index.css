@@ -211,7 +211,6 @@
 
 .route-stage {
   min-height: 100%;
-  animation: route-enter .42s cubic-bezier(.2,.8,.2,1) both;
 }
 
 .operational-surface,

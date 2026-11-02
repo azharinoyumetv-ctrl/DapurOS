@@ -1,0 +1,454 @@
+{
+  "schemaVersion": 1,
+  "status": "passed-candidate",
+  "verifiedAt": "2026-11-02T16:35:01.070Z",
+  "sourceBaseline": "161b1328158c0a9ea2c913e490b4150cbaf1c050",
+  "referenceCommits": {
+    "categories": "321392ca1502e3e7329e199ce7e42ea9623fbcb7",
+    "photos": "87c410dbd84fbfbf8fff736762b17014d7936858",
+    "units": "b7fad97218d8ad4721d8c07a931ab558b0cc2562"
+  },
+  "referenceResultsUsedAsDapurVerification": false,
+  "nativeEvidenceDirectory": "1.0.5-native",
+  "package": {
+    "applicationId": "com.dagangos.dapuros",
+    "version": "1.0.5",
+    "versionCode": 7,
+    "minimumSdk": 34,
+    "supportedAbis": [
+      "arm64-v8a",
+      "x86_64"
+    ],
+    "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+    "apkBytes": 19230163,
+    "aabSha256": "c3488d40ecb2fd6c0a969847dceb126c3e9bbca05cf3b9699ef03939fbaf67bb",
+    "signingCertificateSha256": "fced7b77d88c3477bd991d97e4a224567e775a633c2e16a280ad03991f2c914a",
+    "unitTests": 33,
+    "lintErrors": 0,
+    "lintWarnings": 70,
+    "privateCredentialScan": "passed",
+    "frontendManifestEntriesVerified": 93
+  },
+  "backend": {
+    "contractsPassed": 237,
+    "realTransactionPassed": 12,
+    "socketAndIntegrityPassed": 21,
+    "failed": 0,
+    "realPayments": 0,
+    "realEmailsSent": 0,
+    "customerRecordsErased": 0,
+    "writeFencePreserved": true,
+    "normalizedWriteFenceSha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1"
+  },
+  "fullStack": {
+    "passed": 30,
+    "failed": 0,
+    "canonicalScreens": 58,
+    "transport": "Real local FastAPI and disposable MongoDB replica; browser socket disabled to exercise HTTP fallback",
+    "catalogueItems": 618
+  },
+  "browser": {
+    "passed": 39,
+    "companionSessionsPassed": 16,
+    "editorBrowserPassed": 54,
+    "failed": 0,
+    "flaky": 0
+  },
+  "installed": [
+    {
+      "status": "passed",
+      "profile": "phone",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        1080,
+        2400
+      ],
+      "density": 420
+    },
+    {
+      "status": "passed",
+      "profile": "xiaomi-landscape",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        2032,
+        3048
+      ],
+      "density": 320
+    },
+    {
+      "status": "passed",
+      "profile": "samsung-landscape",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Readable login and password visibility",
+        "Restaurant catalogue responsive with configured cash only",
+        "Cash takeaway saved durably before receipt with tax",
+        "Product barcode fills recipe draft without saving",
+        "Installed identity subscription expiry and support entry agree",
+        "Camera denial recovery and offline model preview",
+        "Native Bluetooth and USB receipt setup available without sending print"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "deviceApi": 34,
+      "physicalScreenPixels": [
+        1848,
+        2960
+      ],
+      "density": 240
+    }
+  ],
+  "subscriptionTheme": [
+    {
+      "status": "passed",
+      "profile": "phone-billing",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "DapurOS trial billing uses its own orange brand theme",
+        "Trial upgrade offers only the three paid DapurOS plans"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+    },
+    {
+      "status": "passed",
+      "profile": "xiaomi-landscape-billing",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "DapurOS trial billing uses its own orange brand theme",
+        "Trial upgrade offers only the three paid DapurOS plans"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+    },
+    {
+      "status": "passed",
+      "profile": "samsung-landscape-billing",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "DapurOS trial billing uses its own orange brand theme",
+        "Trial upgrade offers only the three paid DapurOS plans"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+    }
+  ],
+  "reservations": [
+    {
+      "status": "passed",
+      "profile": "phone-reservation",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Business cashier can enter a named reservation on this screen",
+        "Starter cashier sees the Business reservation lock"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+    },
+    {
+      "status": "passed",
+      "profile": "xiaomi-landscape-reservation",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Business cashier can enter a named reservation on this screen",
+        "Starter cashier sees the Business reservation lock"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+    },
+    {
+      "status": "passed",
+      "profile": "samsung-landscape-reservation",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Business cashier can enter a named reservation on this screen",
+        "Starter cashier sees the Business reservation lock"
+      ],
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+    }
+  ],
+  "companionSwitching": [
+    {
+      "status": "passed",
+      "applicationId": "com.dagangos.dapuros",
+      "targetPackage": "com.dagangos.geraina",
+      "profile": "phone",
+      "fixtureOnly": true,
+      "sessionRetained": true,
+      "documentRetained": true,
+      "planRetained": "starter",
+      "foregroundActivity": "    topResumedActivity=ActivityRecord{33cf0c u0 com.dagangos.geraina/com.example.gerainapos.MainActivity t294}",
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "version": "1.0.5"
+    },
+    {
+      "status": "passed",
+      "applicationId": "com.dagangos.dapuros",
+      "targetPackage": "com.dagangos.geraina",
+      "profile": "xiaomi-landscape",
+      "fixtureOnly": true,
+      "sessionRetained": true,
+      "documentRetained": true,
+      "planRetained": "starter",
+      "foregroundActivity": "    topResumedActivity=ActivityRecord{af84e18 u0 com.dagangos.geraina/com.example.gerainapos.MainActivity t300}",
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "version": "1.0.5"
+    },
+    {
+      "status": "passed",
+      "applicationId": "com.dagangos.dapuros",
+      "targetPackage": "com.dagangos.geraina",
+      "profile": "samsung-landscape",
+      "fixtureOnly": true,
+      "sessionRetained": true,
+      "documentRetained": true,
+      "planRetained": "starter",
+      "foregroundActivity": "    topResumedActivity=ActivityRecord{ff1efec u0 com.dagangos.geraina/com.example.gerainapos.MainActivity t306}",
+      "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+      "version": "1.0.5"
+    }
+  ],
+  "companionPeerSwitching": [
+    {
+      "status": "passed",
+      "applicationId": "com.dagangos.geraina",
+      "targetPackage": "com.dagangos.dapuros",
+      "profile": "phone",
+      "fixtureOnly": true,
+      "sessionRetained": true,
+      "documentRetained": true,
+      "planRetained": "business",
+      "foregroundActivity": "    topResumedActivity=ActivityRecord{95fe3a8 u0 com.dagangos.dapuros/com.example.dapurospos.MainActivity t297}",
+      "apkSha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f",
+      "installedApkSha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f",
+      "version": "1.2.20"
+    },
+    {
+      "status": "passed",
+      "applicationId": "com.dagangos.geraina",
+      "targetPackage": "com.dagangos.dapuros",
+      "profile": "xiaomi-landscape",
+      "fixtureOnly": true,
+      "sessionRetained": true,
+      "documentRetained": true,
+      "planRetained": "business",
+      "foregroundActivity": "    topResumedActivity=ActivityRecord{e86a95f u0 com.dagangos.dapuros/com.example.dapurospos.MainActivity t303}",
+      "apkSha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f",
+      "installedApkSha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f",
+      "version": "1.2.20"
+    },
+    {
+      "status": "passed",
+      "applicationId": "com.dagangos.geraina",
+      "targetPackage": "com.dagangos.dapuros",
+      "profile": "samsung-landscape",
+      "fixtureOnly": true,
+      "sessionRetained": true,
+      "documentRetained": true,
+      "planRetained": "business",
+      "foregroundActivity": "    topResumedActivity=ActivityRecord{ecafa35 u0 com.dagangos.dapuros/com.example.dapurospos.MainActivity t309}",
+      "apkSha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f",
+      "installedApkSha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f",
+      "version": "1.2.20"
+    }
+  ],
+  "startupRecovery": {
+    "status": "passed",
+    "applicationId": "com.dagangos.dapuros",
+    "fixtureOnly": true,
+    "tokenRetained": true,
+    "retryValidatedOwnModule": true,
+    "planRetained": "starter",
+    "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+  },
+  "peerStartupRecovery": {
+    "status": "passed",
+    "applicationId": "com.dagangos.geraina",
+    "fixtureOnly": true,
+    "tokenRetained": true,
+    "retryValidatedOwnModule": true,
+    "planRetained": "business",
+    "installedApkSha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f"
+  },
+  "testedCompanionRelease": {
+    "version": "1.2.20",
+    "versionCode": 25,
+    "applicationId": "com.dagangos.geraina",
+    "downloadUrl": "/downloads/geraina/Geraina-POS-1.2.20.apk",
+    "bytes": 19176155,
+    "sha256": "b6fcece07b4ab7b3b23a6bb3c8fe0b68bb1aa3818da185aaf432cb460ca31e0f",
+    "minimumAndroid": "14.0",
+    "minimumSdk": 34,
+    "supportedAbis": [
+      "arm64-v8a",
+      "x86_64"
+    ],
+    "verifiedAt": "2026-11-03T00:40:18.243182+09:00",
+    "signingCertificateSha256": "52e14a39a7da4f5f528838f33602860e35960373070a6132d08f682487494ec8"
+  },
+  "editorNative": {
+    "status": "passed",
+    "verifiedAt": "2026-11-02T16:32:21.530Z",
+    "version": "1.0.5",
+    "versionCode": 7,
+    "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+    "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+    "checks": [
+      "camera-denial-retains-draft",
+      "system-gallery-selection-without-camera-permission",
+      "gallery-cancel-retains-photo-and-draft",
+      "real-emulated-camera-capture-and-preview",
+      "camera-cancel-retains-previous-photo",
+      "captured-photo-saved-and-reopened",
+      "temporary-camera-files-released",
+      "tablet-gallery-replacement-retains-draft",
+      "tablet-camera-launch-and-cancel",
+      "CSV-Excel-retains-document-picker"
+    ],
+    "profiles": [
+      {
+        "name": "phone",
+        "size": "1080x2400",
+        "density": "420",
+        "symbol": "cup",
+        "unit": "Cangkir menu",
+        "status": "passed",
+        "checks": [
+          "saved-category-selected",
+          "unit-symbol-saved",
+          "reopen-retains-choices",
+          "photo-actions-retained",
+          "recipe-form-retained"
+        ],
+        "selection": "native-popup-tapped"
+      },
+      {
+        "name": "xiaomi-landscape",
+        "size": "3048x2032",
+        "density": "320",
+        "symbol": "btl",
+        "unit": "Botol menu",
+        "status": "passed",
+        "checks": [
+          "saved-category-selected",
+          "unit-symbol-saved",
+          "reopen-retains-choices",
+          "photo-actions-retained",
+          "recipe-form-retained"
+        ],
+        "selection": "actual-WebView-select"
+      },
+      {
+        "name": "samsung-landscape",
+        "size": "2960x1848",
+        "density": "240",
+        "symbol": "box",
+        "unit": "Kotak menu",
+        "status": "passed",
+        "checks": [
+          "saved-category-selected",
+          "unit-symbol-saved",
+          "reopen-retains-choices",
+          "photo-actions-retained",
+          "recipe-form-retained"
+        ],
+        "selection": "actual-WebView-select"
+      }
+    ],
+    "upgrade": {
+      "fromVersion": "1.0.4",
+      "status": "passed",
+      "tokenRetained": true,
+      "preferenceRetained": true
+    },
+    "runtimeErrors": [],
+    "productionWrites": 0,
+    "scope": "Exact signed APK, actual AOSP photo picker and virtual camera; real isolated API and MongoDB; phone plus resized large-tablet window. No physical vendor-camera certification."
+  },
+  "upgrade": {
+    "status": "passed",
+    "baselineVersion": "1.0.4",
+    "finalVersion": "1.0.5",
+    "pendingSaleId": "43914fed-2907-42bc-9fa5-eaaa269e6694",
+    "baselineReceipt": "OFF-43914FED290742BC",
+    "finalInstalledApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+    "evidence": {
+      "status": "passed",
+      "profile": "upgrade",
+      "applicationId": "com.dagangos.dapuros",
+      "signedRelease": true,
+      "fixtureNetworkOnly": true,
+      "checks": [
+        "Signed upgrade retains account preferences and pending cash sale"
+      ],
+      "installedApkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64"
+    }
+  },
+  "portalUnitTests": {
+    "passed": 65,
+    "failed": 0
+  },
+  "fixes": [
+    "Saved and unused category dropdown with legacy values, custom input, complete paging and retry",
+    "Saved product unit dropdown independent of recipe entitlement; symbols saved and old custom strings retained",
+    "Gallery and direct camera actions with replacement, cancellation and processing recovery",
+    "Private camera-only cache provider, asynchronous release and abandoned-capture pruning",
+    "DapurOS recipe/ingredient form, stock guards, reservations, kitchen, branding and independent sessions preserved",
+    "Remaining 420 ms screen transition removed; existing deferred-screen recovery retained",
+    "DapurOS-owned signed Android 1.0.5 build 7 and immutable website download"
+  ],
+  "limitations": [
+    "No physical printer paper output, live merchant settlement, provider email/message delivery or Play submission was performed",
+    "Screen profiles run on an isolated AOSP Android 14 emulator, not physical Xiaomi or Samsung firmware",
+    "Legacy sales without saved costs are reported as unknown rather than recalculated from current product costs",
+    "Old inventory history may lack movements recorded before this release; new movements are written atomically",
+    "Offline recipe sales reconcile using the recipe at synchronization and flag shortages for staff review",
+    "Reservations hold one table immediately until seating or cancellation; future time-slot scheduling, automatic expiry and customer notifications are not included"
+  ]
+}

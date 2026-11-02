@@ -63,6 +63,8 @@ class DapurOSReleaseFlowTest {
                             path == "/api/products" -> products
                             path == "/api/products/catalogue" -> """{"items":$products,"total":1,"next_cursor":null}"""
                             path == "/api/products/category-names" -> """["Minuman"]"""
+                            path == "/api/records/categories" -> """{"items":[{"id":"category-test","name":"Minuman"}],"total":1,"next_cursor":null}"""
+                            path == "/api/records/units" -> """{"items":[{"id":"unit-test","name":"Pieces","short_name":"pcs"}],"total":1,"next_cursor":null}"""
                             path == "/api/ingredients" -> """[{"id":"beans","name":"Biji kopi fixture","stock":2000,"unit":"g"}]"""
                             path == "/api/records/ingredients" -> """{"items":[{"id":"beans","name":"Biji kopi fixture","stock":2000,"unit":"g"}],"total":1,"next_cursor":null}"""
                             path == "/api/floors" -> """[{"id":"floor-test","name":"Lantai Fixture","level":1}]"""

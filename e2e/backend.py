@@ -56,6 +56,24 @@ async def reset(request: Request, x_e2e_fixture: str = Header(default='')):
         await db[collection].delete_many({})
     return {'ok':True}
 
+@app.post('/__e2e/editor-reset')
+async def editor_reset(request: Request, x_e2e_fixture: str = Header(default='')):
+    await reset(request,x_e2e_fixture)
+    import auth
+    db=get_raw_db();now=datetime.now(timezone.utc).isoformat()
+    password=auth.hash_password('DapurEditorFixture-5642')
+    for suffix in ('a','b'):
+        subscription={'tier':'business','status':'active','source':'manual_grant','expires_at':'2099-01-01T00:00:00+00:00'}
+        await db.users.insert_one({'id':'editor-'+suffix,'email':'dapuros-editor-'+suffix+'@example.com','password_hash':password,
+            'role':'Owner','plan':'business','store_id':'editor-store-'+suffix,'store_name':'DapurOS isolated editor '+suffix,
+            'created_at':now,'credential_version':0,'subscriptions':{'dapuros':subscription}})
+        await db.stores.insert_one({'id':'editor-store-'+suffix,'name':'DapurOS isolated editor '+suffix,'module':'dapuros',
+            'owner_user_id':'editor-'+suffix,'created_at':now,'subscription':subscription})
+    await db.products.insert_one({'id':'product-0000','store_id':'editor-store-a','module':'dapuros','name':'Legacy product',
+        'sku':'EDITOR-LEGACY','price':1000,'cost':500,'stock':4,'category':'Legacy category','unit':'pcs','active':True,
+        'created_at':now,'updated_at':now,'recipe':[]})
+    return {'ok':True,'disposable':True}
+
 
 @app.post('/__e2e/catalogue')
 async def seed_catalogue(request:Request,x_e2e_fixture:str=Header(default='')):
