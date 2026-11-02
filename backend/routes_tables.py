@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Header
 from pydantic import BaseModel
 
 from database import get_db, utcnow
-from models import Table, TableCreate, TableUpdate, OrderSession, Order
+from models import Table, TableCreate, TableUpdate, OrderSession, Order, TableReservationCreate
+from plan_limits import require_plan
+import table_reservations
 from auth import get_current_user
 from routes_orders import _calc
 from restaurant_billing import settle_table, split_table, settle_split
@@ -53,6 +55,7 @@ async def list_tables(floor_id: Optional[str] = None, user: dict = Depends(get_c
 
 @router.post("", response_model=Table, dependencies=[Depends(require_permission('products.write'))])
 async def create_table(payload: TableCreate, user: dict = Depends(get_current_user)):
+    if payload.status=='Reserved':raise HTTPException(422,'Gunakan tindakan Reservasi untuk menyimpan nama pelanggan.')
     db = get_db()
     from plan_limits import check_capacity
     async def create(session):
@@ -80,7 +83,10 @@ async def update_table(table_id: str, payload: TableUpdate, user: dict = Depends
     update["updated_at"] = utcnow().isoformat()
     async def save(session):
         scope={'id':table_id,'store_id':user['store_id']}
-        if not await db.tables.find_one(scope,session=session):raise HTTPException(404,'Meja tidak ditemukan.')
+        existing=await db.tables.find_one(scope,session=session)
+        if not existing:raise HTTPException(404,'Meja tidak ditemukan.')
+        if update.get('status')=='Reserved':raise HTTPException(422,'Gunakan tindakan Reservasi untuk menyimpan nama pelanggan.')
+        if existing.get('reservation'):await ensure_idle(db,user['store_id'],[table_id],session)
         if update.get('status')=='Vacant':await ensure_idle(db,user['store_id'],[table_id],session)
         if update.get('floor_id') and not await db.floors.find_one({'id':update['floor_id'],'store_id':user['store_id']},session=session):raise HTTPException(422,'Lantai tidak ditemukan di restoran ini.')
         return await db.tables.find_one_and_update(scope,{'$set':update},return_document=True,projection={'_id':0},session=session)
@@ -104,7 +110,7 @@ async def delete_table(table_id: str, user: dict = Depends(get_current_user)):
 # ---------- Dining Sessions ----------
 
 @router.post("/{table_id}/session", response_model=OrderSession)
-async def open_session(table_id: str, user: dict = Depends(get_current_user)):
+async def open_session(table_id: str, expected_reservation_id:Optional[str]=Body(None,embed=True,max_length=200), user: dict = Depends(get_current_user)):
     db = get_db()
     async def open_table(session):
         scope={'id':table_id,'store_id':user['store_id']}
@@ -115,14 +121,37 @@ async def open_session(table_id: str, user: dict = Depends(get_current_user)):
         await db.tables.update_one(scope,{'$inc':{'session_revision':1}},session=session)
         active=await db.order_sessions.find({'table_id':table_id,'store_id':user['store_id'],'status':'Active'},session=session).limit(2).to_list(2)
         if len(active)>1:raise HTTPException(409,'Meja memiliki sesi ganda. Minta Owner memeriksa tagihan sebelum melanjutkan.')
-        if active:return _strip_id(active[0])
+        if active:
+            if expected_reservation_id and (active[0].get('reservation') or {}).get('id')!=expected_reservation_id:raise HTTPException(409,'Sesi meja sudah berubah. Muat ulang meja.')
+            return _strip_id(active[0])
+        reservation=table.get('reservation')
+        if (reservation and (reservation.get('id')!=expected_reservation_id or table.get('status')!='Reserved')) or (expected_reservation_id and not reservation):
+            raise HTTPException(409,'Meja memiliki reservasi atau reservasi sudah berubah. Pilih Tempatkan Tamu dari reservasi terbaru.')
         doc={'id':str(uuid.uuid4()),'table_id':table_id,'store_id':user['store_id'],'opened_at':utcnow().isoformat(),'closed_at':None,'status':'Active'}
+        if reservation:doc['reservation']=reservation
         await db.order_sessions.insert_one(dict(doc),session=session)
-        await db.tables.update_one(scope,{'$set':{'status':'Seated','updated_at':utcnow().isoformat()}},session=session)
+        await db.tables.update_one(scope,{'$set':{'status':'Seated','updated_at':utcnow().isoformat()},'$unset':{'reservation':''}},session=session)
         return doc
     doc=await transactions.run_transaction(db,open_table)
     await notify_clients(user["store_id"])
     return _strip_id(doc)
+
+
+@router.post('/{table_id}/reservation',response_model=Table)
+async def reserve_table(table_id:str,payload:TableReservationCreate,user:dict=Depends(require_plan('business'))):
+    db=get_db()
+    result=await transactions.run_transaction(db,lambda session:table_reservations.save(db,user,table_id,payload,session))
+    await notify_clients(user['store_id'])
+    return result
+
+
+@router.post('/{table_id}/reservation/cancel',response_model=Table)
+async def cancel_reservation(table_id:str,expected_reservation_id:str=Body(...,embed=True,min_length=1,max_length=200),user:dict=Depends(get_current_user)):
+    # Staff can honor or cancel an existing booking after a plan downgrade.
+    db=get_db()
+    result=await transactions.run_transaction(db,lambda session:table_reservations.cancel(db,user,table_id,expected_reservation_id,session))
+    await notify_clients(user['store_id'])
+    return result
 
 
 @router.get("/{table_id}/session")

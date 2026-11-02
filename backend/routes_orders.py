@@ -247,6 +247,8 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
             payload.ewallet_channel = await require_payment_method(db, user, payload.payment_method, payload.ewallet_channel, options=policy)
         choice = policy['methods'].get(payload.payment_method, {})
         hosted = payload.payment_method in ('va', 'credit_card') or (payload.payment_method == 'ewallet' and choice.get('provider') != 'xendit')
+        dining=await db.order_sessions.find_one({'id':payload.session_id,'store_id':user['store_id'],'status':'Active'},session=session) if payload.session_id else None
+        booking=(dining or {}).get('reservation') or {}
         seen, lines = set(), []
         for item in payload.items:
             if item.product_id in seen:
@@ -271,7 +273,7 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
                'payment_status': 'paid' if payload.payment_method == 'cash' and not payload.session_id else 'pending',
                'payment_initialization': 'initializing' if payload.payment_method in ('qris', 'ewallet', 'doku', 'va', 'credit_card') else 'ready',
                'ewallet_channel': payload.ewallet_channel, 'customer_id': customer['id'] if customer else None,
-               'customer_name': payload.customer_name, 'customer_phone': payload.customer_phone, 'customer_email': payload.customer_email,
+               'customer_name': payload.customer_name or booking.get('customer_name'), 'customer_phone': payload.customer_phone or booking.get('phone') or None, 'customer_email': payload.customer_email,
                'cash_received': payload.cash_received, 'change': round(payload.cash_received-calc['total'], 2) if payload.payment_method == 'cash' and not payload.session_id else None,
                'note': payload.note, 'created_at': now, 'updated_at': now, 'inventory_ledger_version': 1, 'inventory_applied': True}
         if hosted:

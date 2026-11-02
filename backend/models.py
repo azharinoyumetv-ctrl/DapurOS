@@ -568,6 +568,27 @@ class TableBase(BaseModel):
 class TableCreate(TableBase):
     pass
 
+class TableReservationCreate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    customer_name: str = Field(min_length=1,max_length=200)
+    phone: str = Field(default='',max_length=64)
+    party_size: int = Field(ge=1,le=1000,strict=True)
+    arrival_at: Optional[datetime] = None
+    note: str = Field(default='',max_length=1000)
+    request_id: str = Field(min_length=36,max_length=36)
+    expected_reservation_id: Optional[str] = Field(default=None,max_length=200)
+
+    @model_validator(mode='after')
+    def valid_reservation(self):
+        self.customer_name=self.customer_name.strip()
+        self.phone=self.phone.strip();self.note=self.note.strip()
+        if not self.customer_name:raise ValueError('Nama pelanggan wajib diisi.')
+        self.request_id=str(uuid.UUID(self.request_id))
+        if self.arrival_at:
+            if self.arrival_at.tzinfo is None:raise ValueError('Waktu kedatangan harus menyertakan zona waktu.')
+            self.arrival_at=self.arrival_at.astimezone(timezone.utc)
+        return self
+
 class TableUpdate(BaseModel):
     floor_id: Optional[str] = None
     label: Optional[str] = None
@@ -585,6 +606,7 @@ class Table(TableBase):
     store_id: str
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)
+    reservation: Optional[dict] = None
 
 
 class OrderSessionCreate(BaseModel):
@@ -598,6 +620,7 @@ class OrderSession(BaseModel):
     opened_at: str = Field(default_factory=utcnow_iso)
     closed_at: Optional[str] = None
     status: str = "Active" # Active | Paid
+    reservation: Optional[dict] = None
 
 
 class KdsItem(BaseModel):

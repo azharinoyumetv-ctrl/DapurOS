@@ -163,6 +163,63 @@ async function dining(request,session){
  const floor=floors[0]||await api(request,session,'post','/floors',{name:'Lantai E2E'});
  return api(request,session,'post','/tables',{floor_id:floor.id,label:'E2E Meja 1',capacity:4});
 }
+
+const booking=(extra={})=>({customer_name:'E2E Booking Guest',phone:'0812345678',party_size:2,arrival_at:'2026-11-03T10:30:00Z',note:'Window seat',request_id:require('node:crypto').randomUUID(),...extra});
+test('Business cashiers reserve named tables, edit, reload and seat the correct guest',async({page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner),p=await product(request,owner),cashier=await employee(request,owner,'Cashier');
+ await page.evaluate(session=>{localStorage.setItem('dapuros_token',session.token);localStorage.setItem('dapuros_user',JSON.stringify({...session.user,current_module:'dapuros'}));},cashier);
+ await page.goto('/dapuros/app/pos');await page.getByTestId('table-card-'+table.id).click();await page.getByTestId('reservation-open').click();
+ await page.getByTestId('reservation-name').fill('E2E Booking Guest');await page.getByTestId('reservation-phone').fill('0812345678');await page.getByTestId('reservation-party-size').fill('3');await page.getByTestId('reservation-arrival').fill('2026-11-03T19:30');await page.getByTestId('reservation-note').fill('Window seat');await page.getByTestId('reservation-save').click();
+ await expect(page.getByTestId('reservation-modal')).toHaveCount(0);await expect(page.getByTestId('table-reservation-'+table.id)).toContainText('E2E Booking Guest');
+ expect(await api(request,owner,'get','/orders')).toHaveLength(0);expect((await request.get(runtime.base+`/api/tables/${table.id}/session`,{headers:cashier.headers})).status()).toBe(404);
+ await page.reload();await page.getByTestId('table-card-'+table.id).click();await expect(page.getByTestId('reservation-details')).toContainText('3 tamu');
+ await page.getByTestId('reservation-edit').click();await page.getByTestId('reservation-name').fill('E2E Updated Guest');await page.getByTestId('reservation-save').click();await expect(page.getByTestId('reservation-details')).toContainText('E2E Updated Guest');
+ await page.screenshot({path:path.join(root,'tmp/reservation-desktop.png'),fullPage:true});
+ await page.getByTestId('reservation-seat').click();await expect(page.getByTestId('seated-reservation-name')).toContainText('E2E Updated Guest');
+ const bill=await api(request,cashier,'get',`/tables/${table.id}/session`);expect(bill.session.reservation.customer_name).toBe('E2E Updated Guest');
+ const order=await api(request,cashier,'post','/orders',{session_id:bill.session.id,payment_method:'cash',items:[{product_id:p.id,name:p.name,price:p.price,quantity:1,subtotal:p.price}]});expect(order.customer_name).toBe('E2E Updated Guest');expect(order.customer_phone).toBe('0812345678');
+ expect((await api(request,owner,'get','/tables'))[0].reservation).toBeNull();
+});
+for(const plan of ['starter','pro'])test(`${plan} cannot create Business reservations through the UI or direct API`,async({page,request})=>{
+ const owner=await register(page,request,{plan}),table=await dining(request,owner);await page.goto('/dapuros/app/pos');await page.getByTestId('table-card-'+table.id).click();await expect(page.getByTestId('reservation-open')).toBeDisabled();await expect(page.getByTestId('reservation-open')).toContainText('Business');
+ const response=await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:owner.headers,data:booking()});expect(response.status()).toBe(403);expect(await response.text()).toContain('Business');
+ expect((await api(request,owner,'get','/tables'))[0].status).toBe('Vacant');
+});
+test('concurrent reservations, repeated requests and stale cancellation cannot overwrite another booking',async({page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner),endpoint=runtime.base+`/api/tables/${table.id}/reservation`;
+ const attempts=await Promise.all(Array.from({length:6},()=>request.post(endpoint,{headers:owner.headers,data:booking()})));expect(attempts.filter(result=>result.ok())).toHaveLength(1);expect(attempts.filter(result=>result.status()===409)).toHaveLength(5);
+ let saved=(await api(request,owner,'get','/tables'))[0];const old=saved.reservation.id;
+ const updated=booking({customer_name:'E2E New Snapshot',expected_reservation_id:old});saved=await api(request,owner,'post',`/tables/${table.id}/reservation`,updated);const current=saved.reservation.id;expect(current).not.toBe(old);
+ expect((await api(request,owner,'post',`/tables/${table.id}/reservation`,updated)).reservation.id).toBe(current);
+ for(const [url,data] of [[`/tables/${table.id}/session`,{}],[`/tables/${table.id}/session`,{expected_reservation_id:old}],[`/tables/${table.id}/reservation/cancel`,{expected_reservation_id:old}]])expect((await request.post(runtime.base+'/api'+url,{headers:owner.headers,data})).status()).toBe(409);
+ await api(request,owner,'post',`/tables/${table.id}/reservation/cancel`,{expected_reservation_id:current});await api(request,owner,'post',`/tables/${table.id}/reservation/cancel`,{expected_reservation_id:current});
+ const next=await api(request,owner,'post',`/tables/${table.id}/reservation`,booking({customer_name:'E2E Next Guest'}));expect((await request.post(runtime.base+`/api/tables/${table.id}/session`,{headers:owner.headers,data:{expected_reservation_id:current}})).status()).toBe(409);expect((await api(request,owner,'get','/tables'))[0].reservation.id).toBe(next.reservation.id);
+});
+test('reservations enforce table capacity, staff roles, store ownership and protected layout changes',async({page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner),warehouse=await employee(request,owner,'Warehouse');
+ expect((await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:warehouse.headers,data:booking()})).status()).toBe(403);
+ const other=await register(page,request),foreign=await dining(request,other),held=await api(request,other,'post',`/tables/${foreign.id}/reservation`,booking());
+ for(const [path,data] of [[`/tables/${foreign.id}/reservation`,booking()],[`/tables/${foreign.id}/reservation/cancel`,{expected_reservation_id:held.reservation.id}],[`/tables/${foreign.id}/session`,{expected_reservation_id:held.reservation.id}]])expect((await request.post(runtime.base+'/api'+path,{headers:owner.headers,data})).status()).toBe(404);
+ expect((await api(request,other,'get','/tables'))[0].reservation.id).toBe(held.reservation.id);
+ for(const change of [{customer_name:'   '},{party_size:5},{party_size:0},{arrival_at:'2026-11-03T19:30:00'}])expect((await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:owner.headers,data:booking(change)})).status()).toBe(422);
+ await api(request,owner,'post',`/tables/${table.id}/reservation`,booking());
+ for(const path of [`/tables/${table.id}`,`/floors/${table.floor_id}`])expect((await request.delete(runtime.base+'/api'+path,{headers:owner.headers})).status()).toBe(409);
+ expect((await request.put(runtime.base+`/api/tables/${table.id}`,{headers:owner.headers,data:{status:'Vacant'}})).status()).toBe(409);
+ expect((await request.post(runtime.base+'/api/tables',{headers:owner.headers,data:{floor_id:table.floor_id,label:'Bypass',status:'Reserved'}})).status()).toBe(422);
+ const existing=(await api(request,owner,'get','/tables'))[0];await api(request,owner,'post',`/tables/${table.id}/session`,{expected_reservation_id:existing.reservation.id});expect((await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:owner.headers,data:booking()})).status()).toBe(409);
+});
+test('a lost reservation response retries the same booking and cancellation works on a phone',async({context,page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner);await page.setViewportSize({width:393,height:852});await page.goto('/dapuros/app/pos');await page.getByTestId('table-card-'+table.id).click();await page.getByTestId('reservation-open').click();await page.getByTestId('reservation-name').fill('E2E Phone Booking');
+ let lost=false;const ids=[];await context.route(`**/api/tables/${table.id}/reservation`,async route=>{if(route.request().method()!=='POST')return route.fallback();ids.push(route.request().postDataJSON().request_id);if(lost)return route.fallback();const response=await route.fetch({url:runtime.base+new URL(route.request().url()).pathname});expect(response.ok()).toBe(true);lost=true;return route.abort('failed');});
+ await page.getByTestId('reservation-save').click();await expect(page.getByTestId('reservation-modal').getByRole('alert')).toContainText('referensi reservasi tetap sama');await page.getByTestId('reservation-save').click();await expect(page.getByTestId('reservation-modal')).toHaveCount(0);expect(ids).toHaveLength(2);expect(new Set(ids).size).toBe(1);
+ await page.screenshot({path:path.join(root,'tmp/reservation-phone.png'),fullPage:true});await page.getByTestId('reservation-cancel').click();await expect(page.getByTestId('reservation-open')).toBeEnabled();expect((await api(request,owner,'get','/tables'))[0].status).toBe('Vacant');
+});
+test('existing bookings can be honored after downgrade without granting new reservations',async({page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner),reserved=await api(request,owner,'post',`/tables/${table.id}/reservation`,booking());
+ const changed=await request.post(runtime.base+'/__e2e/plan',{headers:{'X-E2E-Fixture':runtime.fixtureKey},data:{store_id:owner.user.store_id,plan:'pro'}});expect(changed.ok()).toBe(true);
+ expect((await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:owner.headers,data:booking()})).status()).toBe(403);
+ await api(request,owner,'post',`/tables/${table.id}/session`,{expected_reservation_id:reserved.reservation.id});expect((await api(request,owner,'get','/tables'))[0].status).toBe('Seated');
+});
 test('restaurant invariants: one session, protected open bills, bounded ingredients and debt',async({page,request})=>{
  const session=await register(page,request),p=await product(request,session),table=await dining(request,session);
  const opened=await Promise.all(Array.from({length:6},()=>api(request,session,'post',`/tables/${table.id}/session`)));

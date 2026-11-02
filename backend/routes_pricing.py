@@ -102,6 +102,7 @@ TIERS = [
         "features": [
             "3 outlet, 24 device, 75 akun karyawan",
             "Manajemen menu & resep terpusat",
+            "Reservasi meja atas nama pelanggan",
             "Transfer stok bahan antar outlet",
             "Laporan konsolidasi + food-cost per outlet",
             "Membership + loyalty",

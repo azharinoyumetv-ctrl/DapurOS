@@ -32,7 +32,9 @@ class DapurOSReleaseFlowTest {
     private val checks = JSONArray()
     private val profile = InstrumentationRegistry.getArguments().getString("profile") ?: "phone"
     @Volatile private var trialFixture = false
-    private val user get() = """{"id":"android-fixture-owner","store_id":"android-fixture-store","email":"android-fixture@example.invalid","role":"Owner","store_name":"DapurOS Test Restaurant","plan":"business","trial_ends_at":"2099-01-01T00:00:00Z","stores":[{"module":"dapuros","store_id":"android-fixture-store"}]}""" .let { if (trialFixture) it.replace("\"plan\":\"business\"", "\"plan\":\"trial\"") else it }
+    @Volatile private var reservationFixture = false
+    @Volatile private var starterFixture = false
+    private val user get() = """{"id":"android-fixture-owner","store_id":"android-fixture-store","email":"android-fixture@example.invalid","role":"Owner","store_name":"DapurOS Test Restaurant","plan":"business","trial_ends_at":"2099-01-01T00:00:00Z","stores":[{"module":"dapuros","store_id":"android-fixture-store"}]}""" .let { JSONObject(it).put("plan",if(trialFixture) "trial" else if(starterFixture) "starter" else "business").apply { if(reservationFixture) put("role","Cashier") }.toString() }
     private val products = """[{"id":"coffee","name":"Kopi Resep Fixture","sku":"899TEST","price":10000,"stock":40,"category":"Minuman","unit":"pcs","recipe":[{"ingredient_id":"beans","quantity":15}]}]"""
     @Volatile private var replay: String? = null
 
@@ -275,6 +277,37 @@ class DapurOSReleaseFlowTest {
             js("document.querySelector('.pricing-grid').scrollIntoView({block:'center'});true")
             assertFalse(js("document.body.innerText.includes('Mulai Trial')") == true)
             checkStep("Trial upgrade offers only the three paid DapurOS plans")
+            save("passed")
+        } finally { scenario.close() }
+    }
+
+    @Test fun reservationFormAndBusinessGate() {
+        reservationFixture=true
+        scenario=ActivityScenario.launch(MainActivity::class.java)
+        try {
+            attach();until("!!window.DapurOSDevice")
+            val saved=js("localStorage.getItem('dapuros_user')")
+            check(saved==null||saved==JSONObject.NULL||saved.toString().contains("android-fixture@example.invalid")) { "Refusing to replace a non-fixture session" }
+            js("localStorage.setItem('dapuros_token','isolated-android-fixture-token');localStorage.setItem('dapuros_user',"+JSONObject.quote(user)+");localStorage.removeItem('dapuros_signed_out');window.__reservationReload=true;true")
+            scenario.onActivity { web.loadUrl(NavigationPolicy.START_URL) }
+            until("!window.__reservationReload && !!document.querySelector('[data-testid=app-layout]') && !!window.DapurOSRouter")
+            go("pos");until("!!document.querySelector('[data-testid=table-card-table-test]')")
+            tap("[data-testid=table-card-table-test]");tap("[data-testid=reservation-open]")
+            until("!!document.querySelector('[data-testid=reservation-modal]')")
+            fill("[data-testid=reservation-name]","Reservation Fixture")
+            assertTrue(js("document.documentElement.scrollWidth<=innerWidth+2") == true)
+            assertTrue(js("document.querySelector('[data-testid=reservation-modal]').getBoundingClientRect().right<=innerWidth+2") == true)
+            checkStep("Business cashier can enter a named reservation on this screen")
+            js("[...document.querySelectorAll('[data-testid=reservation-modal] button')].find(button=>button.textContent==='Batal').click();true")
+            starterFixture=true
+            js("window.__reservationReload=true;true")
+            scenario.onActivity { web.reload() }
+            until("!window.__reservationReload && !!document.querySelector('[data-testid=app-layout]') && !!window.DapurOSRouter")
+            go("pos");until("!!document.querySelector('[data-testid=table-card-table-test]')")
+            tap("[data-testid=table-card-table-test]")
+            until("document.querySelector('[data-testid=reservation-open]')?.disabled===true")
+            assertTrue(js("document.querySelector('[data-testid=reservation-open]').textContent.includes('Business')") == true)
+            checkStep("Starter cashier sees the Business reservation lock")
             save("passed")
         } finally { scenario.close() }
     }

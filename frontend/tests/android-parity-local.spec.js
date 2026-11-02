@@ -106,7 +106,7 @@ for(const layout of [{name:'phone',width:393,height:852},{name:'xiaomi-pad',widt
     await expect(page.getByTestId('product-form')).toContainText('Bahan');
     expect(f.writes).toEqual([]);expect(f.errors).toEqual([]);
   });
-  test('kitchen QR ordering preview and ingredient inventory remain available',async({page,context})=>{
+  test('kitchen QR configuration and ingredient inventory remain available',async({page,context})=>{
     const f=await fixture(page,context);await f.enter('kds');
     await expect(page.getByText('Kitchen Display System',{exact:false}).or(page.getByText('Layar Dapur',{exact:false})).first()).toBeVisible();
     await f.go('qr-menu');await expect(page.getByTestId('qr-menu-page')).toBeVisible();
@@ -114,6 +114,16 @@ for(const layout of [{name:'phone',width:393,height:852},{name:'xiaomi-pad',widt
     await f.go('products/ingredients');await expect(page.getByTestId('ingredients-page')).toBeVisible();
     await expect(page.getByTestId('ingredients-list')).toContainText('Biji kopi');
     expect(f.writes).toEqual([]);expect(f.errors).toEqual([]);
+  });
+  test('Business reservation form fits the screen and keeps unsaved data local',async({page,context})=>{
+    const f=await fixture(page,context);await f.enter('pos');await page.getByTestId('table-card-table').click();await page.getByTestId('reservation-open').click();
+    await page.getByTestId('reservation-name').fill('Pelanggan reservasi');await expect(page.getByTestId('reservation-save')).toBeEnabled();
+    expect(await page.getByTestId('reservation-modal').evaluate(element=>element.getBoundingClientRect().right<=innerWidth+2)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
+    await page.getByTestId('reservation-modal').getByRole('button',{name:'Batal',exact:true}).click();await expect(page.getByTestId('reservation-modal')).toHaveCount(0);expect(f.writes).toEqual([]);expect(f.errors).toEqual([]);
+  });
+  test('Starter has a visible Business lock for table reservations',async({page,context})=>{
+    const f=await fixture(page,context,{plan:'starter'});await f.enter('pos');await page.getByTestId('table-card-table').click();await expect(page.getByTestId('reservation-open')).toBeDisabled();await expect(page.getByTestId('reservation-open')).toContainText('Business');expect(f.writes).toEqual([]);expect(f.errors).toEqual([]);
   });
   test('category validation and failed save recover without duplicate submissions',async({page,context})=>{
     const f=await fixture(page,context);await f.enter('products/categories');

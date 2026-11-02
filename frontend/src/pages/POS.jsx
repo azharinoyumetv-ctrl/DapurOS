@@ -7,6 +7,7 @@ import OfflineStatus from "@/offline/OfflineStatus";
 import { offlineAvailable, scopeFor, cached, cache, recordCashSale, synchronize, localSales } from "@/offline/posStore";
 import { canonicalRole, canManageProducts } from "@/auth/permissions";
 import BankQrisPayment from "@/payments/BankQrisPayment";
+import TableReservationDialog from '@/components/TableReservationDialog';
 import { useEffect, useMemo, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import api, { fmtIDR, downloadPdf } from "@/api/client";
@@ -66,6 +67,7 @@ export function ReceiptDialog({ order, onClose, onUpdated }) {
         </div>
 
         <div className="text-center mb-4">
+          {o.customer_name&&<p className="text-sm mb-2" data-testid="receipt-customer-name">Tamu: {o.customer_name}</p>}
           {o.sync_status === "pending" && <p className="text-xs text-[#754419] mb-2" data-testid="receipt-pending-sync">Pembayaran tunai dicatat di perangkat. Menunggu sinkronisasi; jangan hapus data aplikasi.</p>}
           {o.payment_initialization === "initializing" && <p role="status" className="text-sm my-3">Pembayaran sedang disiapkan. Tunggu status transaksi ini; jangan membuat pembayaran baru.</p>}
         {o.payment_initialization === "uncertain" && <p role="alert" className="text-sm my-3 text-red-800">Status pembayaran dari penyedia belum pasti. Periksa transaksi ini di akun merchant; jangan meminta pelanggan membayar ulang.</p>}
@@ -190,6 +192,9 @@ export default function POS() {
   const [selectedFloorId, setSelectedFloorId] = useState("fl-main");
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
+  const [reservationTable,setReservationTable]=useState(null);
+  const reservationLock=useRef(false);
+  const canReserve=!isPlanLocked('business',user?.plan);
   const [activeSession, setActiveSession] = useState(null);
   const [websocketConnected, setWebsocketConnected] = useState(false);
 
@@ -301,7 +306,7 @@ export default function POS() {
     if (!window.confirm("Apakah Anda yakin ingin menghapus meja ini?")) return;
     try {
       await api.delete(`/tables/${tableId}`);
-    } catch (err) {}
+    } catch (err) {toast.error(typeof err?.response?.data?.detail==='string'?err.response.data.detail:'Meja belum dapat dihapus. Coba lagi.');return;}
     setTables(prev => prev.filter(t => t.id !== tableId));
     if (selectedTable?.id === tableId) setSelectedTable(null);
   };
@@ -449,7 +454,7 @@ export default function POS() {
     return subscribeStore(user.store_id, async () => {
       const rows=await loadTables();
       const current=rows?.find(table=>table.id===selectedTable?.id);
-      if(current?.status!=='Vacant'&&current)await loadActiveTableSession(current.id);
+      if(current&&!['Vacant','Reserved'].includes(current.status))await loadActiveTableSession(current.id);
       else if(rows)setActiveSession(null);
     }, setWebsocketConnected);
   }, [user?.store_id, selectedTable?.id]);
@@ -660,7 +665,7 @@ export default function POS() {
   // Open active session
   const handleOpenTableSession = async (table) => {
     setSubmitting(true);
-    try{const res = await api.post(`/tables/${table.id}/session`);setSelectedTable({...table,status:'Seated'});setActiveSession(res.data);await loadActiveTableSession(table.id);await loadTables();}
+    try{const res = await api.post(`/tables/${table.id}/session`,table.reservation?{expected_reservation_id:table.reservation.id}:{});setSelectedTable({...table,status:'Seated',reservation:null});setActiveSession(res.data);await loadActiveTableSession(table.id);await loadTables();}
     catch(e){toast.error(typeof e?.response?.data?.detail==='string'?e.response.data.detail:'Sesi meja belum dapat dibuka. Coba lagi.');}
     finally{setSubmitting(false);}
   };
@@ -686,11 +691,20 @@ export default function POS() {
 
   const handleSelectTable = (table) => {
     setSelectedTable(table);
-    if (table.status !== "Vacant") {
+    if (!['Vacant','Reserved'].includes(table.status)) {
       loadActiveTableSession(table.id);
     } else {
       setActiveSession(null);
     }
+  };
+
+  const applyReservationTable=table=>{setTables(rows=>rows.map(row=>row.id===table.id?table:row));setSelectedTable(current=>current?.id===table.id?table:current);setActiveSession(null);};
+  const cancelReservation=async()=>{
+    if(!selectedTable?.reservation||reservationLock.current||!window.confirm(`Batalkan reservasi atas nama ${selectedTable.reservation.customer_name}?`))return;
+    reservationLock.current=true;setSubmitting(true);
+    try{const {data}=await api.post(`/tables/${selectedTable.id}/reservation/cancel`,{expected_reservation_id:selectedTable.reservation.id});applyReservationTable(data);await loadTables();}
+    catch(error){toast.error(typeof error.response?.data?.detail==='string'?error.response.data.detail:'Reservasi belum dapat dibatalkan. Periksa koneksi dan coba lagi.');await loadTables();}
+    finally{reservationLock.current=false;setSubmitting(false);}
   };
 
   const handleBillSplitEqual = async () => {
@@ -855,7 +869,10 @@ export default function POS() {
                 let statusText = "Kosong (Vacant)";
                 let dotColor = "bg-slate-400";
 
-                if (t.status === "Seated") {
+                if (t.status === 'Reserved') {
+                  statusBg='bg-violet-50 border-violet-300 hover:border-violet-500 text-violet-950';
+                  statusText='Direservasi';dotColor='bg-violet-600';
+                } else if (t.status === "Seated") {
                   statusBg = "bg-yellow-50 border-yellow-200 hover:border-yellow-400 text-yellow-900";
                   statusText = "Tamu Duduk";
                   dotColor = "bg-yellow-500";
@@ -872,6 +889,7 @@ export default function POS() {
                 return (
                   <div
                     key={t.id}
+                    data-testid={`table-card-${t.id}`}
                     onClick={() => handleSelectTable(t)}
                     className={`p-4 rounded-xl border flex flex-col items-center justify-between text-center transition-all cursor-pointer relative group ${statusBg} ${isSelected ? "ring-2 ring-[hsl(var(--primary))] scale-[1.03]" : ""}`}
                   >
@@ -881,11 +899,12 @@ export default function POS() {
                     </div>
                     <span className="font-display font-black text-base text-[hsl(var(--foreground))] mt-2">{t.label}</span>
                     <span className="text-[10px] font-semibold mt-1 opacity-70">{statusText}</span>
+                    {t.reservation&&<div className="text-xs mt-2 space-y-1 break-words max-w-full" data-testid={`table-reservation-${t.id}`}><p className="font-bold">{t.reservation.customer_name}</p><p>{t.reservation.party_size} tamu{t.reservation.arrival_at?` · ${new Date(t.reservation.arrival_at).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}</p></div>}
 
-                    <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1 bg-white/90 p-1 rounded-md shadow border border-slate-200">
+                    {canManageProducts(user?.role)&&!t.reservation&&<div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1 bg-white/90 p-1 rounded-md shadow border border-slate-200">
                       <button onClick={(e) => handleOpenEditTable(t, e)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit Meja"><Edit3 size={12} /></button>
                       <button onClick={(e) => handleDeleteTable(t.id, e)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Hapus Meja"><Trash2 size={12} /></button>
-                    </div>
+                    </div>}
                   </div>
                 );
               })}
@@ -910,12 +929,13 @@ export default function POS() {
                         Floor: {floors.find(f => f.id === selectedTable.floor_id)?.name}
                       </span>
                     </div>
-                    <span className={`pill text-[10px] px-2 py-0.5 ${selectedTable.status === "Vacant" ? "pill-muted" : selectedTable.status === "Seated" ? "pill-warning" : "pill-danger"}`}>
+                    <span className={`pill text-[10px] px-2 py-0.5 ${selectedTable.status === 'Reserved'?'bg-violet-100 text-violet-900':selectedTable.status === "Vacant" ? "pill-muted" : selectedTable.status === "Seated" ? "pill-warning" : "pill-danger"}`}>
                       {selectedTable.status}
                     </span>
                   </div>
 
-                  <div className="space-y-4">
+                  {selectedTable.status==='Reserved'&&selectedTable.reservation?<div className="space-y-3 text-sm rounded-xl bg-violet-50 p-4" data-testid="reservation-details"><p className="font-bold text-lg">{selectedTable.reservation.customer_name}</p><p>{selectedTable.reservation.party_size} tamu</p>{selectedTable.reservation.phone&&<p>Telepon: {selectedTable.reservation.phone}</p>}<p>{selectedTable.reservation.arrival_at?`Kedatangan: ${new Date(selectedTable.reservation.arrival_at).toLocaleString('id-ID')}`:'Waktu kedatangan belum ditentukan'}</p>{selectedTable.reservation.note&&<p className="whitespace-pre-wrap break-words">{selectedTable.reservation.note}</p>}<p className="text-xs">Meja ditahan untuk reservasi ini. Tagihan baru dibuka ketika tamu ditempatkan.</p></div>:<div className="space-y-4">
+                    {activeSession?.session?.reservation&&<p className="text-sm" data-testid="seated-reservation-name">Tamu: <b>{activeSession.session.reservation.customer_name}</b> · {activeSession.session.reservation.party_size} orang</p>}
                     <span className="text-[10px] uppercase font-bold text-[hsl(var(--muted))] tracking-wider">Daftar Tagihan Sesi:</span>
                     {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 ? (
                       <div className="divide-y divide-[hsl(var(--border))] max-h-[220px] overflow-y-auto pr-1">
@@ -936,7 +956,7 @@ export default function POS() {
                           : "Belum ada menu dipesan. Ketuk 'Ambil Pesanan' untuk mengisi."}
                       </div>
                     )}
-                  </div>
+                  </div>}
                 </div>
 
                 <div className="space-y-4 border-t border-[hsl(var(--border))] pt-4">
@@ -954,7 +974,7 @@ export default function POS() {
                   )}
 
                   <div className="grid grid-cols-2 gap-2">
-                    {selectedTable.status === "Vacant" ? (
+                    {selectedTable.status==='Reserved'?<><button className="btn-primary col-span-2 py-3 text-xs" disabled={submitting||!online} onClick={()=>handleOpenTableSession(selectedTable)} data-testid="reservation-seat">Tempatkan tamu &amp; buka meja</button><button className="btn-outline text-xs" disabled={submitting||!online||!canReserve} onClick={()=>setReservationTable(selectedTable)} data-testid="reservation-edit">Ubah reservasi</button><button className="btn-outline text-xs text-red-700" disabled={submitting||!online} onClick={cancelReservation} data-testid="reservation-cancel">Batalkan reservasi</button></>:selectedTable.status === "Vacant" ? (<>
                       <button
                         disabled={submitting}
                         onClick={() => handleOpenTableSession(selectedTable)}
@@ -962,7 +982,8 @@ export default function POS() {
                       >
                         Buka Meja / Tempatkan Tamu
                       </button>
-                    ) : (
+                      <button className="btn-outline col-span-2 py-3 text-xs" disabled={!canReserve||!online||submitting} title={canReserve?'Reservasi atas nama pelanggan':'Reservasi tersedia di paket Business'} onClick={()=>setReservationTable(selectedTable)} data-testid="reservation-open">Reservasi meja{!canReserve?' · Business':''}</button>
+                    </>) : (
                       <>
                         <button
                           onClick={() => {
@@ -1294,6 +1315,7 @@ export default function POS() {
 
       {viewMode === "catalog" && <button className="restaurant-cart-dock btn-primary" data-testid="mobile-cart-open" onClick={() => setCartOpen(true)}>Keranjang ({cart.reduce((s,i) => s+i.quantity,0)}) · {fmtIDR(total)}</button>}
       {receipt && <ReceiptDialog order={receipt} onClose={() => setReceipt(null)} />}
+      {reservationTable&&<TableReservationDialog table={reservationTable} onClose={()=>setReservationTable(null)} onSaved={table=>{applyReservationTable(table);setReservationTable(null);loadTables();}}/>}
 
       {/* EDC / card payment — MANUAL confirmation on the merchant's own terminal */}
       {cardConfirmOpen && (
