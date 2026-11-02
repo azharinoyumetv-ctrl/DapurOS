@@ -1,6 +1,6 @@
 # DapurOS 1.0.5 verification
 
-DapurOS 1.0.5 (build 7) ports the saved category dropdown, gallery/direct-camera capture and saved unit dropdown from the listed Geraina implementations into DapurOS's restaurant product editor. The APK/AAB use DapurOS's existing package and signing key. Publication is pending until the machine-readable report records the live download checks.
+DapurOS 1.0.5 (build 7) ports the saved category dropdown, gallery/direct-camera capture and saved unit dropdown from the listed Geraina implementations into DapurOS's restaurant product editor. The APK/AAB use DapurOS's existing package and signing key. The matching website and APK download are published and live-verified.
 
 Categories include unused saved records and legacy product values. Units display full name and symbol and save the symbol, with existing custom/full-name strings preserved. Both support explicit custom input, paging, refresh and failure/retry without clearing the draft. Starter owners can select product units independently of Pro ingredient controls.
 
@@ -25,10 +25,10 @@ DapurOS's recipe quantities, ingredient creation, stock checks, named Business r
 | Bundled frontend integrity | All 93 files verified in APK and AAB |
 | Portal checks | 65 passed |
 
-Package: `com.dagangos.dapuros`  
-Minimum Android: 14/API 34; ABIs: ARM64 and x86-64  
-APK size: 19,230,163 bytes  
-APK SHA-256: `06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64`  
+Package: `com.dagangos.dapuros`\
+Minimum Android: 14/API 34; ABIs: ARM64 and x86-64\
+APK size: 19,230,163 bytes\
+APK SHA-256: `06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64`\
 Signing certificate SHA-256: `fced7b77d88c3477bd991d97e4a224567e775a633c2e16a280ad03991f2c914a`
 
 These are DapurOS test results. Geraina's passing results were not counted as DapurOS verification. Tests used disposable local data or owned emulator fixtures. Production customer writes, real merchant charges, provider messages and customer erasure were not used. The existing erasure fence is preserved.
@@ -36,3 +36,7 @@ These are DapurOS test results. Geraina's passing results were not counted as Da
 The native camera is AOSP's real camera application on an emulator with a virtual camera. Phone/tablet profiles do not certify physical vendor camera firmware, printer output or merchant settlement. Google Play submission/declarations/approval remain separate. Inspection is enabled through a test-only APK on the owned emulator; production WebView debugging remains disabled.
 
 Machine-readable package, source and publication evidence: [ANDROID-1.0.5-VERIFICATION.json](ANDROID-1.0.5-VERIFICATION.json).
+
+Download: [DapurOS 1.0.5 APK](https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.5.apk), also on the existing [Android download page](https://dagangos.com/dapuros/android). [Deployment workflow](https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/41483886303) passed.
+
+All six live download checks passed, including exact downloaded bytes and metadata-outage recovery. Six live product-editor cases checked the deployed assets with explicit API fixtures for Starter and Business across phone and two tablet widths; no product was saved on production. Six live reservation/pricing regressions also passed. The deployed backend revision, authenticated registry boundaries, absence of fixture routes and both erasure fences were verified.

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "passed-candidate",
+  "status": "passed-published",
   "verifiedAt": "2026-11-02T16:35:01.070Z",
   "sourceBaseline": "161b1328158c0a9ea2c913e490b4150cbaf1c050",
   "referenceCommits": {
@@ -450,5 +450,231 @@
     "Old inventory history may lack movements recorded before this release; new movements are written atomically",
     "Offline recipe sales reconcile using the recipe at synchronization and flag shortages for staff review",
     "Reservations hold one table immediately until seating or cancellation; future time-slot scheduling, automatic expiry and customer notifications are not included"
-  ]
+  ],
+  "publication": {
+    "status": "published",
+    "verifiedAt": "2026-11-02T16:47:59.427949+00:00",
+    "testedRuntimeCommit": "26047c73fcf9bc115bbd01ee961ee13ee9c7c11a",
+    "portalCommit": "be5af827cf9be90719837f47011ae0d419c48ea5",
+    "workflow": "https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/41483886303",
+    "workflowConclusion": "success",
+    "downloadUrl": "https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.5.apk",
+    "downloadPage": "https://dagangos.com/dapuros/android",
+    "apkSha256": "06a7679606905340039d17be6404f55f8e3a0ff466e38ebc38cc2efa00944f64",
+    "apkBytes": 19230163,
+    "liveWebsite": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "version": "1.0.5",
+      "checks": [
+        "Homepage Android link reaches the verified download page and fits 1440px",
+        "Homepage Android link reaches the verified download page and fits 768px",
+        "Homepage Android link reaches the verified download page and fits 393px",
+        "Homepage Android link reaches the verified download page and fits 320px",
+        "Clicking Download saves the exact verified APK bytes",
+        "Unavailable release metadata leaves download buttons safely disabled"
+      ]
+    },
+    "liveProductEditor": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "version": "1.0.5",
+      "verifiedAt": "2026-11-02T16:46:30.359Z",
+      "checks": [
+        {
+          "width": 393,
+          "plan": "business",
+          "status": "passed",
+          "apiFixture": true,
+          "checks": [
+            "saved-category",
+            "saved-unit-symbol",
+            "photo-actions",
+            "recipe-entitlement",
+            "cancel-keeps-draft",
+            "viewport-fit"
+          ],
+          "productionWrites": 0
+        },
+        {
+          "width": 393,
+          "plan": "starter",
+          "status": "passed",
+          "apiFixture": true,
+          "checks": [
+            "saved-category",
+            "saved-unit-symbol",
+            "photo-actions",
+            "recipe-entitlement",
+            "cancel-keeps-draft",
+            "viewport-fit"
+          ],
+          "productionWrites": 0
+        },
+        {
+          "width": 1016,
+          "plan": "business",
+          "status": "passed",
+          "apiFixture": true,
+          "checks": [
+            "saved-category",
+            "saved-unit-symbol",
+            "photo-actions",
+            "recipe-entitlement",
+            "cancel-keeps-draft",
+            "viewport-fit"
+          ],
+          "productionWrites": 0
+        },
+        {
+          "width": 1016,
+          "plan": "starter",
+          "status": "passed",
+          "apiFixture": true,
+          "checks": [
+            "saved-category",
+            "saved-unit-symbol",
+            "photo-actions",
+            "recipe-entitlement",
+            "cancel-keeps-draft",
+            "viewport-fit"
+          ],
+          "productionWrites": 0
+        },
+        {
+          "width": 1480,
+          "plan": "business",
+          "status": "passed",
+          "apiFixture": true,
+          "checks": [
+            "saved-category",
+            "saved-unit-symbol",
+            "photo-actions",
+            "recipe-entitlement",
+            "cancel-keeps-draft",
+            "viewport-fit"
+          ],
+          "productionWrites": 0
+        },
+        {
+          "width": 1480,
+          "plan": "starter",
+          "status": "passed",
+          "apiFixture": true,
+          "checks": [
+            "saved-category",
+            "saved-unit-symbol",
+            "photo-actions",
+            "recipe-entitlement",
+            "cancel-keeps-draft",
+            "viewport-fit"
+          ],
+          "productionWrites": 0
+        }
+      ],
+      "productionWrites": 0
+    },
+    "liveReservations": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "verifiedAt": "2026-11-02T16:46:54.185Z",
+      "checks": [
+        {
+          "width": 393,
+          "plan": "business",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 393,
+          "plan": "starter",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 393,
+          "plan": "pro",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 1280,
+          "plan": "business",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 1280,
+          "plan": "starter",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 1280,
+          "plan": "pro",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        }
+      ],
+      "businessOnlyPricing": true,
+      "productionWrites": 0
+    },
+    "liveBackend": {
+      "status": "passed",
+      "verifiedAt": "2026-11-02T16:43:08.494Z",
+      "backendRevision": "26047c73fcf9bc115bbd01ee961ee13ee9c7c11a",
+      "backendAndFenceEvidence": [
+        {
+          "url": "https://dapuros.vercel.app/api/health",
+          "body": {
+            "ok": true,
+            "revision": "26047c73fcf9bc115bbd01ee961ee13ee9c7c11a"
+          }
+        },
+        {
+          "url": "https://geraina-os.vercel.app/api/health",
+          "body": {
+            "ok": true
+          }
+        },
+        {
+          "url": "https://dapuros.vercel.app/api/system/erasure-capabilities",
+          "body": {
+            "module": "dapuros",
+            "protocol": "dagangos-erasure-fence-v1",
+            "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+            "write_fence_enabled": true
+          }
+        },
+        {
+          "url": "https://geraina-os.vercel.app/api/system/erasure-capabilities",
+          "body": {
+            "module": "geraina",
+            "protocol": "dagangos-erasure-fence-v1",
+            "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+            "write_fence_enabled": true
+          }
+        }
+      ],
+      "fixtureRoutesNotPublished": true,
+      "anonymousRegistryReads": [
+        {
+          "path": "/api/products/units",
+          "status": 401
+        },
+        {
+          "path": "/api/products/category-names",
+          "status": 401
+        }
+      ],
+      "productionCustomerMutations": 0
+    },
+    "productionCustomerMutationsUsedForVerification": 0
+  }
 }
