@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import api from '@/api/client';
 
 const localInput=value=>{
@@ -21,7 +22,7 @@ export default function TableReservationDialog({table,onClose,onSaved}){
   catch(error){setError(typeof error.response?.data?.detail==='string'?error.response.data.detail:'Reservasi belum dapat dikonfirmasi. Periksa koneksi dan coba lagi; referensi reservasi tetap sama.');}
   finally{lock.current=false;setBusy(false);}
  };
- return <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="reservation-heading" data-testid="reservation-modal">
+ return createPortal(<div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="reservation-heading" data-testid="reservation-modal">
   <form onSubmit={submit} className="card-surface bg-white p-6 w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto space-y-4">
    <div><span className="pill pill-muted">Business</span><h2 id="reservation-heading" className="font-display text-xl font-bold mt-2">{saved.id?'Ubah reservasi':'Reservasi meja'} · {table.label}</h2><p className="text-sm mt-2 text-[hsl(var(--muted))]">Meja ditahan sejak reservasi disimpan sampai tamu ditempatkan atau reservasi dibatalkan.</p></div>
    <label className="block text-sm">Nama pelanggan<input className="input-field block w-full mt-1" required maxLength={200} autoFocus value={form.customer_name} onChange={e=>change('customer_name',e.target.value)} data-testid="reservation-name"/></label>
@@ -31,5 +32,5 @@ export default function TableReservationDialog({table,onClose,onSaved}){
    {error&&<p role="alert" className="text-sm text-red-700">{error}</p>}
    <div className="flex flex-wrap gap-3 justify-end"><button className="btn-outline" type="button" disabled={busy} onClick={onClose}>Batal</button><button className="btn-primary" disabled={busy} data-testid="reservation-save">{busy?'Menyimpan…':'Simpan reservasi'}</button></div>
   </form>
- </div>;
+ </div>,document.body);
 }
