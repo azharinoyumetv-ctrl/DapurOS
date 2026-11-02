@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "passed-candidate",
-  "verifiedAt": "2026-11-02T10:39:57.025Z",
+  "status": "passed-published",
+  "verifiedAt": "2026-11-02T10:47:44.853Z",
   "sourceBaseline": "dae457c",
   "nativeEvidenceDirectory": "1.0.3-native",
   "package": {
@@ -299,5 +299,99 @@
     "Legacy sales without saved costs are reported as unknown rather than recalculated from current product costs",
     "Old inventory history may lack movements recorded before this release; new movements are written atomically",
     "Offline recipe sales reconcile using the recipe at synchronization and flag shortages for staff review"
-  ]
+  ],
+  "publication": {
+    "status": "published",
+    "verifiedAt": "2026-11-02T10:47:44.853Z",
+    "downloadUrl": "https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.3.apk",
+    "downloadPage": "https://dagangos.com/dapuros/android",
+    "apkSha256": "6651e3761b720c9caee4b94ca3f040e15749a5e3894ad9426ef50ab127a2d67a",
+    "apkBytes": 19208999,
+    "testedRuntimeCommit": "a0820c8505d6a3df9e7a1efa18a1e20a8363e561",
+    "backendRevision": "2e7117d3ebdec82a6329bac1091983ed8261c150",
+    "portalCommit": "34e776be3f62ef9cca50703a860a27bdda5fb765",
+    "workflow": "https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/41430962775",
+    "liveWebsite": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "version": "1.0.3",
+      "checks": [
+        "Homepage Android link reaches the verified download page and fits 1440px",
+        "Homepage Android link reaches the verified download page and fits 768px",
+        "Homepage Android link reaches the verified download page and fits 393px",
+        "Homepage Android link reaches the verified download page and fits 320px",
+        "Clicking Download saves the exact verified APK bytes",
+        "Unavailable release metadata leaves download buttons safely disabled"
+      ]
+    },
+    "liveQrUi": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "guestRoute": {
+        "status": 200,
+        "invalidQrRejected": true,
+        "operatorAuthRequests": 0
+      },
+      "operatorPage": {
+        "liveAssets": true,
+        "fixtureTransport": true,
+        "noDemoPanel": true
+      },
+      "errors": []
+    },
+    "backendAndFenceEvidence": [
+      {
+        "url": "https://dapuros.vercel.app/api/health",
+        "body": {
+          "ok": true,
+          "revision": "2e7117d3ebdec82a6329bac1091983ed8261c150"
+        }
+      },
+      {
+        "url": "https://geraina-os.vercel.app/api/health",
+        "body": {
+          "ok": true
+        }
+      },
+      {
+        "url": "https://dapuros.vercel.app/api/system/erasure-capabilities",
+        "body": {
+          "module": "dapuros",
+          "protocol": "dagangos-erasure-fence-v1",
+          "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+          "write_fence_enabled": true
+        }
+      },
+      {
+        "url": "https://geraina-os.vercel.app/api/system/erasure-capabilities",
+        "body": {
+          "module": "geraina",
+          "protocol": "dagangos-erasure-fence-v1",
+          "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+          "write_fence_enabled": true
+        }
+      },
+      {
+        "url": "https://dagangos.com/downloads/geraina/latest.json",
+        "body": {
+          "version": "1.2.17",
+          "versionCode": 22,
+          "applicationId": "com.dagangos.geraina",
+          "downloadUrl": "/downloads/geraina/Geraina-POS-1.2.17.apk",
+          "bytes": 19157435,
+          "sha256": "9b7cc539b842556feab5c19f1647855d06c95301b5b31a5b369a2791e931f602",
+          "minimumAndroid": "14.0",
+          "minimumSdk": 34,
+          "supportedAbis": [
+            "arm64-v8a",
+            "x86_64"
+          ],
+          "verifiedAt": "2026-10-29T14:19:40.952Z",
+          "signingCertificateSha256": "52e14a39a7da4f5f528838f33602860e35960373070a6132d08f682487494ec8"
+        }
+      }
+    ],
+    "gerainaPublicReleaseUnchanged": true,
+    "productionCustomerMutationsUsedForVerification": 0
+  }
 }

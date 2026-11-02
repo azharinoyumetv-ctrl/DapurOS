@@ -1,6 +1,6 @@
 # DapurOS 1.0.3 verification
 
-DapurOS 1.0.3 (build 5) is signed with the existing DapurOS certificate and verified for Android 14+. The matching backend is published; website/download publication is pending.
+DapurOS 1.0.3 (build 5) is signed with the existing DapurOS certificate and verified for Android 14+. The matching backend, website and APK download are published and verified.
 
 The demo sweep removed the duplicate QR order preview, unused sample database/catalogue, fake payment responses, unsigned simulated webhooks and the manual gateway-payment override. QR setup now manages actual table links and prints/downloads the enabled QR. Orders use the real guest page or cashier.
 
@@ -18,6 +18,10 @@ The demo sweep removed the duplicate QR order preview, unused sample database/ca
 | Upgrade retention | Recorded pending cash receipt from 1.0.2 retained in the final APK |
 | Bundled frontend integrity | All 93 files verified in APK and app bundle |
 | Portal routing and download metadata | 65 checks passed |
+
+Download: [DapurOS 1.0.3 APK](https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.3.apk). The existing [Android download page](https://dagangos.com/dapuros/android) serves the same verified file.
+
+All six live download-page checks passed at 1440, 768, 393 and 320 pixels, including exact downloaded bytes and unavailable-metadata recovery. The published guest page rejects invalid QR codes without requesting an operator session; the live operator assets show the cleaned QR setup. [Deployment workflow](https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/41430962775) passed.
 
 Application: `com.dagangos.dapuros`  
 APK size: 19,208,999 bytes  
