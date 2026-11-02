@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "passed-candidate",
+  "status": "passed-published",
   "verifiedAt": "2026-11-02T15:43:25.314Z",
   "sourceBaseline": "8aeee3c8a23384e719e37a47c36733ead5fedfef",
   "nativeEvidenceDirectory": "1.0.4-native",
@@ -367,8 +367,7 @@
     "Reservations hold one table immediately until seating or cancellation; future time-slot scheduling, automatic expiry and customer notifications are not included"
   ],
   "publication": {
-    "status": "pending",
-    "testedRuntimeCommit": "840675fc62f9b76e38410530e5fc969a2c855082",
+    "status": "published",
     "localWebsite": {
       "status": "passed",
       "base": "http://127.0.0.1:8799",
@@ -432,6 +431,243 @@
       ],
       "businessOnlyPricing": true,
       "productionWrites": 0
-    }
+    },
+    "verifiedAt": "2026-11-02T15:58:08.925356+00:00",
+    "downloadUrl": "https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.4.apk",
+    "downloadPage": "https://dagangos.com/dapuros/android",
+    "apkSha256": "30d84e4e8e37f6f29682a277b6472f8266bedf680727d3c790a0793533e34da3",
+    "apkBytes": 19211175,
+    "portalCommit": "94acb556afd21d6dc2709933b3184f24a112f011",
+    "workflow": "https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/41476021504",
+    "workflowConclusion": "success",
+    "liveWebsite": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "version": "1.0.4",
+      "checks": [
+        "Homepage Android link reaches the verified download page and fits 1440px",
+        "Homepage Android link reaches the verified download page and fits 768px",
+        "Homepage Android link reaches the verified download page and fits 393px",
+        "Homepage Android link reaches the verified download page and fits 320px",
+        "Clicking Download saves the exact verified APK bytes",
+        "Unavailable release metadata leaves download buttons safely disabled"
+      ]
+    },
+    "liveReservations": {
+      "status": "passed",
+      "base": "https://dagangos.com",
+      "verifiedAt": "2026-11-02T15:57:18.751Z",
+      "checks": [
+        {
+          "width": 393,
+          "plan": "business",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 393,
+          "plan": "starter",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 393,
+          "plan": "pro",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 1280,
+          "plan": "business",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 1280,
+          "plan": "starter",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        },
+        {
+          "width": 1280,
+          "plan": "pro",
+          "status": "passed",
+          "apiFixture": true,
+          "productionWrites": 0
+        }
+      ],
+      "businessOnlyPricing": true,
+      "productionWrites": 0
+    },
+    "liveBackend": {
+      "status": "passed",
+      "verifiedAt": "2026-11-02T15:57:35.360Z",
+      "backendRevision": "c6a336ae9f67e4acbcf3a127bae8f7cec568f936",
+      "backendAndFenceEvidence": [
+        {
+          "url": "https://dapuros.vercel.app/api/health",
+          "body": {
+            "ok": true,
+            "revision": "c6a336ae9f67e4acbcf3a127bae8f7cec568f936"
+          }
+        },
+        {
+          "url": "https://geraina-os.vercel.app/api/health",
+          "body": {
+            "ok": true
+          }
+        },
+        {
+          "url": "https://dapuros.vercel.app/api/system/erasure-capabilities",
+          "body": {
+            "module": "dapuros",
+            "protocol": "dagangos-erasure-fence-v1",
+            "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+            "write_fence_enabled": true
+          }
+        },
+        {
+          "url": "https://geraina-os.vercel.app/api/system/erasure-capabilities",
+          "body": {
+            "module": "geraina",
+            "protocol": "dagangos-erasure-fence-v1",
+            "implementation_sha256": "b24297360d8862948a165252c0a18fa3726df8ef26a81245001b67524700d8e1",
+            "write_fence_enabled": true
+          }
+        }
+      ],
+      "businessOnlyPricing": true,
+      "anonymousReservationStatus": 401,
+      "productionCustomerMutations": 0
+    },
+    "productionCustomerMutationsUsedForVerification": 0,
+    "testedApkSourceCommit": "840675fc62f9b76e38410530e5fc969a2c855082",
+    "testedWebSourceCommit": "c6a336ae9f67e4acbcf3a127bae8f7cec568f936",
+    "webDialogCorrection": {
+      "status": "passed-published",
+      "cause": "The animated route container made a fixed web dialog scroll with the cashier page and clip its heading.",
+      "fix": "Render the reservation dialog at the document body, outside the animated route container.",
+      "scope": "Website dialog positioning; the immutable signed Android 1.0.4 package already disables route transforms and passed installed reservation checks.",
+      "affectedFlows": {
+        "passed": 8,
+        "failed": 0,
+        "flaky": 0
+      },
+      "androidBrowserParity": {
+        "passed": 39,
+        "failed": 0,
+        "flaky": 0
+      },
+      "localViewportChecks": {
+        "status": "passed",
+        "base": "http://127.0.0.1:8799",
+        "verifiedAt": "2026-11-02T15:52:36.740Z",
+        "checks": [
+          {
+            "width": 393,
+            "plan": "business",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 393,
+            "plan": "starter",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 393,
+            "plan": "pro",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 1280,
+            "plan": "business",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 1280,
+            "plan": "starter",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 1280,
+            "plan": "pro",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          }
+        ],
+        "businessOnlyPricing": true,
+        "productionWrites": 0
+      },
+      "sourceCommit": "c6a336ae9f67e4acbcf3a127bae8f7cec568f936",
+      "liveViewportChecks": {
+        "status": "passed",
+        "base": "https://dagangos.com",
+        "verifiedAt": "2026-11-02T15:57:18.751Z",
+        "checks": [
+          {
+            "width": 393,
+            "plan": "business",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 393,
+            "plan": "starter",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 393,
+            "plan": "pro",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 1280,
+            "plan": "business",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 1280,
+            "plan": "starter",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          },
+          {
+            "width": 1280,
+            "plan": "pro",
+            "status": "passed",
+            "apiFixture": true,
+            "productionWrites": 0
+          }
+        ],
+        "businessOnlyPricing": true,
+        "productionWrites": 0
+      },
+      "viewportTitleAndActionsVisible": true
+    },
+    "apkPublicationWorkflow": "https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/41474536147"
   }
 }

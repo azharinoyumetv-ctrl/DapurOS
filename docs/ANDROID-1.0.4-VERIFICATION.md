@@ -1,6 +1,6 @@
 # DapurOS 1.0.4 verification
 
-DapurOS 1.0.4 (build 6) adds named table reservations to the Business plan. The signed candidate uses the existing DapurOS identity and certificate and requires Android 14+.
+DapurOS 1.0.4 (build 6) adds named table reservations to the Business plan. The matching backend, website pricing and APK download are published and verified. The signed release uses the existing DapurOS identity and certificate and requires Android 14+.
 
 In **Kasir**, select an empty table and choose **Reservasi meja**. Save the guest's name and party size, with optional contact, arrival time and notes. Staff can edit, seat or cancel the reservation. The table is held immediately, and the dining bill opens only when staff seat the guest. This is one active hold per table, without future time-slot scheduling or automatic expiry. See [Business reservations](BUSINESS-RESERVATIONS.md).
 
@@ -32,4 +32,10 @@ Tests used disposable local databases or isolated Android fixture accounts. They
 
 Android screen profiles use AOSP Android 14; physical Xiaomi/Samsung firmware, physical printer output and live payment settlement are not certified by these checks. The companion release tested is recorded in the machine-readable report, independently of later Geraina releases.
 
-Machine-readable package, test and publication evidence: [ANDROID-1.0.4-VERIFICATION.json](ANDROID-1.0.4-VERIFICATION.json). Publication remains pending until that report records the live download and deployment checks.
+Machine-readable package, test and publication evidence: [ANDROID-1.0.4-VERIFICATION.json](ANDROID-1.0.4-VERIFICATION.json). [Deployment workflow](https://github.com/azharinoyumetv-ctrl/DagangOS/actions/runs/41476021504) passed. All six public download checks passed, including the exact downloaded bytes. Six additional checks verified the live app assets with isolated Business/Starter/Pro API fixtures at phone and desktop widths, without saving a production booking. The live backend revision, anonymous reservation rejection and both erasure fences were verified.
+
+Download: [DapurOS 1.0.4 APK](https://dagangos.com/downloads/dapuros/DapurOS-POS-1.0.4.apk), also available on the existing [Android download page](https://dagangos.com/dapuros/android).
+
+The final visual review also reproduced a phone website dialog heading clipped after scrolling, caused by the animated route container. The website dialog now renders outside that container. Eight affected flows and all 39 Android browser layout checks passed after this correction. The signed APK already disables the route transforms and remains the exact immutable package verified above. Separate APK and web source commits are recorded in the JSON evidence.
+
+The corrected live website passed all six Business/Starter/Pro viewport checks, including visible dialog heading and save action after scrolling. The public download was reverified against the signed APK hash, and the deployed backend revision and both write fences passed.
