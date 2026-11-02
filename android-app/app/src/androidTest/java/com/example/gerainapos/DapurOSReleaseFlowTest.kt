@@ -62,6 +62,7 @@ class DapurOSReleaseFlowTest {
                             path == "/api/products/catalogue" -> """{"items":$products,"total":1,"next_cursor":null}"""
                             path == "/api/products/category-names" -> """["Minuman"]"""
                             path == "/api/ingredients" -> """[{"id":"beans","name":"Biji kopi fixture","stock":2000,"unit":"g"}]"""
+                            path == "/api/records/ingredients" -> """{"items":[{"id":"beans","name":"Biji kopi fixture","stock":2000,"unit":"g"}],"total":1,"next_cursor":null}"""
                             path == "/api/floors" -> """[{"id":"floor-test","name":"Lantai Fixture","level":1}]"""
                             path == "/api/tables" -> """[{"id":"table-test","label":"Meja Fixture","floor_id":"floor-test","capacity":4,"status":"Vacant"}]"""
                             path == "/api/payments/options" -> """{"methods":{"cash":{"enabled":true,"displayed":true},"qris_bank":{"enabled":false},"ewallet":{"enabled":false},"va":{"enabled":false},"credit_card":{"enabled":false},"doku":{"enabled":false}},"ewallet_channels":[]}"""
@@ -323,7 +324,7 @@ class DapurOSReleaseFlowTest {
             js("window.__baselineSaleRead=false;let r=indexedDB.open('dapuros-pos-offline-v1',1);r.onsuccess=()=>{let q=r.result.transaction('sales').objectStore('sales').getAll();q.onsuccess=()=>{let row=q.result.find(x=>x.body.client_order_id===window.__baselineSaleId);window.__baselineSaleOk=!!row&&row.status!=='synced'&&row.order.total===11000&&row.body.expected_store_id==='android-fixture-store';window.__baselineSaleRead=true}};true")
             until("window.__baselineSaleRead===true");assertTrue(js("window.__baselineSaleOk") == true)
             assertEquals(BuildConfig.VERSION_NAME,js("window.DapurOSDevice.appInfo.versionName"))
-            checkStep("Released 1.0.0 pending cash sale survives final signed 1.0.1 update");save("passed")
+            checkStep("Pending cash sale from the published baseline survives the final signed update");save("passed")
         } finally { scenario.close() }
     }
 

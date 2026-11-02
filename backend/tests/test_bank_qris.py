@@ -120,7 +120,7 @@ def test_bank_order_needs_no_gateway_and_keeps_original_destination_snapshot(fix
     assert run(db.products.find_one({"id": "product-a"}))["stock"] == 9
     assert configure(client, qr_payload=synthetic_qris(**{"59": "DIFFERENT TEST MERCHANT"})).status_code == 200
     assert client.get(f'/api/orders/{order["id"]}').json()["bank_qris"]["qr_payload"] == synthetic_qris()
-    assert client.post(f'/api/orders/{order["id"]}/mark-paid').status_code == 400
+    assert client.post(f'/api/orders/{order["id"]}/mark-paid').status_code == 404
     gateway.assert_not_awaited()
 
 

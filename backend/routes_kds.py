@@ -1,7 +1,7 @@
 from permissions import require_permission
 """Kitchen Display System (KDS) routes for DapurOS."""
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
 
 from database import get_db, utcnow
@@ -33,7 +33,6 @@ async def list_kds_tickets(
     
     # Calculate elapsed time dynamically
     for t in tickets:
-        # Time calculations (dummy time elapsed or based on created_at)
         from datetime import datetime, timezone
         try:
             created = datetime.fromisoformat(t["created_at"])
@@ -44,7 +43,7 @@ async def list_kds_tickets(
             else:
                 t["time_elapsed"] = f"{mins} mnt lalu"
         except Exception:
-            t["time_elapsed"] = "Baru saja"
+            t["time_elapsed"] = "Waktu tidak tersedia"
             
     return tickets
 
@@ -52,7 +51,7 @@ async def list_kds_tickets(
 @router.put("/{ticket_id}/status", dependencies=[Depends(require_permission('pos.use'))])
 async def update_ticket_status(
     ticket_id: str,
-    status: str = Body(..., embed=True), # Pending | Cooking | Ready | Served
+    status: Literal['Pending', 'Cooking', 'Ready', 'Served'] = Body(..., embed=True),
     user: dict = Depends(get_current_user)
 ):
     db = get_db()

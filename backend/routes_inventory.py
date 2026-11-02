@@ -10,6 +10,8 @@ from models import (
 )
 from auth import get_current_user
 from plan_limits import require_plan
+import inventory_service
+import transactions
 
 router = APIRouter(prefix="/api/products", tags=["inventory"])
 
@@ -162,31 +164,13 @@ async def list_adjustments(user: dict = Depends(get_current_user)):
 @router.post("/stock-adjustments", response_model=StockAdjustment, dependencies=[Depends(require_permission('inventory.write'))])
 async def create_adjustment(payload: StockAdjustmentCreate, user: dict = Depends(get_current_user)):
     db = get_db()
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "product_name": payload.product_name,
-        "sku": payload.sku,
-        "adjustment_qty": payload.adjustment_qty,
-        "type": payload.type,
-        "reason": payload.reason,
-        "created_by": payload.created_by,
-        "created_at": utcnow().isoformat()
-    }
-    await db.stock_adjustments.insert_one(doc)
-    
-    # Update actual product stock if product is matched by SKU
-    if payload.sku:
-        diff = payload.adjustment_qty if payload.type == "add" else -payload.adjustment_qty
-        await db.products.update_one(
-            {"store_id": user["store_id"], "sku": payload.sku},
-            {"$inc": {"stock": diff}}
-        )
-        
-    doc.pop("_id", None)
-    return doc
+    return await transactions.run_transaction(db,lambda session:inventory_service.adjustment(db,payload,user,session))
 
 # ---------- Stock Transfers (Business-tier feature -- see AppLayout.jsx minPlan) ----------
+@router.get('/transfer-branches', dependencies=[Depends(require_permission('inventory.read'))])
+async def transfer_branches(user: dict = Depends(require_plan('business'))):
+    return await get_db().branches.find({'store_id':user['store_id']},{'_id':0,'id':1,'name':1}).sort('name',1).to_list(None)
+
 @router.get("/stock-transfers", response_model=List[StockTransfer], dependencies=[Depends(require_permission('inventory.read'))])
 async def list_transfers(user: dict = Depends(require_plan("business"))):
     db = get_db()
@@ -196,15 +180,14 @@ async def list_transfers(user: dict = Depends(require_plan("business"))):
 @router.post("/stock-transfers", response_model=StockTransfer, dependencies=[Depends(require_permission('inventory.write'))])
 async def create_transfer(payload: StockTransferCreate, user: dict = Depends(require_plan("business"))):
     db = get_db()
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "from_branch": payload.from_branch,
-        "to_branch": payload.to_branch,
-        "items": [item.model_dump() for item in payload.items],
-        "status": payload.status,
-        "created_at": utcnow().isoformat()
-    }
-    await db.stock_transfers.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
+    return await transactions.run_transaction(db,lambda session:inventory_service.ship(db,payload,user,session))
+
+@router.post('/stock-transfers/{transfer_id}/receive', response_model=StockTransfer, dependencies=[Depends(require_permission('inventory.write'))])
+async def receive_transfer(transfer_id: str, user: dict = Depends(require_plan('business'))):
+    db=get_db()
+    return await transactions.run_transaction(db,lambda session:inventory_service.finish_transfer(db,transfer_id,user,session))
+
+@router.post('/stock-transfers/{transfer_id}/cancel', response_model=StockTransfer, dependencies=[Depends(require_permission('inventory.write'))])
+async def cancel_transfer(transfer_id: str, user: dict = Depends(require_plan('business'))):
+    db=get_db()
+    return await transactions.run_transaction(db,lambda session:inventory_service.finish_transfer(db,transfer_id,user,session,cancel=True))

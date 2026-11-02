@@ -1,19 +1,25 @@
-import { useEffect, useState } from "react";
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import { inventoryError } from '@/api/inventoryItems';
+import { readCollection } from '@/api/records';
+import { useEffect, useRef, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
 import { Plus, Check, HandCoins } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function AccountsReceivable() {
   const [receivables, setReceivables] = useState([]);
+  const debtPage=useTablePage(receivables);
   const [customerName, setCustomerName] = useState("");
   const [orderNo, setOrderNo] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const paymentAttempt=useRef(null),paymentLock=useRef(false);
 
   const fetchReceivables = () => {
-    api.get("/debt/receivables").then((r) => setReceivables(r.data)).catch(() => {});
+    readCollection("/debt/receivables").then((r) => setReceivables(r.data)).catch(() => {});
   };
 
   useEffect(() => {
@@ -27,14 +33,14 @@ export default function AccountsReceivable() {
     // looked like it saved (button clicked, no error) but nothing was ever sent.
     if (!customerName.trim()) { setFormError("Nama Pelanggan wajib diisi."); return; }
     if (!orderNo.trim()) { setFormError("No Referensi / Transaksi POS wajib diisi."); return; }
-    if (!amount || parseInt(amount) <= 0) { setFormError("Jumlah Piutang wajib diisi dan lebih besar dari 0."); return; }
+    if (!amount || Number(amount) <= 0) { setFormError("Jumlah Piutang wajib diisi dan lebih besar dari 0."); return; }
     setFormError("");
     setSaving(true);
 
     api.post("/debt/receivables", {
       customer_name: customerName,
       order_no: orderNo,
-      amount: parseInt(amount),
+      amount: Number(amount),
       paid_amount: 0,
       due_date: dueDate || new Date().toISOString().slice(0, 10),
       status: "Unpaid"
@@ -46,27 +52,32 @@ export default function AccountsReceivable() {
       fetchReceivables();
       toast.success("Catatan Piutang Baru berhasil ditambahkan!");
     }).catch((err) => {
-      setFormError(err?.response?.data?.detail || "Gagal menyimpan catatan piutang.");
+      setFormError(inventoryError(err));
     }).finally(() => setSaving(false));
   };
 
   const handleSettle = (id, currentPaid, totalAmount) => {
+    if(paymentLock.current)return;
     const pay = prompt(`Masukkan jumlah cicilan / pelunasan (Total Tagihan: ${fmtIDR(totalAmount)}):`, totalAmount - currentPaid);
-    if (pay === null || isNaN(pay) || parseInt(pay) <= 0) return;
+    if (pay === null || isNaN(pay) || Number(pay) <= 0) return;
 
-    const newPaid = currentPaid + parseInt(pay);
+    const newPaid = currentPaid + Number(pay);
     const status = newPaid >= totalAmount ? "Paid" : "Partial";
 
     // HISTORY: this used to POST {id, paid_amount, status} straight to the CREATE endpoint,
     // which ignored the id and always inserted a brand-new, field-incomplete row -- the
     // request actually 422'd (customer_name/order_no/due_date are required) and, since there
     // was no .catch(), failed completely silently. Real fix: PUT to the record's own URL.
-    api.put(`/debt/receivables/${id}`, { paid_amount: newPaid, status }).then(() => {
+    const fingerprint=JSON.stringify([id,currentPaid,newPaid]);
+    if(paymentAttempt.current?.fingerprint!==fingerprint)paymentAttempt.current={fingerprint,id:crypto.randomUUID()};
+    paymentLock.current=true;
+    api.put(`/debt/receivables/${id}`, { paid_amount: newPaid, expected_paid_amount:currentPaid,request_id:paymentAttempt.current.id,status }).then(() => {
+      paymentAttempt.current=null;
       fetchReceivables();
       toast.success("Pembayaran piutang berhasil dicatat!");
     }).catch((err) => {
-      toast.error(err?.response?.data?.detail || "Gagal mencatat pembayaran piutang.");
-    });
+      toast.error(inventoryError(err));fetchReceivables();
+    }).finally(()=>{paymentLock.current=false;});
   };
 
   return (
@@ -148,7 +159,7 @@ export default function AccountsReceivable() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
-                {receivables.map((r) => {
+                {debtPage.rows.map((r) => {
                   const remaining = r.amount - r.paid_amount;
                   const isPaid = r.status === "Paid";
                   return (
@@ -182,6 +193,7 @@ export default function AccountsReceivable() {
                 )}
               </tbody>
             </table>
+            <TablePage value={debtPage} label="piutang"/>
           </div>
         </div>
       </div>

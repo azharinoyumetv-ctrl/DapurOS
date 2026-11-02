@@ -16,8 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from database import get_db, utcnow
 from models import Device, DeviceCreate
 from auth import get_current_user
+from permissions import require_permission
+import transactions
 
-router = APIRouter(prefix="/api/devices", tags=["devices"])
+router = APIRouter(prefix="/api/devices", tags=["devices"],dependencies=[Depends(require_permission('devices.manage'))])
 
 
 @router.get("", response_model=List[Device])
@@ -29,8 +31,13 @@ async def list_devices(user: dict = Depends(get_current_user)):
 
 @router.post("", response_model=Device)
 async def register_device(payload: DeviceCreate, user: dict = Depends(get_current_user)):
+    return await transactions.run_transaction(get_db(),lambda session:_register_device(payload,user))
+
+
+async def _register_device(payload,user):
     db = get_db()
 
+    await db.capacity_guards.update_one({'_id':user['store_id']+':devices'},{'$inc':{'revision':1}},upsert=True)
     existing = await db.devices.find_one({"store_id": user["store_id"], "device_id": payload.device_id})
     if existing:
         res = await db.devices.find_one_and_update(

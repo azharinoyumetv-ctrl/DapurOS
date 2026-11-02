@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from database import get_db, utcnow
 from models import Floor, FloorCreate, FloorUpdate
 from auth import get_current_user
+import transactions
+from table_safety import ensure_idle
 
 router = APIRouter(prefix="/api/floors", tags=["floors"])
 
@@ -65,12 +67,13 @@ async def update_floor(floor_id: str, payload: FloorUpdate, user: dict = Depends
 async def delete_floor(floor_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
     
-    # Delete the floor
-    res = await db.floors.delete_one({"id": floor_id, "store_id": user["store_id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Lantai tidak ditemukan")
-        
-    # Cascade delete tables on this floor
-    await db.tables.delete_many({"floor_id": floor_id, "store_id": user["store_id"]})
+    async def remove(session):
+        scope={'floor_id':floor_id,'store_id':user['store_id']}
+        tables=await db.tables.find(scope,{'id':1},session=session).to_list(None)
+        await ensure_idle(db,user['store_id'],[table['id'] for table in tables],session)
+        res=await db.floors.delete_one({'id':floor_id,'store_id':user['store_id']},session=session)
+        if not res.deleted_count:raise HTTPException(404,'Lantai tidak ditemukan.')
+        await db.tables.delete_many(scope,session=session)
+    await transactions.run_transaction(db,remove)
     
     return {"ok": True}

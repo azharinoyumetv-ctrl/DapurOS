@@ -1,4 +1,5 @@
-from restaurant_sales import deduct, restore, kitchen
+from product_scope import product_scope, inventory_scope
+from restaurant_sales import deduct, restore, kitchen, cancel_kitchen, notify_orders
 """POS / Orders routes."""
 from permissions import require_permission
 import os
@@ -23,7 +24,7 @@ import httpx
 import transactions
 from pymongo.errors import DuplicateKeyError
 from xendit_client import PaymentNotConfiguredError
-from stock_ledger import movement
+from stock_ledger import movement, sale_events
 from sale_effects import customer_for_sale, apply_loyalty
 from paging import encode_cursor, decode_cursor
 from payment_options import require_payment_method, payment_options
@@ -235,6 +236,10 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
             if not existing:
                 raise HTTPException(409, 'Percobaan pembayaran masih perlu diperiksa. Jangan membuat transaksi baru.')
             return public_order(existing), False
+        if user.get('role')=='Guest':
+            table=await db.tables.find_one({'store_id':user['store_id'],'id':user.get('guest_table_id'),'qr_token_hash':user.get('guest_qr_hash'),'qr_enabled':True},session=session)
+            active=await db.order_sessions.find_one({'store_id':user['store_id'],'id':payload.session_id,'table_id':user.get('guest_table_id'),'status':'Active'},session=session)
+            if not table or not active:raise HTTPException(409,'QR atau sesi meja sudah berubah. Hubungi staf sebelum mengirim pesanan baru.')
         if payload.session_id:
             payload.payment_method = 'cash'
         policy = await payment_options(db, user)
@@ -247,7 +252,7 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
             if item.product_id in seen:
                 raise HTTPException(422, 'Produk duplikat dalam transaksi.')
             seen.add(item.product_id)
-            product = await db.products.find_one({'id': item.product_id, 'store_id': user['store_id']}, session=session)
+            product = await db.products.find_one(product_scope(user['store_id'],id=item.product_id), session=session)
             if not product or product.get('active') is False:
                 raise HTTPException(409, 'Produk tidak tersedia. Muat ulang katalog kasir.')
             if 'price' not in product or Decimal(str(product['price'])) != Decimal(str(item.price)):
@@ -287,9 +292,7 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
         await kitchen(db, user, doc, session, payload.session_id)
         await db.orders.insert_one(dict(doc), session=session)
         for line in lines:
-            await movement(db, session, identifier=f"{identifier}:sale:{line['product_id']}", store_id=user['store_id'],
-                   product_id=line['product_id'], name=line['name'], quantity=-line['quantity'], reference=doc['order_no'],
-                   kind='sale', actor=user['id'], at=now)
+            await sale_events(db,session,order_id=identifier,store_id=user['store_id'],line=line,reference=doc['order_no'],kind='sale',actor=user['id'],at=now)
         await apply_loyalty(db, doc, session)
         return doc, True
 
@@ -298,6 +301,7 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
     except DuplicateKeyError:
         # A concurrent request with the same attempt key committed first.
         doc, created = await transactions.run_transaction(db, prepare)
+    if created:await notify_orders(user['store_id'])
     if not created or payload.payment_method not in ('qris', 'ewallet', 'doku', 'va', 'credit_card'):
         if created:
             await deliver_receipt(payload, user, db, doc)
@@ -316,9 +320,7 @@ async def create_order(payload: OrderCreate, user: dict = Depends(get_current_us
                 return
             for line in doc['items']:
                 await restore(db, user['store_id'], line, session)
-                await movement(db, session, identifier=f"{doc['id']}:declined:{line['product_id']}", store_id=user['store_id'],
-                     product_id=line['product_id'], name=line['name'], quantity=line['quantity'], reference=doc['order_no'],
-                     kind='payment_declined', actor=user['id'], at=utcnow().isoformat())
+                await sale_events(db,session,order_id=doc['id'],store_id=user['store_id'],line=line,reference=doc['order_no'],kind='payment_declined',actor=user['id'],at=utcnow().isoformat())
             await db.kds_tickets.delete_many({'order_id': doc['id'], 'store_id': user['store_id']}, session=session)
             await db.orders.delete_one({'id': doc['id'], 'store_id': user['store_id']}, session=session)
             await db.checkout_attempts.update_one({'_id': attempt_id}, {'$set': {'state': 'failed', 'error': error.detail}}, session=session)
@@ -370,7 +372,8 @@ async def stats(user: dict = Depends(get_current_user)):
             match["payment_status"] = "paid"
         cur = db.orders.aggregate([
             {"$match": match},
-            {"$group": {"_id": None, "total": {"$sum": "$total"}, "count": {"$sum": 1}}},
+            {"$group": {"_id": None, "total": {"$sum": "$total"}, "count": {"$sum": 1},
+                        "merchandise": {"$sum": {"$subtract": ["$subtotal", {"$ifNull": ["$discount", 0]}]}}}},
         ])
         rows = await cur.to_list(length=1)
         return rows[0] if rows else {"total": 0, "count": 0}
@@ -384,15 +387,27 @@ async def stats(user: dict = Depends(get_current_user)):
     ]).to_list(None)
     # These independent reads share the same store and time boundaries. Waiting
     # for each database round trip in turn unnecessarily delays every dashboard.
-    today, week, month, product_count, day_rows, low_stock_count = await asyncio.gather(
+    cost_query=db.orders.aggregate([
+        {'$match':{'store_id':user['store_id'],'payment_status':'paid','created_at':{'$gte':today_start,'$lt':today_end,'$lte':now.isoformat()}}},
+        {'$unwind':'$items'},
+        {'$set':{'sale_cost':{'$ifNull':['$items.unit_cost',None]}}},
+        {'$group':{'_id':None,'cogs':{'$sum':{'$multiply':[{'$ifNull':['$sale_cost',0]},'$items.quantity']}},
+                   'missing':{'$sum':{'$cond':[{'$eq':[{'$ifNull':['$sale_cost',None]},None]},1,0]}}}}
+    ]).to_list(1)
+    today, week, month, product_count, day_rows, low_stock_count, costs = await asyncio.gather(
         sum_in(today_start, before=today_end), sum_in(week_start), sum_in(month_start),
-        db.products.count_documents({"store_id": user["store_id"]}), daily_query,
-        db.products.count_documents({'store_id':user['store_id'],'stock':{'$lte':5}}),
+        db.products.count_documents(product_scope(user["store_id"])), daily_query,
+        db.products.count_documents({**product_scope(user['store_id']),'stock':{'$lte':5},'recipe':{'$in':[None,[]]}}),
+        cost_query,
     )
     by_day = {row['_id']:row['value'] for row in day_rows}
     daily_sales = [{'date':(first_day+timedelta(days=index)).date().isoformat(),
                     'value':by_day.get((first_day+timedelta(days=index)).date().isoformat(),0)} for index in range(7)]
+    cost=costs[0] if costs else {'cogs':0,'missing':0}
     return {
+        'today_cost_complete':cost['missing']==0,
+        'today_cogs':cost['cogs'] if not cost['missing'] else None,
+        'today_gross_profit':today.get('merchandise',0)-cost['cogs'] if not cost['missing'] else None,
         "timezone": str(zone), "today_date": local_start.date().isoformat(),
         "daily_sales": daily_sales, "low_stock_count": low_stock_count,
         "today_sales": today.get("total", 0),
@@ -403,6 +418,34 @@ async def stats(user: dict = Depends(get_current_user)):
         "month_orders": month.get("count", 0),
         "product_count": product_count,
     }
+
+
+@router.get('/sales-trend', dependencies=[Depends(require_permission('pos.use'))])
+async def sales_trend(user: dict = Depends(get_current_user), days: int = Query(7, ge=1, le=366)):
+    from datetime import timedelta, timezone
+    db=get_db();now=utcnow();zone=await store_zone(db,user['store_id'])
+    end=now.astimezone(zone).replace(hour=0,minute=0,second=0,microsecond=0)
+    start=end-timedelta(days=days-1)
+    rows=await db.orders.aggregate([
+        {'$match':{'store_id':user['store_id'],'payment_status':'paid','created_at':{'$gte':start.astimezone(timezone.utc).isoformat(),'$lte':now.isoformat()}}},
+        {'$group':{'_id':{'$dateToString':{'format':'%Y-%m-%d','date':{'$dateFromString':{'dateString':'$created_at'}},'timezone':str(zone)}},'sales':{'$sum':'$total'},'orders':{'$sum':1}}}
+    ]).to_list(None)
+    indexed={row['_id']:row for row in rows};labels=['Sen','Sel','Rab','Kam','Jum','Sab','Min']
+    return [{'date':(start+timedelta(days=i)).date().isoformat(),'day':labels[(start+timedelta(days=i)).weekday()],
+             'sales':indexed.get((start+timedelta(days=i)).date().isoformat(),{}).get('sales',0),
+             'orders':indexed.get((start+timedelta(days=i)).date().isoformat(),{}).get('orders',0)} for i in range(days)]
+
+
+@router.get('/payment-methods', dependencies=[Depends(require_permission('pos.use'))])
+async def payment_method_totals(user: dict = Depends(get_current_user), days: int = Query(7, ge=1, le=366)):
+    from datetime import timedelta, timezone
+    db=get_db();now=utcnow();zone=await store_zone(db,user['store_id'])
+    start=now.astimezone(zone).replace(hour=0,minute=0,second=0,microsecond=0)-timedelta(days=days-1)
+    rows=await db.orders.aggregate([
+        {'$match':{'store_id':user['store_id'],'payment_status':'paid','created_at':{'$gte':start.astimezone(timezone.utc).isoformat(),'$lte':now.isoformat()}}},
+        {'$group':{'_id':'$payment_method','total':{'$sum':'$total'},'count':{'$sum':1}}},{'$sort':{'_id':1}}
+    ]).to_list(None)
+    return [{'method':row['_id'],'total':row['total'],'count':row['count']} for row in rows]
 
 
 @router.get("/product-sales", dependencies=[Depends(require_permission("reports.read"))])
@@ -474,25 +517,6 @@ async def confirm_bank_qris(order_id: str, payload: BankQrisConfirmation, user: 
     return await transactions.run_transaction(db, confirm)
 
 
-@router.post('/{order_id}/mark-paid', dependencies=[Depends(require_permission('pos.use'))])
-async def mark_paid(order_id: str, user: dict = Depends(require_admin)):
-    db = get_db()
-    async def settle(session):
-        order = await db.orders.find_one({'id': order_id, 'store_id': user['store_id']}, session=session)
-        if not order:
-            raise HTTPException(404, 'Order tidak ditemukan')
-        if order.get('payment_method') == 'qris_bank':
-            raise HTTPException(400, 'Gunakan konfirmasi QRIS bank setelah memeriksa aplikasi bank.')
-        if order.get('payment_status') == 'paid':
-            return public_order(order)
-        if order.get('payment_status') != 'pending':
-            raise HTTPException(409, 'Transaksi yang dibatalkan atau gagal tidak dapat ditandai lunas.')
-        order.update(payment_status='paid', updated_at=utcnow().isoformat())
-        await db.orders.update_one({'id': order_id, 'store_id': user['store_id'], 'payment_status': 'pending'},
-                    {'$set': {'payment_status': 'paid', 'updated_at': order['updated_at']}}, session=session)
-        await apply_loyalty(db, order, session)
-        return public_order(order)
-    return await transactions.run_transaction(db, settle)
 
 
 @router.post('/{order_id}/void', dependencies=[Depends(require_permission('pos.use'))])
@@ -511,9 +535,10 @@ async def void_order(order_id: str, user: dict = Depends(require_admin)):
              {'$set': {'payment_status': 'voided', 'updated_at': at, 'voided_at': at, 'voided_by': user['id'], 'inventory_applied': False, 'inventory_void_ledger_version': 1}}, session=session)
         for line in order.get('items', []) if order.get('inventory_applied') is not False else []:
             await restore(db, user['store_id'], line, session)
-            await movement(db, session, identifier=f"{order_id}:void:{line['product_id']}", store_id=user['store_id'],
-                   product_id=line['product_id'], name=line['name'], quantity=line['quantity'], reference=order['order_no'],
-                   kind='void', actor=user['id'], at=at)
+            await sale_events(db,session,order_id=order_id,store_id=user['store_id'],line=line,reference=order['order_no'],kind='void',actor=user['id'],at=at)
         await apply_loyalty(db, order, session, reverse=True)
+        await cancel_kitchen(db,user['store_id'],order,session)
         return {'ok': True, 'refund_automatic': False, 'refund_required': order.get('payment_status') == 'paid' and order.get('payment_method') != 'cash'}
-    return await transactions.run_transaction(db, cancel)
+    result=await transactions.run_transaction(db,cancel)
+    await notify_orders(user['store_id'])
+    return result

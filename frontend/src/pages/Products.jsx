@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react";
-import api, { fmtIDR, API_BASE } from "@/api/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import api, { fmtIDR, API_BASE, downloadBlob } from "@/api/client";
 import { Plus, Upload, Search, Edit3, Trash2, X, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ScanBarcode } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { useAuth } from '@/auth/AuthContext';
+import { isPlanLocked } from '@/navigation/sections';
+import { loadCatalogue } from '@/api/catalogue';
+import { readCollection } from '@/api/records';
+import { canManageProducts } from '@/auth/permissions';
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import ReadState from '@/components/ReadState';
 
 function ProductForm({ product, onClose, onSaved }) {
-  const isDapurOS = true;
+  const { user } = useAuth();
+  const isDapurOS = !isPlanLocked('pro', user?.plan);
   const isEdit = !!product?.id;
   const [form, setForm] = useState({
     name: product?.name || "",
@@ -34,7 +43,7 @@ function ProductForm({ product, onClose, onSaved }) {
 
   const loadIngredients = async (selectId) => {
     try {
-      const res = await api.get("/ingredients");
+      const res = await readCollection("/ingredients");
       setIngredients(res.data);
       if (selectId) setSelectedIngredientId(selectId);
       else if (res.data.length > 0) setSelectedIngredientId((cur) => cur || res.data[0].id);
@@ -46,7 +55,7 @@ function ProductForm({ product, onClose, onSaved }) {
   useEffect(() => {
     if (!isDapurOS) return;
     loadIngredients();
-    api.get("/products/units").then((r) => setUnits(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    readCollection("/products/units").then((r) => setUnits(Array.isArray(r.data) ? r.data : [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDapurOS]);
 
@@ -139,7 +148,7 @@ function ProductForm({ product, onClose, onSaved }) {
           quantity: parseFloat(r.quantity)
         })) : null
       };
-      if (isEdit) await api.put(`/products/${product.id}`, payload);
+      if (isEdit) await api.put(`/products/${product.id}`, { ...payload, expected_stock: product.stock });
       else await api.post("/products", payload);
       onSaved();
     } catch (e) {
@@ -403,6 +412,7 @@ function ImportDialog({ onClose, onDone }) {
             <div className="flex items-center justify-between mt-4">
               <a
                 href={`${API_BASE}/products/import-template.csv`}
+                onClick={e=>{e.preventDefault();api.get('/products/import-template.csv',{responseType:'blob'}).then(r=>downloadBlob(r.data,'dapuros-menu-template.csv')).catch(()=>setErr('Template belum dapat diunduh. Coba lagi.'));}}
                 className="text-sm text-[hsl(var(--primary))] flex items-center gap-1.5 font-semibold"
                 data-testid="import-template-link"
               >
@@ -474,6 +484,8 @@ function ImportDialog({ onClose, onDone }) {
 }
 
 export default function Products() {
+  const { user } = useAuth();
+  const editable = canManageProducts(user?.role);
   const isDapurOS = true;
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
@@ -483,6 +495,9 @@ export default function Products() {
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
   const [filterCat, setFilterCat] = useState("all");
+  const [loadError,setLoadError]=useState('');
+  const matches=useMemo(()=>items.filter(p=>(filterCat==='all'||p.category===filterCat)&&(!q.trim()||[p.name,p.sku,p.category].some(v=>String(v||'').toLocaleLowerCase('id').includes(q.trim().toLocaleLowerCase('id'))))),[items,q,filterCat]);
+  const table=useTablePage(matches,25);
 
   // Same unsequenced-concurrent-request race fixed in GerainaOS's Products.jsx (commit
   // 9ab99b0): the 200ms debounce only cancels a *pending* timer, not a request already in
@@ -495,8 +510,10 @@ export default function Products() {
     setLoading(true);
     const reqId = ++loadReqIdRef.current;
     try {
-      const r = await api.get("/products", { params: { q: q || undefined, category: filterCat !== "all" ? filterCat : undefined } });
-      if (reqId === loadReqIdRef.current) setItems(r.data);
+      const data = await loadCatalogue();
+      if (reqId === loadReqIdRef.current) {setItems(data);setCategories([...new Set(data.map(p=>p.category).filter(Boolean))]);setLoadError('');}
+    } catch(e) {
+      if(reqId===loadReqIdRef.current)setLoadError('Katalog belum dapat diperbarui. Periksa koneksi lalu coba lagi.');
     } finally {
       if (reqId === loadReqIdRef.current) setLoading(false);
     }
@@ -504,21 +521,20 @@ export default function Products() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    setItems([]);setShowForm(false);setShowImport(false);
     load();
     // /products/categories pointed at a separate, user-managed Kategori collection that starts
     // empty -- not the actual category values on real products. Same bug already fixed in
     // GerainaOS (task tracked as "Fix category filter dropdown not populated"): the correct
     // source is /products/category-names, distinct values straight off the products
     // themselves, same endpoint POS already uses correctly for its filter chips.
-    api.get("/products/category-names").then((r) => setCategories(r.data)).catch(() => {});
-  }, []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [q, filterCat]);
+    return()=>{loadReqIdRef.current++;};
+  }, [user?.id,user?.store_id]);
 
   const remove = async (p) => {
     if (!window.confirm(`Hapus "${p.name}"?`)) return;
-    await api.delete(`/products/${p.id}`);
-    load();
+    try{await api.delete(`/products/${p.id}`);load();}
+    catch(e){toast.error(typeof e?.response?.data?.detail==='string'?e.response.data.detail:'Menu belum dapat dihapus. Coba lagi.');}
   };
 
   return (
@@ -528,14 +544,14 @@ export default function Products() {
           <span className="label-tiny">Manajemen</span>
           <h1 className="font-display text-3xl font-bold mt-1">Produk</h1>
         </div>
-        <div className="flex gap-2">
+        {editable && <div className="flex gap-2">
           <button onClick={() => setShowImport(true)} className="btn-outline" data-testid="open-import-btn">
             <Upload size={16} /> Impor Excel/CSV
           </button>
           <button onClick={() => { setEditing(null); setShowForm(true); }} className="btn-primary" data-testid="new-product-btn">
             <Plus size={16} /> Produk Baru
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="card-surface p-4">
@@ -565,7 +581,8 @@ export default function Products() {
         </div>
       </div>
 
-      <div className="card-surface overflow-hidden">
+      <ReadState loading={false} error={loadError} retry={load} testid="products-read-state" />
+      <div className="card-surface overflow-x-auto">
         <table className="w-full text-sm" data-testid="products-table">
           <thead className="bg-[hsl(var(--background))] border-b border-[hsl(var(--border))]">
             <tr className="text-left">
@@ -581,14 +598,14 @@ export default function Products() {
             {loading && (
               <tr><td colSpan={6} className="px-5 py-10 text-center text-[hsl(var(--muted))]" data-testid="products-loading">Memuat…</td></tr>
             )}
-            {!loading && items.length === 0 && (
+            {!loading && !loadError && matches.length === 0 && (
               <tr><td colSpan={6} className="px-5 py-10 text-center text-[hsl(var(--muted))]" data-testid="products-empty">Belum ada produk.</td></tr>
             )}
-            {items.map((p) => (
+            {table.rows.map((p) => (
               <tr key={p.id} className="hover:bg-[hsl(var(--background))]" data-testid={`product-row-${p.id}`}>
                 <td className="px-5 py-3 font-medium flex items-center gap-2.5">
                   {p.image_url ? (
-                    <img src={p.image_url} alt="" className="w-8 h-8 rounded-md object-cover border border-slate-200 shrink-0" />
+                    <img src={p.image_url} alt="" loading="lazy" decoding="async" className="w-8 h-8 rounded-md object-cover border border-slate-200 shrink-0" />
                   ) : (
                     <span className="w-8 h-8 rounded-md bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center text-slate-300 text-[10px]">—</span>
                   )}
@@ -604,8 +621,8 @@ export default function Products() {
                 <td className="px-5 py-3 text-right font-display font-bold num-display">{fmtIDR(p.price)}</td>
                 <td className="px-5 py-3 text-right num-display">{p.stock} <span className="text-xs text-[hsl(var(--muted))]">{p.unit}</span></td>
                 <td className="px-5 py-3 text-right">
-                  <button onClick={() => { setEditing(p); setShowForm(true); }} className="btn-ghost p-1.5" data-testid={`edit-product-${p.id}`}><Edit3 size={15} /></button>
-                  <button onClick={() => remove(p)} className="btn-ghost p-1.5 text-[hsl(var(--destructive))]" data-testid={`delete-product-${p.id}`}><Trash2 size={15} /></button>
+                  {editable&&<><button onClick={() => { setEditing(p); setShowForm(true); }} className="btn-ghost p-1.5" data-testid={`edit-product-${p.id}`}><Edit3 size={15} /></button>
+                  <button onClick={() => remove(p)} className="btn-ghost p-1.5 text-[hsl(var(--destructive))]" data-testid={`delete-product-${p.id}`}><Trash2 size={15} /></button></>}
                 </td>
               </tr>
             ))}
@@ -613,8 +630,9 @@ export default function Products() {
         </table>
       </div>
 
-      {showForm && <ProductForm product={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
-      {showImport && <ImportDialog onClose={() => setShowImport(false)} onDone={load} />}
+      {!loading&&!loadError&&<TablePage value={table} label="menu"/>}
+      {editable && showForm && <ProductForm product={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
+      {editable && showImport && <ImportDialog onClose={() => setShowImport(false)} onDone={load} />}
     </div>
   );
 }

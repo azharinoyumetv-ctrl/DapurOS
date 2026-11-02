@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
+import useInventory from "@/hooks/useInventory";
+import useTablePage from "@/hooks/useTablePage";
+import TablePage from "@/components/TablePage";
+import ReadState from "@/components/ReadState";
 import api, { fmtIDR } from "@/api/client";
 
 export default function InventoryValuation() {
-  const [products, setProducts] = useState([]);
-
-  useEffect(() => {
-    api.get("/products").then((r) => setProducts(r.data)).catch(() => {});
-  }, []);
-
-  const totalAssetValue = products.reduce((acc, p) => acc + ((p.stock || 0) * (p.cost || 0)), 0);
-  const totalRetailValue = products.reduce((acc, p) => acc + ((p.stock || 0) * (p.price || 0)), 0);
+  const { products, loading, error, retry } = useInventory();
+  const valued=useMemo(()=>products.filter(p=>p.kind==='product'),[products]);
+  const table=useTablePage(valued);
+  const totalAssetValue=valued.reduce((sum,p)=>sum+(p.stock||0)*(p.cost||0),0);
+  const totalRetailValue=valued.reduce((sum,p)=>sum+(p.stock||0)*(p.price||0),0);
 
   return (
     <div className="p-8 space-y-6" data-testid="inventory-valuation-page">
@@ -18,6 +19,9 @@ export default function InventoryValuation() {
         <h1 className="font-display text-3xl font-bold mt-1">Penilaian Inventaris</h1>
       </div>
 
+      <ReadState loading={loading} error={error} retry={retry} />
+      {!loading&&!error&&<>
+      <p className="text-sm text-[hsl(var(--muted))]">Valuasi mencakup produk berstok fisik. Bahan baku belum memiliki biaya satuan, sehingga belum termasuk nilai persediaan ini. Menu resep mengikuti stok bahan baku.</p>
       <div className="grid md:grid-cols-3 gap-6">
         <div className="card-surface p-6">
           <span className="label-tiny">Total Nilai Aset (Harga Beli)</span>
@@ -54,7 +58,7 @@ export default function InventoryValuation() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[hsl(var(--border))]">
-              {products.map((p) => {
+              {table.rows.map((p) => {
                 const assetVal = (p.stock || 0) * (p.cost || 0);
                 const retailVal = (p.stock || 0) * (p.price || 0);
                 return (
@@ -76,7 +80,9 @@ export default function InventoryValuation() {
             </tbody>
           </table>
         </div>
+        <TablePage value={table}/>
       </div>
+      </>}
     </div>
   );
 }

@@ -1,0 +1,2 @@
+const {defineConfig}=require('@playwright/test');
+module.exports=defineConfig({testDir:'./tests',testMatch:'full-stack-local.spec.js',outputDir:'../tmp/full-e2e-artifacts',workers:1,retries:0,timeout:90000,expect:{timeout:10000},use:{channel:'chrome',headless:true,viewport:{width:1440,height:1000},baseURL:'https://dagangos.com',actionTimeout:12000,navigationTimeout:20000,screenshot:'only-on-failure',trace:'retain-on-failure',reducedMotion:'reduce'}});

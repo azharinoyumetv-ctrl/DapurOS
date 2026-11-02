@@ -1,4 +1,4 @@
-from restaurant_sales import deduct, kitchen
+from restaurant_sales import deduct, kitchen, notify_orders
 """Durable replay of cash sales, with stock and the order in one MongoDB transaction."""
 from permissions import require_permission
 import hashlib
@@ -15,7 +15,7 @@ from pymongo.errors import OperationFailure
 from auth import get_current_user
 from database import get_db
 from models import OrderLineItem
-from stock_ledger import movement
+from stock_ledger import movement, sale_events
 from sale_effects import customer_for_sale, apply_loyalty
 
 router = APIRouter(prefix="/api/offline", tags=["offline"])
@@ -112,23 +112,24 @@ async def synchronize_cash_sale(payload: OfflineCashSale, user: dict = Depends(g
             line.update(saved)
             if line.get('recipe_applied_at_sync'):
                 warnings.append({'product_id': line['product_id'], 'reason': 'recipe_applied_at_sync'})
+            for entry in line.get('ingredient_deductions') or []:
+                ingredient=await db.ingredients.find_one({'id':entry['ingredient_id'],'store_id':user['store_id']},session=session)
+                if ingredient and ingredient.get('stock',0)<0:warnings.append({'product_id':line['product_id'],'ingredient_id':entry['ingredient_id'],'reason':'ingredient_stock_below_zero','shortage_qty':-ingredient['stock']})
             if line.get('unit_cost') is not None:
                 line['cost_snapshot_source'] = 'offline_catalogue'
             else:
                 line['unit_cost'] = product.get('cost') if product else None
                 line['cost_snapshot_source'] = 'sync_time' if line['unit_cost'] is not None else 'unknown'
-            await movement(db, session, identifier=f"{identifier}:sale:{line['product_id']}", store_id=user['store_id'],
-                product_id=line['product_id'], name=line['name'], quantity=-line['quantity'], reference=f"DP-{day}-{counter['seq']:04d}",
-                kind='sale', actor=user['id'], at=sold_at.isoformat())
+            await sale_events(db,session,order_id=identifier,store_id=user['store_id'],line=line,reference=f"DP-{day}-{counter['seq']:04d}",kind='sale',actor=user['id'],at=sold_at.isoformat())
             if product is None:
                 warnings.append({"product_id": line["product_id"], "reason": "product_missing"})
-            elif product.get("stock", 0) < 0:
+            elif not line.get('ingredient_deductions') and (await db.products.find_one({'id':line['product_id'],'store_id':user['store_id']},session=session) or {}).get('stock',0)<0:
                 warnings.append({"product_id": line["product_id"], "reason": "stock_below_zero"})
         customer = await customer_for_sale(db, user["store_id"], payload, session, strict=False)
         document = {
             "_id": identity, "id": identifier, "store_id": user["store_id"],
             "cashier_id": user["id"], "cashier_email": user["email"],
-            "order_no": f"GR-{day}-{counter['seq']:04d}", "items": snapshot_lines, **totals,
+            "order_no": f"DP-{day}-{counter['seq']:04d}", "items": snapshot_lines, **totals,
             "customer_id": customer["id"] if customer else None, "inventory_ledger_version": 1,
             "tax_percent": payload.tax_percent, "payment_method": "cash", "payment_status": "paid",
             "customer_name": payload.customer_name, "customer_phone": payload.customer_phone,
@@ -144,7 +145,9 @@ async def synchronize_cash_sale(payload: OfflineCashSale, user: dict = Depends(g
 
     try:
         async with await db.client.start_session() as session:
-            return await session.with_transaction(commit)
+            result=await session.with_transaction(commit)
+        await notify_orders(user['store_id'])
+        return result
     except OperationFailure as error:
         if error.code in (20, 303):
             raise HTTPException(503, "Sinkronisasi belum tersedia. Transaksi tetap aman di perangkat; jangan hapus data aplikasi") from None

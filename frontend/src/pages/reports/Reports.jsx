@@ -1,6 +1,12 @@
-import { useEffect, useState } from "react";
+import { useAuth } from '@/auth/AuthContext';
+import ReadState from '@/components/ReadState';
+import { loadCatalogue } from '@/api/catalogue';
+import { readCollection } from '@/api/records';
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import api, { fmtIDR } from "@/api/client";
+import api, { fmtIDR, downloadBlob } from "@/api/client";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, LineChart, Line
@@ -26,41 +32,44 @@ export default function Reports() {
   const [expenseForm, setExpenseForm] = useState({ category: "Lainnya", description: "", amount: "", expense_date: new Date().toISOString().slice(0, 10) });
   const [savingExpense, setSavingExpense] = useState(false);
 
-  useEffect(() => {
-    api.get("/orders/stats").then((r) => setStats(r.data)).catch(() => {});
-    api.get("/products").then((r) => setProducts(r.data)).catch(() => {});
-    api.get("/orders/product-sales?days=30&limit=8").then((r) => setProductSales(r.data || [])).catch(() => setProductSales([]));
-  }, [type]);
-
-  useEffect(() => {
-    if (type === "sales") {
-      api.get("/orders/sales-trend?days=7").then((r) => setSalesTrend(r.data)).catch(() => setSalesTrend([]));
-    }
-    if (type === "profit") {
-      api.get("/reports/profit?months=6").then((r) => setProfitReport(r.data)).catch(() => setProfitReport(null));
-    }
-    if (type === "cashflow") {
-      reloadCashflowData();
-    }
-    if (type === "inventory") {
-      api.get("/reports/inventory/turnover?days=30").then((r) => setTurnover(r.data)).catch(() => setTurnover(null));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type]);
-
-  const reloadCashflowData = () => {
-    api.get("/reports/cashflow?weeks=4").then((r) => setCashflowReport(r.data)).catch(() => setCashflowReport(null));
-    api.get("/expenses").then((r) => setExpenses(r.data || [])).catch(() => setExpenses([]));
-  };
+  const { user } = useAuth();
+  const [attempt,setAttempt]=useState(0),[read,setRead]=useState({key:'',loading:true,error:''}),[taxReport,setTaxReport]=useState(null);
+  const key=`${user?.id}:${user?.store_id}:${type}`;
+  const inventoryPage=useTablePage(products),expensePage=useTablePage(expenses);
+  const expenseLock=useRef(false);
+  const reloadCashflowData=()=>setAttempt(n=>n+1);
+  const valueText=value=>typeof value==='number'?fmtIDR(value):'—';
+  useEffect(()=>{
+    let active=true;const controller=new AbortController();setRead({key,loading:true,error:''});
+    const get=async(path,array=false)=>{const {data}=await api.get(path,{signal:controller.signal,timeout:15000});if(array?!Array.isArray(data):!data||typeof data!=='object'||Array.isArray(data))throw Error('Invalid report');return data;};
+    (async()=>{
+      if(type==='sales'){
+        const [stats,trend]=await Promise.all([get('/orders/stats'),get('/orders/sales-trend?days=7',true)]);if(active){setStats(stats);setSalesTrend(trend);}
+      }else if(type==='product'){
+        const rows=await get('/orders/product-sales?days=30&limit=8',true);if(active)setProductSales(rows);
+      }else if(type==='inventory'){
+        const [stats,rows,turnover]=await Promise.all([get('/orders/stats'),loadCatalogue({signal:controller.signal}),get('/reports/inventory/turnover?days=30')]);if(active){setStats(stats);setProducts(rows.filter(p=>!p.recipe?.length));setTurnover(turnover);}
+      }else if(type==='profit'){
+        const data=await get('/reports/profit?months=6');if(active)setProfitReport(data);
+      }else if(type==='cashflow'){
+        const [data,expenses]=await Promise.all([get('/reports/cashflow?weeks=4'),readCollection('/expenses',{signal:controller.signal})]);if(active){setCashflowReport(data);setExpenses(expenses.data);}
+      }else if(type==='tax'){
+        const data=await get('/reports/tax');if(active)setTaxReport(data);
+      }
+      if(active)setRead({key,loading:false,error:''});
+    })().catch(()=>{if(active)setRead({key,loading:false,error:'Laporan belum dapat dimuat. Periksa koneksi lalu coba lagi. Angka tidak ditampilkan saat data belum tersedia.'});});
+    return()=>{active=false;controller.abort();};
+  },[key,attempt]);
 
   const handleAddExpense = (e) => {
     e.preventDefault();
+    if(expenseLock.current)return;
     const amount = parseFloat(expenseForm.amount);
     if (!expenseForm.category || !amount || amount <= 0 || !expenseForm.expense_date) {
       toast.error("Lengkapi kategori, jumlah, dan tanggal pengeluaran.");
       return;
     }
-    setSavingExpense(true);
+    expenseLock.current=true;setSavingExpense(true);
     api.post("/expenses", {
       category: expenseForm.category,
       description: expenseForm.description || null,
@@ -72,7 +81,7 @@ export default function Reports() {
     }).catch((err) => {
       const msg = err?.response?.data?.detail || "Gagal terhubung ke server.";
       toast.error(`Gagal mencatat pengeluaran: ${msg}`);
-    }).finally(() => setSavingExpense(false));
+    }).finally(() => {expenseLock.current=false;setSavingExpense(false);});
   };
 
   const handleDeleteExpense = (id) => {
@@ -222,16 +231,16 @@ export default function Reports() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[hsl(var(--border))]">
-                    {products.slice(0, 6).map((p) => (
+                    {inventoryPage.rows.map((p) => (
                       <tr key={p.id} className="hover:bg-[hsl(var(--background))]/50">
                         <td className="py-3 font-medium">{p.name}</td>
                         <td className="py-3 font-mono">{p.sku || "-"}</td>
                         <td className="py-3 text-center font-mono font-semibold">{p.stock}</td>
                         <td className="py-3 text-center">
                           {p.stock > 10 ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">Cepat</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">Tersedia</span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100">Lambat</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100">Menipis</span>
                           )}
                         </td>
                         <td className="py-3 text-right font-mono font-bold">{fmtIDR(p.stock * (p.cost || 0))}</td>
@@ -250,6 +259,7 @@ export default function Reports() {
         const hasAnyRevenue = series.some((s) => s.revenue > 0);
         return (
           <div className="space-y-6">
+            {profitReport?.notice&&<p role="status" className="card-surface p-4">{profitReport.notice}</p>}
             <div className="card-surface p-6 h-80">
               <h3 className="font-display font-bold text-sm mb-4">Laporan Laba Rugi Bersih (Net Profit) — 6 Bulan Terakhir</h3>
               {!profitReport ? (
@@ -280,11 +290,11 @@ export default function Reports() {
                   </div>
                   <div className="p-4 bg-[hsl(var(--background))] rounded-lg">
                     <p className="text-xs text-[hsl(var(--muted))]">HPP (COGS)</p>
-                    <p className="font-display font-bold text-base mt-1">{fmtIDR(totals.cogs)}</p>
+                    <p className="font-display font-bold text-base mt-1">{valueText(totals.cogs)}</p>
                   </div>
                   <div className="p-4 bg-[hsl(var(--background))] rounded-lg">
                     <p className="text-xs text-[hsl(var(--muted))]">Laba Kotor</p>
-                    <p className="font-display font-bold text-base mt-1">{fmtIDR(totals.gross_profit)}</p>
+                    <p className="font-display font-bold text-base mt-1">{valueText(totals.gross_profit)}</p>
                   </div>
                   <div className="p-4 bg-[hsl(var(--background))] rounded-lg">
                     <p className="text-xs text-[hsl(var(--muted))]">Beban Operasional</p>
@@ -292,11 +302,11 @@ export default function Reports() {
                   </div>
                   <div className="p-4 bg-[hsl(var(--background))] rounded-lg">
                     <p className="text-xs text-[hsl(var(--muted))]">Laba Bersih</p>
-                    <p className="font-display font-bold text-base mt-1">{fmtIDR(totals.net_profit)}</p>
+                    <p className="font-display font-bold text-base mt-1">{valueText(totals.net_profit)}</p>
                   </div>
                 </div>
                 <p className="text-[11px] text-[hsl(var(--muted))] mt-3">
-                  HPP dihitung dari harga modal (cost) produk saat ini dikali kuantitas terjual, bukan snapshot harga modal saat transaksi terjadi. Beban operasional berasal dari pengeluaran yang dicatat di tab Arus Kas.
+                  HPP menggunakan biaya yang tersimpan saat penjualan. Jika biaya transaksi lama tidak tersedia, laba ditandai —. Beban operasional berasal dari pengeluaran tercatat.
                 </p>
               </div>
             )}
@@ -394,7 +404,7 @@ export default function Reports() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[hsl(var(--border))]">
-                      {expenses.slice(0, 10).map((ex) => (
+                      {expensePage.rows.map((ex) => (
                         <tr key={ex.id} className="hover:bg-[hsl(var(--background))]/50">
                           <td className="py-2.5">{ex.expense_date}</td>
                           <td className="py-2.5">{ex.category}</td>
@@ -415,39 +425,13 @@ export default function Reports() {
       }
 
       case "tax":
-        const taxBase = stats?.month_sales || 15000000;
-        const ppn = taxBase * 0.11; // 11% PPN
-        return (
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="card-surface p-6 space-y-4">
-              <h3 className="font-display font-bold text-sm border-b border-[hsl(var(--border))] pb-2">Kewajiban Pajak Bulan Ini</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[hsl(var(--muted))]">Dasar Pengenaan Pajak (DPP)</span>
-                  <span className="font-mono font-semibold">{fmtIDR(taxBase)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[hsl(var(--muted))]">PPN Terhutang (11%)</span>
-                  <span className="font-mono font-semibold text-red-500">{fmtIDR(ppn)}</span>
-                </div>
-                <div className="flex justify-between border-t border-[hsl(var(--border))] pt-2 font-bold">
-                  <span>Net Revenue Setelah Pajak</span>
-                  <span className="font-mono text-emerald-600">{fmtIDR(taxBase - ppn)}</span>
-                </div>
-              </div>
-            </div>
-            <div className="card-surface p-6 space-y-4">
-              <h3 className="font-display font-bold text-sm border-b border-[hsl(var(--border))] pb-2">Kepatuhan Pajak</h3>
-              <p className="text-xs text-[hsl(var(--muted))] leading-relaxed">
-                Pajak Pertambahan Nilai (PPN) dihitung otomatis berdasarkan PMK Republik Indonesia dengan tarif standar 11%.
-                Semua laporan perpajakan dapat diekspor langsung ke CSV untuk diimpor ke aplikasi e-Faktur DJP Online.
-              </p>
-              <button onClick={() => toast.success("Laporan e-Faktur DJP siap diunduh (Format CSV).")} className="btn-primary w-full py-2 text-xs font-semibold">
-                Unduh Format e-Faktur CSV
-              </button>
-            </div>
-          </div>
-        );
+        return <div className="card-surface p-6 space-y-4" data-testid="recorded-tax-report">
+          <h2 className="font-bold">Pajak tercatat pada transaksi lunas</h2>
+          <p className="text-sm">Periode {taxReport?.period} · {taxReport?.timezone} · {taxReport?.orders} transaksi</p>
+          <dl className="grid grid-cols-2 gap-3 text-sm"><dt>Penjualan sebelum diskon</dt><dd>{valueText(taxReport?.subtotal)}</dd><dt>Diskon</dt><dd>{valueText(taxReport?.discount)}</dd><dt>Biaya layanan tercatat</dt><dd>{valueText(taxReport?.service_charge)}</dd><dt>Pajak tercatat</dt><dd data-testid="recorded-tax-total">{valueText(taxReport?.tax_amount)}</dd><dt>Total transaksi</dt><dd>{valueText(taxReport?.total)}</dd></dl>
+          <p className="text-xs text-[hsl(var(--muted))]">Rekap ini berasal dari nominal pajak pada transaksi. CSV merupakan rincian operasional restoran, dan dapat diperiksa bersama catatan akuntansi Anda.</p>
+          <button className="btn-primary" onClick={()=>api.get('/reports/tax.csv',{responseType:'blob'}).then(r=>downloadBlob(r.data,`dapuros-recorded-tax-${taxReport.period}.csv`)).catch(()=>toast.error('CSV belum dapat diunduh. Coba lagi.'))} data-testid="recorded-tax-download">Unduh rincian CSV</button>
+        </div>;
 
       default:
         return <p className="text-sm text-[hsl(var(--muted))]">Tipe laporan tidak didukung.</p>;
@@ -477,7 +461,10 @@ export default function Reports() {
         })}
       </div>
 
-      {renderReport()}
+      <ReadState loading={read.key!==key||read.loading} error={read.key===key?read.error:''} retry={()=>setAttempt(n=>n+1)} testid="report-read-state"/>
+      {read.key===key&&!read.loading&&!read.error&&renderReport()}
+      {read.key===key&&!read.loading&&!read.error&&type==='inventory'&&<TablePage value={inventoryPage}/>}
+      {read.key===key&&!read.loading&&!read.error&&type==='cashflow'&&<TablePage value={expensePage} label="pengeluaran"/>}
     </div>
   );
 }

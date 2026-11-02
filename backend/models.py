@@ -53,13 +53,13 @@ class UserPublic(BaseModel):
 # ---------- Products ----------
 class RecipeItem(BaseModel):
     ingredient_id: str
-    quantity: float
+    quantity: float = Field(gt=0, le=1_000_000, allow_inf_nan=False)
 
 class ProductBase(BaseModel):
     name: str
     sku: Optional[str] = None
-    price: float = Field(ge=0)
-    cost: float = Field(default=0, ge=0)
+    price: float = Field(ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    cost: float = Field(default=0, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
     stock: int = Field(default=0, ge=0)
     category: Optional[str] = "Umum"
     unit: Optional[str] = "pcs"
@@ -76,9 +76,10 @@ class ProductCreate(ProductBase):
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     sku: Optional[str] = None
-    price: Optional[float] = None
-    cost: Optional[float] = None
-    stock: Optional[int] = None
+    price: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    cost: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    stock: Optional[int] = Field(default=None, ge=0)
+    expected_stock: Optional[int] = Field(default=None, ge=-1_000_000_000)
     category: Optional[str] = None
     unit: Optional[str] = None
     image_url: Optional[str] = None
@@ -216,32 +217,49 @@ class Unit(UnitBase):
     updated_at: str = Field(default_factory=utcnow_iso)
 
 class StockAdjustmentCreate(BaseModel):
-    product_name: str
-    sku: Optional[str] = None
-    adjustment_qty: int
-    type: str  # add | sub
-    reason: str
-    created_by: str
+    product_id: Optional[str] = Field(default=None, max_length=200)
+    kind: Literal['product', 'ingredient'] = 'product'
+    product_name: str = Field(default='', max_length=200)
+    sku: Optional[str] = Field(default=None, max_length=200)
+    adjustment_qty: float = Field(gt=0, le=100000, allow_inf_nan=False)
+    type: Literal['add', 'sub']
+    reason: str = Field(min_length=1, max_length=1000)
+    created_by: str = Field(default='', max_length=200)
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
 class StockAdjustment(StockAdjustmentCreate):
+    type: str
+    reason: Optional[str] = ''
+    adjustment_qty: float
+    created_by: Optional[str] = None
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
     created_at: str = Field(default_factory=utcnow_iso)
 
 class StockTransferItem(BaseModel):
-    name: str
-    qty: int
+    product_id: str = Field(min_length=1, max_length=200)
+    kind: Literal['product','ingredient'] = 'product'
+    name: str = Field(default='', max_length=200)
+    qty: float = Field(gt=0, le=100000, allow_inf_nan=False)
 
 class StockTransferCreate(BaseModel):
     from_branch: str
     to_branch: str
-    items: List[StockTransferItem]
-    status: str = "Shipped"
+    items: List[StockTransferItem] = Field(min_length=1, max_length=500)
+    status: Literal['Shipped'] = "Shipped"
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
-class StockTransfer(StockTransferCreate):
+class StockTransfer(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
     created_at: str = Field(default_factory=utcnow_iso)
+    from_branch: str
+    to_branch: str
+    from_branch_id: Optional[str] = None
+    to_branch_id: Optional[str] = None
+    items: List[dict]
+    status: str
+    inventory_applied: bool = False
 
 class SupplierBase(BaseModel):
     name: str
@@ -255,11 +273,25 @@ class Supplier(SupplierBase):
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)
 
+class PurchaseLine(BaseModel):
+    product_id: str = Field(min_length=1, max_length=200)
+    kind: Literal['product', 'ingredient'] = 'product'
+    name: str = Field(default='', max_length=200)
+    qty: float = Field(gt=0, le=100000, allow_inf_nan=False, validation_alias=AliasChoices('qty', 'quantity'))
+    cost: float = Field(ge=0, le=1_000_000_000_000, allow_inf_nan=False, validation_alias=AliasChoices('cost','price','unit_cost'))
+    received_qty: float = Field(default=0, ge=0, allow_inf_nan=False)
+
+class ReceivingLine(BaseModel):
+    product_id: str = Field(min_length=1, max_length=200)
+    kind: Literal['product', 'ingredient'] = 'product'
+    qty: float = Field(gt=0, le=100000, allow_inf_nan=False, validation_alias=AliasChoices('qty','quantity'))
+
 class PurchaseOrderCreate(BaseModel):
     po_no: str
     supplier_id: str
     supplier_name: str
-    total: float
+    items: List[PurchaseLine] = Field(default_factory=list, max_length=500)
+    total: float = Field(ge=0, le=1_000_000_000_000, allow_inf_nan=False)
     status: str = "Ordered"
 
 class PurchaseOrder(PurchaseOrderCreate):
@@ -269,29 +301,35 @@ class PurchaseOrder(PurchaseOrderCreate):
 
 class GoodsReceivingCreate(BaseModel):
     po_no: str
-    gr_no: str
-    received_by: str
+    gr_no: str = Field(default='', max_length=200)
+    received_by: str = Field(default='', max_length=200)
     received_at: str = Field(default_factory=utcnow_iso)
+    items: Optional[List[ReceivingLine]] = Field(default=None, min_length=1, max_length=500)
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
 class GoodsReceiving(GoodsReceivingCreate):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
+    items: List[dict] = Field(default_factory=list)
+    inventory_applied: bool = False
 
 class SupplierInvoiceCreate(BaseModel):
     invoice_no: str
     po_no: str
-    amount: float
-    status: str = "Unpaid"
+    amount: float = Field(gt=0, le=1_000_000_000_000, allow_inf_nan=False)
+    status: Literal['Unpaid','Paid'] = "Unpaid"
     due_date: str
 
 class SupplierInvoice(SupplierInvoiceCreate):
+    status: str = 'Unpaid'
+    amount: float
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
     created_at: str = Field(default_factory=utcnow_iso)
 
 class SupplierInvoiceUpdate(BaseModel):
     """Partial update -- used to mark an invoice paid without re-submitting the full record."""
-    status: Optional[str] = None
+    status: Optional[Literal['Unpaid','Partial','Paid']] = None
 
 class CustomerBase(BaseModel):
     name: str
@@ -299,6 +337,7 @@ class CustomerBase(BaseModel):
     email: Optional[str] = None
     membership_tier: Optional[str] = "Bronze"
     loyalty_points: int = 0
+    expected_loyalty_points: Optional[int] = None
     notes: Optional[str] = None
 
 class Customer(CustomerBase):
@@ -325,35 +364,43 @@ class DebtReceivableCreate(BaseModel):
     customer_name: str
     phone: Optional[str] = None
     order_no: str
-    amount: float
-    paid_amount: float = 0
+    amount: float = Field(gt=0, le=1_000_000_000_000, allow_inf_nan=False)
+    paid_amount: float = Field(default=0, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
     due_date: str
     status: str = "Unpaid"  # Unpaid | Partial | Paid
 
 class DebtReceivable(DebtReceivableCreate):
+    amount: float
+    paid_amount: float = 0
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
 
 class DebtReceivableUpdate(BaseModel):
     """Partial update -- used to record a payment/settlement against an existing
     receivable without re-submitting the full record."""
-    paid_amount: Optional[float] = None
+    paid_amount: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    expected_paid_amount: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    request_id: Optional[str] = Field(default=None,min_length=1,max_length=200)
     status: Optional[str] = None
 
 class DebtPayableCreate(BaseModel):
     supplier_name: str
     invoice_no: str
-    amount: float
-    paid_amount: float = 0
+    amount: float = Field(gt=0, le=1_000_000_000_000, allow_inf_nan=False)
+    paid_amount: float = Field(default=0, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
     due_date: str
     status: str = "Unpaid"
 
 class DebtPayable(DebtPayableCreate):
+    amount: float
+    paid_amount: float = 0
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
 
 class DebtPayableUpdate(BaseModel):
-    paid_amount: Optional[float] = None
+    paid_amount: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    expected_paid_amount: Optional[float] = Field(default=None, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
+    request_id: Optional[str] = Field(default=None,min_length=1,max_length=200)
     status: Optional[str] = None
 
 class StaffBase(BaseModel):
@@ -424,21 +471,25 @@ class Device(DeviceCreate):
 
 # ---------- Ingredients (DapurOS BOM) ----------
 class IngredientBase(BaseModel):
-    name: str
-    stock: float = Field(default=0.0, ge=0)
-    safety_stock: float = Field(default=0.0, ge=0)
-    unit: str  # g, ml, pcs, kg, etc.
+    name: str = Field(min_length=1, max_length=200)
+    stock: float = Field(default=0.0, ge=0, le=1_000_000_000, allow_inf_nan=False)
+    safety_stock: float = Field(default=0.0, ge=0, le=1_000_000_000, allow_inf_nan=False)
+    unit: str = Field(min_length=1, max_length=40)
 
 class IngredientCreate(IngredientBase):
     pass
 
 class IngredientUpdate(BaseModel):
     name: Optional[str] = None
-    stock: Optional[float] = None
-    safety_stock: Optional[float] = None
+    stock: Optional[float] = Field(default=None, ge=0, le=1_000_000_000, allow_inf_nan=False)
+    expected_stock: Optional[float] = Field(default=None, ge=-1_000_000_000, le=1_000_000_000, allow_inf_nan=False)
+    safety_stock: Optional[float] = Field(default=None, ge=0, le=1_000_000_000, allow_inf_nan=False)
     unit: Optional[str] = None
 
 class Ingredient(IngredientBase):
+    # Offline cash sales are retained even if reconciliation reveals a shortage.
+    # Creation/edit payloads still reject negative physical stock.
+    stock: float = Field(default=0,allow_inf_nan=False)
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     store_id: str
@@ -463,9 +514,10 @@ SPOILAGE_REASON_ALIASES = {
 
 
 class SpoilageCreate(BaseModel):
-    quantity_lost: float = Field(gt=0)
+    quantity_lost: float = Field(gt=0, le=1_000_000_000, allow_inf_nan=False)
     reason: str
     notes: Optional[str] = None
+    request_id: Optional[str] = Field(default=None,min_length=1,max_length=200)
 
 
 class SpoilageLog(BaseModel):

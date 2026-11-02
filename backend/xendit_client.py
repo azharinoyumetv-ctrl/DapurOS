@@ -22,8 +22,6 @@ dropped their "ID_" prefix (OVO not ID_OVO), and OVO no longer needs a
 mobile_number in channel_properties (v3 OVO is REDIRECT/SKIP like the other
 e-wallets, not the old phone-linked flow).
 """
-import os
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import httpx
@@ -41,13 +39,6 @@ class PaymentNotConfiguredError(Exception):
     pass
 
 
-def _is_mock_mode(cfg: Dict[str, Any]) -> bool:
-    # Mock payment responses are DEV-ONLY. In production, a merchant that hasn't
-    # configured their own (BYO) Xendit key must get a clear error — never a fake QR.
-    if os.environ.get("ALLOW_PAYMENT_MOCK", "false").lower() not in ("1", "true", "yes"):
-        return False
-    k = (cfg.get("secret_key") or "").strip()
-    return (not k) or k.startswith("xnd_development_REPLACE") or k == "test"
 
 
 def _require_configured(cfg: Dict[str, Any], purpose: str) -> None:
@@ -86,28 +77,6 @@ async def create_qris(cfg: Dict[str, Any], external_id: str, amount: int, curren
     """cfg = the store's integrations.xendit dict: {is_active, secret_key, webhook_token}."""
     if type(amount) is not int or not 0 < amount <= 10_000_000 or currency != "IDR":
         raise PaymentNotConfiguredError("Nominal QRIS harus dalam Rupiah, lebih dari nol dan maksimal Rp10.000.000.")
-    if _is_mock_mode(cfg):
-        # Mock for demo when no real key set
-        mock_res = {
-            "payment_request_id": f"mock_qr_{uuid.uuid4().hex[:12]}",
-            "reference_id": external_id,
-            "request_amount": amount,
-            "currency": currency,
-            "status": "REQUIRES_ACTION",
-            "actions": [{
-                "type": "PRESENT_TO_CUSTOMER",
-                "descriptor": "QR_STRING",
-                "value": (
-                    f"00020101021226680014ID.CO.QRIS.WWW0118ID{uuid.uuid4().hex[:18].upper()}0303UMI"
-                    f"5204481253033605802ID5910DapurOS6007Jakarta61051234062260722MOCK{external_id[:8]}"
-                ),
-            }],
-            "_mock": True,
-        }
-        # Same flattening as the real path below -- caught by a local test that the mock
-        # branch previously skipped this and left qr_string missing entirely.
-        mock_res["qr_string"] = _first_action_value(mock_res, "QR_STRING")
-        return mock_res
     _require_configured(cfg, "QRIS")
     payload = {
         "reference_id": external_id,
@@ -146,20 +115,6 @@ async def create_ewallet_charge(
 ) -> Dict[str, Any]:
     """cfg = the store's integrations.xendit dict: {is_active, secret_key, webhook_token}.
     channel_code is the plain v3 code: OVO | DANA | SHOPEEPAY | LINKAJA (no ID_ prefix)."""
-    if _is_mock_mode(cfg):
-        action_url = f"https://example.com/mock-ewallet/{reference_id}"
-        mock_res = {
-            "payment_request_id": f"mock_ewc_{uuid.uuid4().hex[:12]}",
-            "reference_id": reference_id,
-            "channel_code": channel_code,
-            "request_amount": amount,
-            "currency": currency,
-            "status": "REQUIRES_ACTION",
-            "actions": [{"type": "REDIRECT_CUSTOMER", "descriptor": "WEB_URL", "value": action_url}],
-            "_mock": True,
-        }
-        mock_res["checkout_url"] = _first_action_value(mock_res, "WEB_URL")
-        return mock_res
 
     _require_configured(cfg, "e-wallet")
     payload = {

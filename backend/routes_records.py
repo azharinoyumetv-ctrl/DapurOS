@@ -10,8 +10,10 @@ from paging import encode_cursor, decode_cursor
 
 router=APIRouter(prefix='/api/records',tags=['record_pages'])
 KINDS={
+ 'ingredients':('ingredients','inventory.read','pro',['name','unit']),
  'memberships':('memberships','customers.read','business',['name']),
- 'customers':('customers','customers.read','starter',['name','phone','email']),
+ 'customers':('customers','customers.read','pro',['name','phone','email']),
+ 'expenses':('expenses','reports.read','pro',['category','description','expense_date']),
  'suppliers':('suppliers','suppliers.read','pro',['name','phone']),
  'purchase-orders':('purchase_orders','purchase.read','pro',['po_no','supplier_name']),
  'receiving':('goods_receiving','purchase.read','pro',['po_no','gr_no']),

@@ -6,6 +6,7 @@ export function canonicalRole(role) {
 }
 export const canManageStaff = role => canonicalRole(role) === "Owner";
 export const canManageProducts = role => ["Owner", "Manager"].includes(canonicalRole(role));
+export const canManageCustomerRules = role => ["Owner", "Manager"].includes(canonicalRole(role));
 export const canViewTeamAttendance = role => ["Owner", "Manager"].includes(canonicalRole(role));
 
 export const ROLE_MODULES = {
@@ -22,6 +23,7 @@ export function canAccessPath(role, pathname) {
   const path = pathname.replace(/^\/dapuros\/app/, "").replace(/\/$/, "") || "/dashboard";
   const matches = prefix => path === prefix || path.startsWith(prefix + "/");
   if (role === "Owner") return true;
+  if (matches('/customers/membership') || matches('/customers/loyalty')) return canManageCustomerRules(role);
   if (matches("/staff/attendance")) return canViewTeamAttendance(role);
   if (ownerPaths.some(matches)) return false;
   if (["/products/categories", "/products/brands", "/products/units"].some(matches)) return canManageProducts(role);

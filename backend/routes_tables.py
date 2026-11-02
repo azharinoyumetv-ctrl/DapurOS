@@ -9,7 +9,11 @@ from models import Table, TableCreate, TableUpdate, OrderSession, Order
 from auth import get_current_user
 from routes_orders import _calc
 from restaurant_billing import settle_table, split_table, settle_split
+from restaurant_billing import close_empty
+from decimal import Decimal
 from permissions import require_permission
+import transactions
+from table_safety import ensure_idle
 
 router = APIRouter(prefix="/api/tables", tags=["tables"], dependencies=[Depends(require_permission("pos.use"))])
 
@@ -51,19 +55,17 @@ async def list_tables(floor_id: Optional[str] = None, user: dict = Depends(get_c
 async def create_table(payload: TableCreate, user: dict = Depends(get_current_user)):
     db = get_db()
     from plan_limits import check_capacity
-    await check_capacity(db, user["store_id"], user.get("plan"), "tables", "max_tables")
-    existing = await db.tables.find_one({"store_id": user["store_id"], "floor_id": payload.floor_id, "label": payload.label})
-    if existing:
-        raise HTTPException(status_code=400, detail="Meja dengan label tersebut sudah ada di lantai ini")
-    
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "created_at": utcnow().isoformat(),
-        "updated_at": utcnow().isoformat(),
-        **payload.model_dump()
-    }
-    await db.tables.insert_one(doc)
+    async def create(session):
+        if not await db.floors.find_one({'store_id':user['store_id'],'id':payload.floor_id},session=session):
+            raise HTTPException(422,'Lantai tidak ditemukan di restoran ini.')
+        await db.capacity_guards.update_one({'_id':user['store_id']+':tables'},{'$inc':{'revision':1}},upsert=True,session=session)
+        await check_capacity(db, user['store_id'], user.get('plan'), 'tables', 'max_tables')
+        if await db.tables.find_one({'store_id':user['store_id'],'floor_id':payload.floor_id,'label':payload.label},session=session):
+            raise HTTPException(409,'Meja dengan label tersebut sudah ada di lantai ini.')
+        doc={'id':str(uuid.uuid4()),'store_id':user['store_id'],'created_at':utcnow().isoformat(),'updated_at':utcnow().isoformat(),**payload.model_dump()}
+        await db.tables.insert_one(dict(doc),session=session)
+        return doc
+    doc=await transactions.run_transaction(db,create)
     await notify_clients(user["store_id"])
     return _strip_id(doc)
 
@@ -76,14 +78,13 @@ async def update_table(table_id: str, payload: TableUpdate, user: dict = Depends
         raise HTTPException(status_code=400, detail="Tidak ada perubahan data")
     
     update["updated_at"] = utcnow().isoformat()
-    res = await db.tables.find_one_and_update(
-        {"id": table_id, "store_id": user["store_id"]},
-        {"$set": update},
-        return_document=True,
-        projection={"_id": 0}
-    )
-    if not res:
-        raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
+    async def save(session):
+        scope={'id':table_id,'store_id':user['store_id']}
+        if not await db.tables.find_one(scope,session=session):raise HTTPException(404,'Meja tidak ditemukan.')
+        if update.get('status')=='Vacant':await ensure_idle(db,user['store_id'],[table_id],session)
+        if update.get('floor_id') and not await db.floors.find_one({'id':update['floor_id'],'store_id':user['store_id']},session=session):raise HTTPException(422,'Lantai tidak ditemukan di restoran ini.')
+        return await db.tables.find_one_and_update(scope,{'$set':update},return_document=True,projection={'_id':0},session=session)
+    res=await transactions.run_transaction(db,save)
     await notify_clients(user["store_id"])
     return res
 
@@ -91,9 +92,11 @@ async def update_table(table_id: str, payload: TableUpdate, user: dict = Depends
 @router.delete("/{table_id}", dependencies=[Depends(require_permission('products.write'))])
 async def delete_table(table_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
-    res = await db.tables.delete_one({"id": table_id, "store_id": user["store_id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
+    async def remove(session):
+        await ensure_idle(db,user['store_id'],[table_id],session)
+        res=await db.tables.delete_one({'id':table_id,'store_id':user['store_id']},session=session)
+        if not res.deleted_count:raise HTTPException(404,'Meja tidak ditemukan.')
+    await transactions.run_transaction(db,remove)
     await notify_clients(user["store_id"])
     return {"ok": True}
 
@@ -103,31 +106,21 @@ async def delete_table(table_id: str, user: dict = Depends(get_current_user)):
 @router.post("/{table_id}/session", response_model=OrderSession)
 async def open_session(table_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
-    table = await db.tables.find_one({"id": table_id, "store_id": user["store_id"]})
-    if not table:
-        raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
-    
-    # Check if there is an active session already
-    active = await db.order_sessions.find_one({"table_id": table_id, "store_id": user["store_id"], "status": "Active"})
-    if active:
-        return _strip_id(active)
-    
-    session_id = str(uuid.uuid4())
-    doc = {
-        "id": session_id,
-        "table_id": table_id,
-        "store_id": user["store_id"],
-        "opened_at": utcnow().isoformat(),
-        "closed_at": None,
-        "status": "Active"
-    }
-    await db.order_sessions.insert_one(doc)
-    
-    # Update table status to Seated
-    await db.tables.update_one(
-        {"id": table_id, "store_id": user["store_id"]},
-        {"$set": {"status": "Seated", "updated_at": utcnow().isoformat()}}
-    )
+    async def open_table(session):
+        scope={'id':table_id,'store_id':user['store_id']}
+        table=await db.tables.find_one(scope,session=session)
+        if not table:raise HTTPException(404,'Meja tidak ditemukan.')
+        # Acquire a write before the predicate read so concurrent opens retry
+        # against a fresh transaction snapshot rather than creating duplicates.
+        await db.tables.update_one(scope,{'$inc':{'session_revision':1}},session=session)
+        active=await db.order_sessions.find({'table_id':table_id,'store_id':user['store_id'],'status':'Active'},session=session).limit(2).to_list(2)
+        if len(active)>1:raise HTTPException(409,'Meja memiliki sesi ganda. Minta Owner memeriksa tagihan sebelum melanjutkan.')
+        if active:return _strip_id(active[0])
+        doc={'id':str(uuid.uuid4()),'table_id':table_id,'store_id':user['store_id'],'opened_at':utcnow().isoformat(),'closed_at':None,'status':'Active'}
+        await db.order_sessions.insert_one(dict(doc),session=session)
+        await db.tables.update_one(scope,{'$set':{'status':'Seated','updated_at':utcnow().isoformat()}},session=session)
+        return doc
+    doc=await transactions.run_transaction(db,open_table)
     await notify_clients(user["store_id"])
     return _strip_id(doc)
 
@@ -140,7 +133,8 @@ async def get_active_session_bill(table_id: str, user: dict = Depends(get_curren
         raise HTTPException(status_code=404, detail="Tidak ada sesi aktif di meja ini")
     
     # Find all orders in this session
-    orders = await db.orders.find({"session_id": session["id"], "store_id": user["store_id"], "payment_status": "pending"}, {"_id": 0}).to_list(length=100)
+    orders = await db.orders.find({"session_id": session["id"], "store_id": user["store_id"], "payment_status": "pending"}, {"_id": 0}).to_list(None)
+    split_orders=await db.orders.find({'source_session_id':session['id'],'store_id':user['store_id'],'payment_status':'pending'},{'_id':0}).to_list(None)
     
     subtotal = 0
     discount = 0
@@ -151,15 +145,15 @@ async def get_active_session_bill(table_id: str, user: dict = Depends(get_curren
         discount += o.get("discount", 0)
         items_summary.extend(o.get("items", []))
         
-    # Recalculate F&B service charge (5%) and tax_pb1 (10% applied on subtotal + service)
-    base_amount = max(0, subtotal - discount)
-    service_charge = round(base_amount * 0.05, 2)
-    tax_pb1 = round((base_amount + service_charge) * 0.10, 2)
-    grand_total = base_amount + service_charge + tax_pb1
+    # Preserve the exact saved allocations, including cents retained after splits.
+    service_charge=float(sum((Decimal(str(o.get('service_charge',0))) for o in orders),Decimal(0)))
+    tax_pb1=float(sum((Decimal(str(o.get('tax_amount',o.get('tax_pb1',0)))) for o in orders),Decimal(0)))
+    grand_total=float(sum((Decimal(str(o['total'])) for o in orders),Decimal(0)))
     
     return {
         "session": _strip_id(session),
         "orders": orders,
+        'split_orders':split_orders,
         "items": items_summary,
         "subtotal": subtotal,
         "discount": discount,
@@ -170,8 +164,15 @@ async def get_active_session_bill(table_id: str, user: dict = Depends(get_curren
 
 
 @router.post('/{table_id}/checkout')
-async def settle_session(table_id: str, payment_method: str = Body(..., embed=True), cash_received: Optional[float] = Body(None, embed=True), expected_session_id: Optional[str] = Body(None, embed=True), checked_in_bank: bool = Body(False, embed=True), received_amount: Optional[float] = Body(None, embed=True), user: dict = Depends(get_current_user)):
-    result = await settle_table(get_db(), user, table_id, payment_method, expected=expected_session_id, cash=cash_received, checked=checked_in_bank, amount=received_amount)
+async def settle_session(table_id: str, payment_method: str = Body(..., embed=True), cash_received: Optional[float] = Body(None, embed=True), expected_session_id: Optional[str] = Body(None, embed=True), checked_in_bank: bool = Body(False, embed=True), received_amount: Optional[float] = Body(None, embed=True), expected_total: Optional[float] = Body(None,embed=True,ge=0,allow_inf_nan=False), user: dict = Depends(get_current_user)):
+    result = await settle_table(get_db(), user, table_id, payment_method, expected=expected_session_id, cash=cash_received, checked=checked_in_bank, amount=received_amount,expected_total=expected_total)
+    await notify_clients(user['store_id'])
+    return result
+
+
+@router.post('/{table_id}/close-empty')
+async def close_empty_session(table_id:str,expected_session_id:str=Body(...,embed=True),user:dict=Depends(get_current_user)):
+    result=await close_empty(get_db(),user,table_id,expected_session_id)
     await notify_clients(user['store_id'])
     return result
 

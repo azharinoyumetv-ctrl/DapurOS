@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { subscribeStore } from "@/api/liveSync";
+import { useEffect, useState, useRef } from "react";
 import api from "@/api/client";
 import { useAuth } from "@/auth/AuthContext";
 import {
@@ -13,19 +14,25 @@ export default function KdsScreen() {
   const [station, setStation] = useState("all"); // all | Kitchen | Bar
   const [loading, setLoading] = useState(true);
   const [websocketConnected, setWebsocketConnected] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const previousTickets = useRef(null);
+  const readAttempt = useRef(0);
 
   const loadTickets = async () => {
+    const attempt = ++readAttempt.current;
     try {
       const qStation = station === "all" ? undefined : station;
       const res = await api.get("/kds", { params: { station: qStation } });
       
-      // Play sound if new ticket count is higher than current ticket count
-      if (tickets.length > 0 && res.data.length > tickets.length) {
+      if (attempt !== readAttempt.current) return;
+      if (previousTickets.current && res.data.some(ticket => !previousTickets.current.has(ticket.id))) {
         playBeep();
       }
-      
+      previousTickets.current = new Set(res.data.map(ticket => ticket.id));
+      setLoadError('');
       setTickets(res.data);
     } catch (e) {
+      if (attempt === readAttempt.current) setLoadError('Layar dapur belum dapat diperbarui. Pesanan sebelumnya tetap ditampilkan. Coba lagi.');
     } finally {
       setLoading(false);
     }
@@ -46,77 +53,20 @@ export default function KdsScreen() {
       gainNode.connect(audioCtx.destination);
       
       oscillator.start();
+      oscillator.onended = () => audioCtx.close();
       setTimeout(() => oscillator.stop(), 250);
     } catch (err) {}
   };
 
   useEffect(() => {
+    previousTickets.current = null;
     loadTickets();
   }, [station]);
 
-  // WebSocket Live Sync
   useEffect(() => {
     if (!user?.store_id) return;
-
-    let ws;
-    let pollInterval;
-
-    const connectWs = () => {
-      const envUrl = process.env.REACT_APP_BACKEND_URL;
-      let backendHost = "localhost:8000";
-      if (envUrl && envUrl !== "undefined" && envUrl !== "") {
-        backendHost = envUrl.replace(/https?:\/\//, "");
-      } else if (!window.location.origin.includes("localhost")) {
-        backendHost = window.location.host || "dagangos.com";
-      }
-
-      const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${wsProto}//${backendHost}/api/ws/${user.store_id}`;
-
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        setWebsocketConnected(true);
-        if (pollInterval) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-        }
-      };
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === "TABLE_UPDATE" || data.type === "ORDER_CREATE") {
-          loadTickets();
-        }
-      };
-
-      ws.onclose = () => {
-        setWebsocketConnected(false);
-        if (!pollInterval) {
-          pollInterval = setInterval(() => {
-            loadTickets();
-          }, 3000);
-        }
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-    };
-
-    connectWs();
-
-    // SLA display update ticker (runs every 30s)
-    const slaInterval = setInterval(() => {
-      loadTickets();
-    }, 30000);
-
-    return () => {
-      if (ws) ws.close();
-      if (pollInterval) clearInterval(pollInterval);
-      clearInterval(slaInterval);
-    };
-  }, [user?.store_id, tickets.length]);
+    return subscribeStore(user.store_id, loadTickets, setWebsocketConnected);
+  }, [user?.store_id, station]);
 
   const handleCycleStatus = async (ticketId, currentStatus) => {
     let nextStatus = "Pending";
@@ -155,11 +105,11 @@ export default function KdsScreen() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`text-[10px] uppercase font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${websocketConnected ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+          <span className={`text-[10px] font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${websocketConnected ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
             {websocketConnected ? (
-              <><Wifi size={12} /> WebSocket Aktif</>
+              <><Wifi size={12} /> Pembaruan langsung</>
             ) : (
-              <><WifiOff size={12} /> HTTP Polling</>
+              <><Wifi size={12} /> Pembaruan berkala</>
             )}
           </span>
           <div className="flex rounded-lg border border-[hsl(var(--border))] p-1 bg-[hsl(var(--surface))]">
@@ -188,9 +138,10 @@ export default function KdsScreen() {
         </div>
       </div>
 
+      {loadError && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{loadError} <button type="button" onClick={loadTickets} className="underline font-bold">Coba lagi</button></div>}
       {loading ? (
         <div className="py-12 text-center text-xs text-[hsl(var(--muted))]" data-testid="kds-loading">
-          Memuat daftar pesanan KDS…
+          Memuat daftar pesanan KDSâ€¦
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -281,7 +232,7 @@ export default function KdsScreen() {
             );
           })}
           
-          {tickets.length === 0 && (
+          {tickets.length === 0 && !loadError && (
             <div className="col-span-full py-16 text-center text-xs text-[hsl(var(--muted))] bg-[hsl(var(--surface))]/40 border border-dashed rounded-2xl flex flex-col items-center justify-center gap-3">
               <Layers size={40} className="stroke-[1.2] text-[hsl(var(--muted))]/50" />
               <div>

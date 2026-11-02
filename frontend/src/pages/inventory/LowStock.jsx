@@ -1,19 +1,16 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
+import useInventory from "@/hooks/useInventory";
+import useTablePage from "@/hooks/useTablePage";
+import TablePage from "@/components/TablePage";
+import ReadState from "@/components/ReadState";
 import api, { fmtIDR } from "@/api/client";
 import { ShoppingBag, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function LowStock() {
-  const [lowStockProducts, setLowStockProducts] = useState([]);
-
-  useEffect(() => {
-    api.get("/products").then((r) => {
-      const list = r.data || [];
-      // Filter products with stock <= 5
-      const low = list.filter(p => p.stock <= 5);
-      setLowStockProducts(low);
-    }).catch(() => {});
-  }, []);
+  const { products, loading, error, retry } = useInventory();
+  const lowStockProducts=useMemo(()=>products.filter(p=>p.stock <= (p.kind==='ingredient'?p.safety_stock:5)),[products]);
+  const table=useTablePage(lowStockProducts);
 
   return (
     <div className="p-8 space-y-6" data-testid="low-stock-page">
@@ -22,7 +19,8 @@ export default function LowStock() {
         <h1 className="font-display text-3xl font-bold mt-1">Peringatan Stok Menipis</h1>
       </div>
 
-      <div className="card-surface p-6">
+      <ReadState loading={loading} error={error} retry={retry} />
+      {!loading&&!error&&<div className="card-surface p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display font-bold text-lg">Peringatan Stok Menipis (Stok ≤ 5)</h2>
           {lowStockProducts.length > 0 && (
@@ -45,9 +43,9 @@ export default function LowStock() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[hsl(var(--border))]">
-              {lowStockProducts.map((p) => (
+              {table.rows.map((p) => (
                 <tr key={p.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors">
-                  <td className="py-3 font-medium">{p.name}</td>
+                  <td className="py-3 font-medium">{p.name}<small className="block text-[hsl(var(--muted))]">{p.kind==='ingredient'?'Bahan baku':'Produk'}</small></td>
                   <td className="py-3 font-mono text-xs">{p.sku || "-"}</td>
                   <td className="py-3 text-[hsl(var(--muted))]">{p.category || "-"}</td>
                   <td className="py-3 text-center font-bold text-red-600 font-mono">{p.stock}</td>
@@ -73,7 +71,8 @@ export default function LowStock() {
             </tbody>
           </table>
         </div>
-      </div>
+        <TablePage value={table} label="barang/bahan"/>
+      </div>}
     </div>
   );
 }

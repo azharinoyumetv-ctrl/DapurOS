@@ -92,14 +92,15 @@ export default function Integrations() {
   const [waInboundLoading, setWaInboundLoading] = useState(false);
   const loadWaInbound = () => {
     setWaInboundLoading(true);
-    api.get("/webhooks/whatsapp/inbound").then((r) => setWaInbound(r.data || [])).catch(() => {}).finally(() => setWaInboundLoading(false));
+    api.get("/webhooks/whatsapp/inbound").then((r) => setWaInbound((r.data || []).filter(message=>message._simulated!==true))).catch(() => {}).finally(() => setWaInboundLoading(false));
   };
   useEffect(() => {
     if (type === "whatsapp") loadWaInbound();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
 
-  if (["stripe", "telegram", "email", "qris"].includes(type)) return <Navigate to="/dapuros/app/integrations/qris" replace />;
+  if (type === 'qris') return <Navigate to="/dapuros/app/payments/qris" replace />;
+  if (["stripe", "telegram", "email"].includes(type)) return <Navigate to="/dapuros/app/integrations/xendit" replace />;
   if (!integrations) return <div className="p-4 sm:p-6 lg:p-8 text-center text-xs text-[hsl(var(--muted))]">Memuat data integrasi...</div>;
 
   const renderForm = () => {
@@ -340,7 +341,6 @@ export default function Integrations() {
                     {waInbound.map((m, i) => (
                       <li key={i} className="text-[11px] border border-[hsl(var(--border))] rounded-md px-2 py-1.5 bg-[hsl(var(--background))]">
                         <span className="font-mono text-[hsl(var(--muted))]">{m.received_at ? new Date(m.received_at).toLocaleString("id-ID") : "-"}</span>
-                        {m._simulated && <span className="ml-2 pill pill-warning text-[9px]">Simulasi</span>}
                         <div className="mt-0.5">{m.payload?.messages?.[0]?.text?.body || JSON.stringify(m.payload)?.slice(0, 120)}</div>
                       </li>
                     ))}

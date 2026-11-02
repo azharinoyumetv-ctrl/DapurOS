@@ -49,7 +49,7 @@ async def settle_rows(db, user, rows, method, session, *, checked=False, amount=
     return total
 
 
-async def settle_table(db, user, table_id, method, *, expected=None, cash=None, checked=False, amount=None):
+async def settle_table(db, user, table_id, method, *, expected=None, cash=None, checked=False, amount=None, expected_total=None):
     async def commit(session):
         active = await active_session(db, user, table_id, session, expected)
         rows = await db.orders.find({"session_id": active["id"], "store_id": user["store_id"], "payment_status": "pending"}, session=session).to_list(None)
@@ -57,6 +57,8 @@ async def settle_table(db, user, table_id, method, *, expected=None, cash=None, 
         if await db.orders.find_one({"source_session_id": active["id"], "store_id": user["store_id"], "payment_status": "pending"}, session=session):
             raise HTTPException(409, "Selesaikan bagian tagihan terpisah sebelum menutup meja.")
         total = sum((money(row["total"]) for row in rows), Decimal(0))
+        if expected_total is not None and (not money(expected_total).is_finite() or money(expected_total)!=total):
+            raise HTTPException(409,'Tagihan bertambah atau berubah. Muat ulang sebelum menerima pembayaran.')
         if cash is not None and (not money(cash).is_finite() or money(cash) < total):
             raise HTTPException(400, "Pembayaran tunai kurang.")
         await settle_rows(db, user, rows, method, session, checked=checked, amount=amount)
@@ -64,6 +66,19 @@ async def settle_table(db, user, table_id, method, *, expected=None, cash=None, 
         await db.tables.update_one({"id": table_id, "store_id": user["store_id"]}, {"$set": {"status": "Vacant", "updated_at": utcnow().isoformat()}}, session=session)
         return {"ok": True, "session_id": active["id"], "total": float(total)}
     return await run_transaction(db, commit)
+
+
+async def close_empty(db,user,table_id,expected):
+    async def close(session):
+        existing=await db.order_sessions.find_one({'id':expected,'store_id':user['store_id'],'table_id':table_id},session=session)
+        if existing and existing.get('status') in ('Closed','Paid') and not await db.order_sessions.find_one({'store_id':user['store_id'],'table_id':table_id,'status':'Active'},session=session):return {'ok':True}
+        active=await active_session(db,user,table_id,session,expected)
+        if await db.orders.find_one({'store_id':user['store_id'],'payment_status':'pending','$or':[{'session_id':active['id']},{'source_session_id':active['id']}]},session=session):
+            raise HTTPException(409,'Meja masih memiliki tagihan. Selesaikan pembayaran sebelum mengosongkan meja.')
+        await db.order_sessions.update_one({'id':active['id'],'store_id':user['store_id']},{'$set':{'status':'Closed','closed_at':utcnow().isoformat()}},session=session)
+        await db.tables.update_one({'id':table_id,'store_id':user['store_id']},{'$set':{'status':'Vacant','updated_at':utcnow().isoformat()}},session=session)
+        return {'ok':True}
+    return await run_transaction(db,close)
 
 
 async def split_table(db, user, table_id, request, key=None):
@@ -109,6 +124,7 @@ async def split_table(db, user, table_id, request, key=None):
                     continue
                 original_quantity = line["quantity"]
                 taken = {**line, "quantity": quantity, "subtotal": float(money(line["price"]) * quantity)}
+                taken['source_order_id']=row['id']
                 if "ingredient_deductions" in line:
                     taken["ingredient_deductions"] = [{**entry, "quantity": float(Decimal(str(entry["quantity"])) * quantity / original_quantity)} for entry in line["ingredient_deductions"]]
                     line["ingredient_deductions"] = [{**entry, "quantity": float(Decimal(str(entry["quantity"])) * (original_quantity - quantity) / original_quantity)} for entry in line["ingredient_deductions"]]

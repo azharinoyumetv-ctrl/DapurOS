@@ -1,50 +1,68 @@
-import { useEffect, useState } from "react";
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import { readCollection } from '@/api/records';
+import { useEffect, useRef, useState } from "react";
 import api from "@/api/client";
+import { loadInventoryItems, inventoryError } from '@/api/inventoryItems';
 import { Plus, Send, Check } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function StockTransfer() {
+  const [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const lock = useRef(false), attempt = useRef(null);
   const [products, setProducts] = useState([]);
   const [branches, setBranches] = useState([]);
   const [transfers, setTransfers] = useState([]);
+  const historyPage=useTablePage(transfers);
 
   const [productId, setProductId] = useState("");
   const [qty, setQty] = useState("");
-  const [fromBranch, setFromBranch] = useState("Outlet Utama (Jakarta)");
+  const [fromBranch, setFromBranch] = useState("main");
   const [toBranch, setToBranch] = useState("");
 
   const fetchData = () => {
-    api.get("/products").then((r) => setProducts(r.data)).catch(() => {});
-    api.get("/branches").then((r) => setBranches(r.data)).catch(() => {});
-    api.get("/products/stock-transfers").then((r) => setTransfers(r.data)).catch(() => {});
+    loadInventoryItems('business').then(setProducts).catch(e => setError(inventoryError(e)));
+    api.get("/products/transfer-branches").then((r) => setBranches(r.data)).catch(e => setError(inventoryError(e)));
+    readCollection("/products/stock-transfers").then((r) => setTransfers(r.data)).catch(e => setError(inventoryError(e)));
   };
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!productId || !qty || !toBranch || fromBranch === toBranch) return;
+    if (lock.current || !productId || !Number.isFinite(Number(qty)) || Number(qty)<=0 || !toBranch || fromBranch === toBranch) return;
 
-    const prod = products.find(p => p.id === productId);
+    const prod = products.find(p => p.key === productId);
     if (!prod) return;
 
     const payload = {
       from_branch: fromBranch,
       to_branch: toBranch,
-      items: [{ name: prod.name, qty: parseInt(qty) }],
+      items: [{ product_id: prod.id, kind: prod.kind, name: prod.name, qty: Number(qty) }],
       status: "Shipped",
-      created_at: new Date().toISOString()
     };
-
-    api.post("/products/stock-transfers", payload).then(() => {
+    const fingerprint = JSON.stringify(payload);
+    if (attempt.current?.fingerprint !== fingerprint) attempt.current = { fingerprint, id: crypto.randomUUID() };
+    lock.current = true; setBusy(true); setError('');
+    try {
+      await api.post("/products/stock-transfers", { ...payload, request_id: attempt.current.id });
+      attempt.current = null;
       setProductId("");
       setQty("");
       setToBranch("");
       fetchData();
       toast.success("Transfer stok berhasil dikirim!");
-    });
+    } catch(e) { setError(inventoryError(e)); }
+    finally { lock.current = false; setBusy(false); }
+  };
+  const finish = async (transfer, action) => {
+    if (lock.current || !window.confirm(action === 'receive' ? 'Konfirmasi barang sudah sampai di cabang tujuan?' : 'Batalkan pengiriman dan kembalikan stok ke cabang asal?')) return;
+    lock.current = true; setBusy(true); setError('');
+    try { await api.post(`/products/stock-transfers/${transfer.id}/${action}`); fetchData(); }
+    catch(e) { setError(inventoryError(e)); }
+    finally { lock.current = false; setBusy(false); }
   };
 
   return (
@@ -54,18 +72,18 @@ export default function StockTransfer() {
         <h1 className="font-display text-3xl font-bold mt-1">Stock Transfer</h1>
       </div>
 
+      {error && <p role="alert" className="text-red-700">{error}</p>}
       <div className="grid grid-cols-12 gap-6">
         <form onSubmit={handleSubmit} className="col-span-12 lg:col-span-4 card-surface p-6 space-y-4" data-testid="transfer-form">
           <h2 className="font-display font-bold text-lg">Kirim Stok Cabang</h2>
           
           <div className="flex flex-col space-y-1">
             <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Dari Cabang</label>
-            <input
-              type="text"
-              readOnly
+            <select
+              onChange={e => setFromBranch(e.target.value)}
               value={fromBranch}
               className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-[hsl(var(--background))] text-[hsl(var(--muted))] outline-none text-sm cursor-not-allowed"
-            />
+            ><option value="main">Restoran utama</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
           </div>
 
           <div className="flex flex-col space-y-1">
@@ -77,8 +95,9 @@ export default function StockTransfer() {
               data-testid="transfer-dest-select"
             >
               <option value="">-- Pilih Cabang --</option>
+              {fromBranch !== 'main' && <option value="main">Restoran utama</option>}
               {branches.map(b => (
-                <option key={b.id} value={b.name}>{b.name}</option>
+                <option key={b.id} value={b.id} disabled={b.id === fromBranch}>{b.name}</option>
               ))}
             </select>
           </div>
@@ -92,7 +111,7 @@ export default function StockTransfer() {
             >
               <option value="">-- Pilih Produk --</option>
               {products.map(p => (
-                <option key={p.id} value={p.id}>{p.name} (Stok: {p.stock})</option>
+                <option key={p.key} value={p.key}>{p.name} (Stok: {fromBranch === 'main' ? p.stock : p.stock_by_branch?.[fromBranch] || 0} {p.unit})</option>
               ))}
             </select>
           </div>
@@ -101,6 +120,7 @@ export default function StockTransfer() {
             <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Jumlah Transfer</label>
             <input
               type="number"
+              required min={productId.startsWith('ingredient:') ? '0.000001' : '1'} step={productId.startsWith('ingredient:') ? 'any' : '1'}
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               placeholder="Jumlah qty"
@@ -108,7 +128,7 @@ export default function StockTransfer() {
             />
           </div>
 
-          <button type="submit" className="btn-primary w-full py-2 flex items-center justify-center gap-2">
+          <button type="submit" disabled={busy} className="btn-primary w-full py-2 flex items-center justify-center gap-2">
             <Send size={16} /> Kirim Barang
           </button>
         </form>
@@ -127,7 +147,7 @@ export default function StockTransfer() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
-                {transfers.map((t) => (
+                {historyPage.rows.map((t) => (
                   <tr key={t.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors">
                     <td className="py-3 text-[hsl(var(--muted))]">{new Date(t.created_at).toLocaleDateString("id-ID")}</td>
                     <td className="py-3 font-medium text-xs">{t.from_branch}</td>
@@ -143,6 +163,7 @@ export default function StockTransfer() {
                       <span className={`pill ${t.status === "Received" ? "pill-success" : "pill-warning"}`}>
                         {t.status}
                       </span>
+                      {t.status === 'Shipped' && t.inventory_applied && <div className="flex gap-2 mt-2 justify-end"><button disabled={busy} className="btn-primary text-xs" onClick={() => finish(t, 'receive')}>Terima</button><button disabled={busy} className="btn-outline text-xs" onClick={() => finish(t, 'cancel')}>Batalkan</button></div>}
                     </td>
                   </tr>
                 ))}
@@ -153,6 +174,7 @@ export default function StockTransfer() {
                 )}
               </tbody>
             </table>
+            <TablePage value={historyPage} label="transfer"/>
           </div>
         </div>
       </div>

@@ -1,4 +1,8 @@
+import math
+import transactions
+import customer_store
 from permissions import require_permission
+from debt_service import payment_status, update_payment
 """Customer CRM, Memberships, Loyalty Rules, and Debt Receivables/Payables routes."""
 import uuid
 from typing import List
@@ -24,46 +28,15 @@ async def list_customers(user: dict = Depends(require_plan("pro"))):
 
 @router.post("/api/customers", response_model=Customer, dependencies=[Depends(require_permission('customers.write'))])
 async def create_customer(payload: CustomerBase, user: dict = Depends(require_plan("pro"))):
-    db = get_db()
-    existing = await db.customers.find_one({"store_id": user["store_id"], "phone": payload.phone} if payload.phone else {"_id": None})
-    if existing:
-        raise HTTPException(status_code=400, detail="Nomor telepon pelanggan sudah ada")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "name": payload.name,
-        "phone": payload.phone,
-        "email": payload.email,
-        "membership_tier": payload.membership_tier or "Bronze",
-        "loyalty_points": payload.loyalty_points or 0,
-        "notes": payload.notes,
-        "created_at": utcnow().isoformat()
-    }
-    await db.customers.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
+    db=get_db()
+    return await transactions.run_transaction(db,lambda session:customer_store.save(db,payload,user,session))
 
 @router.put("/api/customers/{cust_id}", response_model=Customer, dependencies=[Depends(require_permission('customers.write'))])
 async def update_customer(cust_id: str, payload: CustomerBase, user: dict = Depends(require_plan("pro"))):
-    db = get_db()
-    res = await db.customers.find_one_and_update(
-        {"id": cust_id, "store_id": user["store_id"]},
-        {"$set": {
-            "name": payload.name,
-            "phone": payload.phone,
-            "email": payload.email,
-            "membership_tier": payload.membership_tier,
-            "loyalty_points": payload.loyalty_points,
-            "notes": payload.notes
-        }},
-        return_document=True,
-        projection={"_id": 0}
-    )
-    if not res:
-        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
-    return res
+    db=get_db()
+    return await transactions.run_transaction(db,lambda session:customer_store.save(db,payload,user,session,cust_id))
 
-@router.delete("/api/customers/{cust_id}", dependencies=[Depends(require_permission('customers.write'))])
+@router.delete("/api/customers/{cust_id}", dependencies=[Depends(require_permission('customers.manage'))])
 async def delete_customer(cust_id: str, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     res = await db.customers.delete_one({"id": cust_id, "store_id": user["store_id"]})
@@ -78,8 +51,9 @@ async def list_memberships(user: dict = Depends(require_plan("business"))):
     cursor = db.memberships.find({"store_id": user["store_id"]}, {"_id": 0}).sort("min_points", 1)
     return await cursor.to_list(length=100)
 
-@router.post("/api/customers/memberships", response_model=Membership, dependencies=[Depends(require_permission('customers.write'))])
+@router.post("/api/customers/memberships", response_model=Membership, dependencies=[Depends(require_permission('customers.manage'))])
 async def create_membership(payload: MembershipBase, user: dict = Depends(require_plan("business"))):
+    if not payload.name.strip() or payload.min_points<0 or not math.isfinite(payload.discount_percent) or not 0<=payload.discount_percent<=100:raise HTTPException(422,'Nama, batas poin, atau diskon keanggotaan tidak valid.')
     db = get_db()
     existing = await db.memberships.find_one({"store_id": user["store_id"], "name": payload.name})
     if existing:
@@ -106,8 +80,9 @@ async def get_loyalty_rules(user: dict = Depends(require_plan("business"))):
         return LoyaltyRules()
     return rules
 
-@router.post("/api/customers/loyalty", response_model=LoyaltyRules, dependencies=[Depends(require_permission('customers.write'))])
+@router.post("/api/customers/loyalty", response_model=LoyaltyRules, dependencies=[Depends(require_permission('customers.manage'))])
 async def save_loyalty_rules(payload: LoyaltyRules, user: dict = Depends(require_plan("business"))):
+    if not 1<=payload.conversion_rate<=1_000_000_000_000 or not 0<=payload.point_value<=1_000_000_000 or not 1<=payload.min_redeem_points<=1_000_000_000:raise HTTPException(422,'Aturan poin tidak valid. Nominal per poin dan batas penukaran harus lebih dari nol.')
     db = get_db()
     doc = payload.model_dump()
     doc["store_id"] = user["store_id"]
@@ -137,7 +112,7 @@ async def create_receivable(payload: DebtReceivableCreate, user: dict = Depends(
         "amount": payload.amount,
         "paid_amount": payload.paid_amount,
         "due_date": payload.due_date,
-        "status": payload.status
+        "status": payment_status(payload.amount,payload.paid_amount)
     }
     await db.debt_receivables.insert_one(doc)
     doc.pop("_id", None)
@@ -154,18 +129,7 @@ async def update_receivable(receivable_id: str, payload: DebtReceivableUpdate, u
     the frontend) and no payment was ever actually recorded. This PUT is the real fix,
     mirroring GerainaOS's routes_customers.py."""
     db = get_db()
-    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
-    if not update:
-        raise HTTPException(status_code=400, detail="Tidak ada perubahan")
-    res = await db.debt_receivables.find_one_and_update(
-        {"id": receivable_id, "store_id": user["store_id"]},
-        {"$set": update},
-        return_document=True,
-        projection={"_id": 0},
-    )
-    if not res:
-        raise HTTPException(status_code=404, detail="Catatan piutang tidak ditemukan")
-    return res
+    return await update_payment(db,db.debt_receivables,receivable_id,payload,user)
 
 # ---------- Debt Payables (Hutang) -- Pro-tier feature, see AppLayout.jsx minPlan ----------
 @router.get("/api/debt/payables", response_model=List[DebtPayable], dependencies=[Depends(require_permission('customers.read'))])
@@ -185,7 +149,7 @@ async def create_payable(payload: DebtPayableCreate, user: dict = Depends(requir
         "amount": payload.amount,
         "paid_amount": payload.paid_amount,
         "due_date": payload.due_date,
-        "status": payload.status
+        "status": payment_status(payload.amount,payload.paid_amount)
     }
     await db.debt_payables.insert_one(doc)
     doc.pop("_id", None)
@@ -196,15 +160,4 @@ async def update_payable(payable_id: str, payload: DebtPayableUpdate, user: dict
     """Record a payment/settlement against an existing payable (partial or full). Same
     missing-endpoint bug as update_receivable above, fixed the same way."""
     db = get_db()
-    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
-    if not update:
-        raise HTTPException(status_code=400, detail="Tidak ada perubahan")
-    res = await db.debt_payables.find_one_and_update(
-        {"id": payable_id, "store_id": user["store_id"]},
-        {"$set": update},
-        return_document=True,
-        projection={"_id": 0},
-    )
-    if not res:
-        raise HTTPException(status_code=404, detail="Catatan hutang tidak ditemukan")
-    return res
+    return await update_payment(db,db.debt_payables,payable_id,payload,user)

@@ -52,7 +52,7 @@ export default function Login() {
 
       <main className="auth-main">
         <section className="auth-story" aria-labelledby="dapuros-login-story">
-          <span className="auth-kicker">DapurOS · Retail operations</span>
+          <span className="auth-kicker">DapurOS · Operasional restoran</span>
           <h2 id="dapuros-login-story">Masuk kembali ke alur toko Anda.</h2>
           <p>Kasir, inventori, pembelian, supplier, pelanggan, dan laporan tetap berada dalam satu ruang kerja yang terhubung.</p>
           <div className="auth-scene" aria-hidden="true">

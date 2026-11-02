@@ -16,8 +16,9 @@ from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
 
 from database import get_db
 from auth import get_current_user
+from permissions import require_permission
 
-router = APIRouter(prefix="/api/pdf", tags=["pdf"])
+router = APIRouter(prefix="/api/pdf", tags=["pdf"],dependencies=[Depends(require_permission('sales.read'))])
 
 BRAND_GREEN = colors.HexColor("#1A3B2B")
 BRAND_TERRACOTTA = colors.HexColor("#D14B33")

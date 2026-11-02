@@ -1,9 +1,13 @@
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import { readCollection } from '@/api/records';
 import { useEffect, useRef, useState } from "react";
 import api from "@/api/client";
 import { Plus, Trash2, Edit } from "lucide-react";
 
 export default function SupplierList() {
   const [suppliers, setSuppliers] = useState([]);
+  const supplierPage=useTablePage(suppliers);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -14,7 +18,7 @@ export default function SupplierList() {
   const fetchReqIdRef = useRef(0);
   const fetchSuppliers = () => {
     const reqId = ++fetchReqIdRef.current;
-    api.get("/suppliers").then((r) => {
+    readCollection("/suppliers").then((r) => {
       if (reqId === fetchReqIdRef.current) setSuppliers(r.data);
     }).catch(() => {});
   };
@@ -138,7 +142,7 @@ export default function SupplierList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
-                {suppliers.map((s) => (
+                {supplierPage.rows.map((s) => (
                   <tr key={s.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors" data-testid={`supplier-row-${s.id}`}>
                     <td className="py-3 font-medium text-xs">{s.name}</td>
                     <td className="py-3 text-xs">
@@ -163,6 +167,7 @@ export default function SupplierList() {
                 )}
               </tbody>
             </table>
+            <TablePage value={supplierPage} label="pemasok"/>
           </div>
         </div>
       </div>

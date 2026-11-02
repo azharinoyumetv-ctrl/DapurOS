@@ -25,6 +25,7 @@ async function fixture(page,context,{role='Owner',delay=0,offlineFail=false,plan
         case '/api/products/category-names':body=['Minuman'];break;
         case '/api/products/units':body=[{id:'pcs',name:'Pcs',short_name:'pcs'}];break;
         case '/api/ingredients':body=[{id:'beans',name:'Biji kopi',unit:'g',stock:2000,safety_stock:500}];break;
+        case '/api/records/ingredients':body={items:[{id:'beans',name:'Biji kopi',unit:'g',stock:2000,safety_stock:500}],total:1,next_cursor:null};break;
         case '/api/floors':body=[{id:'floor',name:'Lantai 1',level:1}];break;
         case '/api/tables':body=[{id:'table',floor_id:'floor',label:'Meja 1',capacity:4,status:'Vacant'}];break;
         case '/api/payments/options':body={methods:{cash:{enabled:true,displayed:true},qris_bank:{enabled:false},ewallet:{enabled:false},va:{enabled:false},credit_card:{enabled:false},doku:{enabled:false}},ewallet_channels:[]};break;

@@ -11,6 +11,9 @@ from models import (
 )
 from auth import get_current_user
 from plan_limits import require_plan
+import transactions
+import invoice_service
+from purchase_service import create_purchase, receive_purchase
 
 router = APIRouter(tags=["purchase"])
 
@@ -78,17 +81,7 @@ async def list_purchase_orders(user: dict = Depends(require_plan("pro"))):
 @router.post("/api/purchase/orders", response_model=PurchaseOrder, dependencies=[Depends(require_permission('purchase.write'))])
 async def create_purchase_order(payload: PurchaseOrderCreate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "po_no": payload.po_no,
-        "supplier_id": payload.supplier_id,
-        "supplier_name": payload.supplier_name,
-        "total": payload.total,
-        "status": payload.status,
-        "created_at": utcnow().isoformat()
-    }
-    await db.purchase_orders.insert_one(doc)
+    doc = await transactions.run_transaction(db,lambda session:create_purchase(db,payload,user,session))
 
     # Kirim PO ke WhatsApp supplier (best-effort; BYO WABA, tak membatalkan PO bila gagal).
     # Diinisiasi toko -> wajib template. TEMPLATE_PO_NAME_DEFAULT belum disetujui Meta -- lihat
@@ -127,24 +120,7 @@ async def list_receiving(user: dict = Depends(require_plan("pro"))):
 @router.post("/api/purchase/receiving", response_model=GoodsReceiving, dependencies=[Depends(require_permission('purchase.write'))])
 async def create_receiving(payload: GoodsReceivingCreate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "po_no": payload.po_no,
-        "gr_no": payload.gr_no,
-        "received_by": payload.received_by,
-        "received_at": payload.received_at
-    }
-    await db.goods_receiving.insert_one(doc)
-    
-    # Auto-update PO status to "Received"
-    await db.purchase_orders.update_one(
-        {"store_id": user["store_id"], "po_no": payload.po_no},
-        {"$set": {"status": "Received"}}
-    )
-    
-    doc.pop("_id", None)
-    return doc
+    return await transactions.run_transaction(db,lambda session:receive_purchase(db,payload,user,session))
 
 # ---------- Supplier Invoices (Pro-tier feature -- see AppLayout.jsx minPlan) ----------
 @router.get("/api/purchase/invoices", response_model=List[SupplierInvoice], dependencies=[Depends(require_permission('purchase.read'))])
@@ -155,37 +131,8 @@ async def list_supplier_invoices(user: dict = Depends(require_plan("pro"))):
 
 @router.post("/api/purchase/invoices", response_model=SupplierInvoice, dependencies=[Depends(require_permission('purchase.write'))])
 async def create_supplier_invoice(payload: SupplierInvoiceCreate, user: dict = Depends(require_plan("pro"))):
-    db = get_db()
-    doc = {
-        "id": str(uuid.uuid4()),
-        "store_id": user["store_id"],
-        "invoice_no": payload.invoice_no,
-        "po_no": payload.po_no,
-        "amount": payload.amount,
-        "status": payload.status,
-        "due_date": payload.due_date,
-        "created_at": utcnow().isoformat()
-    }
-    await db.supplier_invoices.insert_one(doc)
-    
-    # Auto-create a matching debt payable record if invoice is unpaid
-    if payload.status.lower() != "paid":
-        po = await db.purchase_orders.find_one({"store_id": user["store_id"], "po_no": payload.po_no})
-        supplier_name = po.get("supplier_name", "Supplier") if po else "Supplier"
-        payable_doc = {
-            "id": str(uuid.uuid4()),
-            "store_id": user["store_id"],
-            "supplier_name": supplier_name,
-            "invoice_no": payload.invoice_no,
-            "amount": payload.amount,
-            "paid_amount": 0.0,
-            "due_date": payload.due_date,
-            "status": "Unpaid"
-        }
-        await db.debt_payables.insert_one(payable_doc)
-
-    doc.pop("_id", None)
-    return doc
+    db=get_db()
+    return await transactions.run_transaction(db,lambda session:invoice_service.create(db,payload,user,session))
 
 @router.put("/api/purchase/invoices/{invoice_id}", response_model=SupplierInvoice, dependencies=[Depends(require_permission('purchase.write'))])
 async def update_supplier_invoice(invoice_id: str, payload: SupplierInvoiceUpdate, user: dict = Depends(require_plan("pro"))):
@@ -198,24 +145,5 @@ async def update_supplier_invoice(invoice_id: str, payload: SupplierInvoiceUpdat
     receivable/payable settle buttons, fixed earlier this session). Confirmed this bug exists
     identically on GerainaOS too -- fixing there as well, not just here.
     """
-    db = get_db()
-    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
-    if not update:
-        raise HTTPException(status_code=400, detail="Tidak ada perubahan")
-    res = await db.supplier_invoices.find_one_and_update(
-        {"id": invoice_id, "store_id": user["store_id"]},
-        {"$set": update},
-        return_document=True,
-        projection={"_id": 0},
-    )
-    if not res:
-        raise HTTPException(status_code=404, detail="Faktur tidak ditemukan")
-
-    # Keep the auto-created debt_payable record (see create_supplier_invoice above) in sync --
-    # otherwise marking the invoice paid leaves a stale "Unpaid" payable behind forever.
-    if update.get("status", "").lower() == "paid":
-        await db.debt_payables.update_many(
-            {"store_id": user["store_id"], "invoice_no": res["invoice_no"], "status": {"$ne": "Paid"}},
-            {"$set": {"status": "Paid", "paid_amount": res["amount"]}},
-        )
-    return res
+    db=get_db()
+    return await transactions.run_transaction(db,lambda session:invoice_service.settle(db,invoice_id,payload,user,session))

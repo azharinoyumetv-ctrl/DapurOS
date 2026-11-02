@@ -5,7 +5,7 @@ import PasswordSetup from "@/auth/PasswordSetup";
 import { firstAllowedPath } from "@/auth/permissions";
 import { deferred } from "@/navigation/DeferredPage";
 import "@/index.css";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -65,6 +65,7 @@ import RoleGuard from "@/components/RoleGuard";
 const KdsScreen = deferred(() => import("@/pages/KdsScreen"));
 const QrMenu = deferred(() => import("@/pages/products/QrMenu"));
 const Activate = deferred(() => import("@/pages/Activate"));
+const GuestQrOrder = deferred(() => import("@/pages/GuestQrOrder"));
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -193,6 +194,14 @@ function getAppSubRoutes() {
 }
 
 export default function App() {
+  return <BrowserRouter><ApplicationRoutes /></BrowserRouter>;
+}
+
+function ApplicationRoutes() {
+  const location = useLocation();
+  // Guests use only their table capability. Operator session validation must not
+  // redirect a guest to login or borrow a cached account from another product.
+  if (location.pathname.replace(/\/$/,'') === '/dapuros/qr-order') return <GuestQrOrder key={location.search} />;
   const appRoutes = getAppSubRoutes();
   return (
     <AuthProvider>
@@ -201,7 +210,6 @@ export default function App() {
           browser tab until dismissed, and this repo's sonner scaffold was never actually
           mounted anywhere before this. Mirrors GerainaOS's App.js. */}
       <Toaster position="top-center" richColors closeButton />
-      <BrowserRouter>
         <AndroidRouterBridge />
         <Routes>
           {/* Direct Auth Top-level & Full URL Mappings */}
@@ -253,7 +261,6 @@ export default function App() {
 
           <Route path="*" element={<RootComponent />} />
         </Routes>
-      </BrowserRouter>
     </AuthProvider>
   );
 }

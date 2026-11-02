@@ -1,12 +1,19 @@
-import { useEffect, useState } from "react";
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import { useEffect, useRef, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
+import { readCollection } from '@/api/records';
+import { loadInventoryItems, inventoryError } from '@/api/inventoryItems';
 import { Plus, Check, ListRestart } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function PurchaseOrder() {
+  const [error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const lock=useRef(false),attempt=useRef(null);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const orderPage=useTablePage(orders);
 
   const [supplierId, setSupplierId] = useState("");
   const [productId, setProductId] = useState("");
@@ -15,9 +22,9 @@ export default function PurchaseOrder() {
   const [poItems, setPoItems] = useState([]);
 
   const fetchData = () => {
-    api.get("/suppliers").then((r) => setSuppliers(r.data)).catch(() => {});
-    api.get("/products").then((r) => setProducts(r.data)).catch(() => {});
-    api.get("/purchase/orders").then((r) => setOrders(r.data)).catch(() => {});
+    readCollection('/suppliers').then(r=>setSuppliers(r.data)).catch(e=>setError(inventoryError(e)));
+    loadInventoryItems('pro').then(setProducts).catch(e=>setError(inventoryError(e)));
+    readCollection('/purchase/orders').then(r=>setOrders(r.data)).catch(e=>setError(inventoryError(e)));
   };
 
   useEffect(() => {
@@ -26,27 +33,28 @@ export default function PurchaseOrder() {
 
   const handleAddItem = (e) => {
     e.preventDefault();
-    if (!productId || !qty || isNaN(qty) || parseInt(qty) <= 0 || !cost || isNaN(cost) || parseInt(cost) <= 0) return;
+    if (busy || !productId || !Number.isFinite(Number(qty)) || Number(qty)<=0 || cost==='' || !Number.isFinite(Number(cost)) || Number(cost)<0) return;
 
-    const prod = products.find(p => p.id === productId);
+    const prod = products.find(p => p.key === productId);
     if (!prod) return;
 
     const newItem = {
-      product_id: productId,
+      product_id: prod.id, kind: prod.kind,
       name: prod.name,
-      qty: parseInt(qty),
-      cost: parseInt(cost),
-      subtotal: parseInt(qty) * parseInt(cost)
+      qty: Number(qty),
+      cost: Number(cost),
+      subtotal: Math.round(Number(qty)*Number(cost)*100)/100
     };
 
-    setPoItems([...poItems, newItem]);
+    if(poItems.some(it=>it.product_id===prod.id&&it.kind===prod.kind)){setError('Barang sudah ada pada PO. Hapus baris lama untuk mengganti jumlah.');return;}
+    setError('');setPoItems([...poItems, newItem]);
     setProductId("");
     setQty("");
     setCost("");
   };
 
-  const handleCreatePO = () => {
-    if (!supplierId || poItems.length === 0) return;
+  const handleCreatePO = async () => {
+    if (lock.current || !supplierId || poItems.length === 0) return;
 
     const sup = suppliers.find(s => s.id === supplierId);
     if (!sup) return;
@@ -54,21 +62,22 @@ export default function PurchaseOrder() {
     const total = poItems.reduce((acc, it) => acc + it.subtotal, 0);
 
     const payload = {
-      po_no: `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(100 + Math.random() * 900)}`,
       supplier_id: supplierId,
       supplier_name: sup.name,
       items: poItems,
       total,
       status: "Ordered",
-      created_at: new Date().toISOString()
     };
-
-    api.post("/purchase/orders", payload).then(() => {
+    const fingerprint=JSON.stringify(payload);
+    if(attempt.current?.fingerprint!==fingerprint)attempt.current={fingerprint,number:'PO-'+crypto.randomUUID().slice(0,12).toUpperCase()};
+    lock.current=true;setBusy(true);setError('');
+    try {
+      await api.post('/purchase/orders',{...payload,po_no:attempt.current.number});attempt.current=null;
       setSupplierId("");
       setPoItems([]);
       fetchData();
       toast.success("Purchase Order berhasil diterbitkan!");
-    });
+    }catch(e){setError(inventoryError(e));}finally{lock.current=false;setBusy(false);}
   };
 
   return (
@@ -78,6 +87,7 @@ export default function PurchaseOrder() {
         <h1 className="font-display text-3xl font-bold mt-1">Order Pembelian</h1>
       </div>
 
+      {error&&<p role="alert" className="text-red-700">{error}</p>}
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 lg:col-span-5 card-surface p-6 space-y-4">
           <h2 className="font-display font-bold text-lg">Buat PO Baru</h2>
@@ -105,14 +115,14 @@ export default function PurchaseOrder() {
                   value={productId}
                   onChange={(e) => {
                     setProductId(e.target.value);
-                    const prod = products.find(p => p.id === e.target.value);
+                    const prod = products.find(p => p.key === e.target.value);
                     if (prod) setCost(prod.cost || "");
                   }}
                   className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-[hsl(var(--foreground))] outline-none text-xs"
                 >
                   <option value="">-- Pilih Produk --</option>
                   {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} (Cost: {fmtIDR(p.cost)})</option>
+                    <option key={p.key} value={p.key}>{p.name} ({p.kind==='ingredient'?'Bahan baku · '+p.unit:'Produk'} | Cost: {fmtIDR(p.cost)})</option>
                   ))}
                 </select>
               </div>
@@ -121,7 +131,7 @@ export default function PurchaseOrder() {
                   <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Qty</label>
                   <input
                     type="number"
-                    value={qty}
+                    value={qty} min={productId.startsWith('ingredient:')?'0.000001':'1'} step={productId.startsWith('ingredient:')?'any':'1'} required
                     onChange={(e) => setQty(e.target.value)}
                     placeholder="Contoh: 100"
                     className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-[hsl(var(--foreground))] outline-none text-xs"
@@ -131,7 +141,7 @@ export default function PurchaseOrder() {
                   <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Harga Beli</label>
                   <input
                     type="number"
-                    value={cost}
+                    value={cost} min="0" step="0.01" required
                     onChange={(e) => setCost(e.target.value)}
                     placeholder="Rp"
                     className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-[hsl(var(--foreground))] outline-none text-xs"
@@ -153,7 +163,7 @@ export default function PurchaseOrder() {
                     <p className="font-semibold">{it.name}</p>
                     <p className="text-[hsl(var(--muted))]">{it.qty} x {fmtIDR(it.cost)}</p>
                   </div>
-                  <p className="font-bold">{fmtIDR(it.subtotal)}</p>
+                  <div><p className="font-bold">{fmtIDR(it.subtotal)}</p><button disabled={busy} className="underline" onClick={()=>setPoItems(rows=>rows.filter((_,i)=>i!==idx))}>Hapus</button></div>
                 </div>
               ))}
               {poItems.length === 0 && (
@@ -168,7 +178,7 @@ export default function PurchaseOrder() {
                     {fmtIDR(poItems.reduce((acc, it) => acc + it.subtotal, 0))}
                   </p>
                 </div>
-                <button onClick={handleCreatePO} className="btn-primary py-2 px-4 text-xs flex items-center gap-1">
+                <button disabled={busy} onClick={handleCreatePO} className="btn-primary py-2 px-4 text-xs flex items-center gap-1">
                   <Check size={14} /> Kirim PO
                 </button>
               </div>
@@ -190,7 +200,7 @@ export default function PurchaseOrder() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
-                {orders.map((o) => (
+                {orderPage.rows.map((o) => (
                   <tr key={o.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors">
                     <td className="py-3 font-mono font-semibold text-xs text-[hsl(var(--primary))]">{o.po_no}</td>
                     <td className="py-3 font-medium text-xs">{o.supplier_name}</td>
@@ -213,6 +223,7 @@ export default function PurchaseOrder() {
                 )}
               </tbody>
             </table>
+            <TablePage value={orderPage} label="PO"/>
           </div>
         </div>
       </div>

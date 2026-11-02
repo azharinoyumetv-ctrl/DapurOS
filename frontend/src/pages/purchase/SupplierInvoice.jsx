@@ -1,21 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
+import { readCollection } from '@/api/records';
+import { inventoryError } from '@/api/inventoryItems';
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
 import { CreditCard, Check } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function SupplierInvoice() {
   const [invoices, setInvoices] = useState([]);
+  const [orders,setOrders]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const [form,setForm]=useState({invoice_no:'',po_no:'',amount:'',due_date:new Date().toISOString().slice(0,10)});
+  const lock=useRef(false),table=useTablePage(invoices);
 
   const fetchInvoices = () => {
-    api.get("/purchase/invoices").then((r) => setInvoices(r.data)).catch(() => {});
+    readCollection("/purchase/invoices").then((r) => setInvoices(r.data)).catch(e=>setError(inventoryError(e)));
   };
 
   useEffect(() => {
     fetchInvoices();
+    readCollection('/purchase/orders').then(r=>setOrders(r.data)).catch(e=>setError(inventoryError(e)));
   }, []);
+  const create=async e=>{
+    e.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');
+    try{await api.post('/purchase/invoices',{...form,invoice_no:form.invoice_no.trim(),amount:Number(form.amount),status:'Unpaid'});setForm({invoice_no:'',po_no:'',amount:'',due_date:new Date().toISOString().slice(0,10)});fetchInvoices();toast.success('Faktur dan utang pemasok telah dicatat.');}
+    catch(error){setError(inventoryError(error));}finally{lock.current=false;setBusy(false);}
+  };
 
   const handlePay = (id) => {
-    if (confirm("Konfirmasi pembayaran faktur supplier ini?")) {
+    if (!lock.current && confirm("Konfirmasi pembayaran faktur supplier ini?")) {
+      lock.current=true;setBusy(true);
       // HISTORY: this used to POST {id, status: "Paid"} straight to the CREATE endpoint,
       // which ignores 'id' and requires invoice_no/po_no/amount/due_date that were never
       // sent -- always 422'd, silently (no .catch()). Real fix: PUT to the invoice's own
@@ -24,8 +38,8 @@ export default function SupplierInvoice() {
         fetchInvoices();
         toast.success("Faktur berhasil ditandai Lunas!");
       }).catch((err) => {
-        toast.error(err?.response?.data?.detail || "Gagal menandai faktur lunas.");
-      });
+        toast.error(inventoryError(err));
+      }).finally(()=>{lock.current=false;setBusy(false);});
     }
   };
 
@@ -36,6 +50,15 @@ export default function SupplierInvoice() {
         <h1 className="font-display text-3xl font-bold mt-1">Faktur Supplier</h1>
       </div>
 
+      {error&&<p role="alert" className="text-red-700">{error}</p>}
+      <form onSubmit={create} className="card-surface p-5 grid sm:grid-cols-2 gap-4" data-testid="invoice-form">
+        <h2 className="sm:col-span-2 font-bold">Catat faktur pemasok</h2>
+        <label className="text-sm">Nomor faktur<input className="input-field w-full" aria-label="Nomor faktur" value={form.invoice_no} required maxLength={200} disabled={busy} onChange={e=>setForm(f=>({...f,invoice_no:e.target.value}))}/></label>
+        <label className="text-sm">Referensi PO<select className="input-field w-full" aria-label="Referensi PO" value={form.po_no} required disabled={busy} onChange={e=>setForm(f=>({...f,po_no:e.target.value,amount:orders.find(po=>po.po_no===e.target.value)?.total||''}))}><option value="">Pilih PO</option>{orders.map(po=><option key={po.id} value={po.po_no}>{po.po_no} · {po.supplier_name}</option>)}</select></label>
+        <label className="text-sm">Jumlah tagihan<input className="input-field w-full" type="number" min="0.01" step="0.01" required aria-label="Jumlah tagihan" value={form.amount} disabled={busy} onChange={e=>setForm(f=>({...f,amount:e.target.value}))}/></label>
+        <label className="text-sm">Jatuh tempo<input className="input-field w-full" type="date" required aria-label="Jatuh tempo" value={form.due_date} disabled={busy} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))}/></label>
+        <button className="btn-primary" disabled={busy} data-testid="invoice-create">Catat faktur & utang</button>
+      </form>
       <div className="card-surface p-6">
         <h2 className="font-display font-bold text-lg mb-4">Tagihan & Faktur Supplier</h2>
         <div className="overflow-x-auto">
@@ -51,7 +74,7 @@ export default function SupplierInvoice() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[hsl(var(--border))]">
-              {invoices.map((inv) => {
+              {table.rows.map((inv) => {
                 const isPaid = inv.status === "Paid";
                 const isOverdue = new Date(inv.due_date) < new Date() && !isPaid;
                 return (
@@ -69,7 +92,7 @@ export default function SupplierInvoice() {
                     </td>
                     <td className="py-3 text-right">
                       {!isPaid && (
-                        <button onClick={() => handlePay(inv.id)} className="btn-primary py-1 px-3 text-xs flex items-center gap-1 font-semibold ml-auto">
+                        <button disabled={busy} onClick={() => handlePay(inv.id)} className="btn-primary py-1 px-3 text-xs flex items-center gap-1 font-semibold ml-auto">
                           <CreditCard size={12} /> Tandai Lunas
                         </button>
                       )}
@@ -89,6 +112,7 @@ export default function SupplierInvoice() {
               )}
             </tbody>
           </table>
+          <TablePage value={table} label="faktur"/>
         </div>
       </div>
     </div>

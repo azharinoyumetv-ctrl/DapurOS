@@ -2,13 +2,15 @@ import api from './client';
 import { loadCatalogue } from './catalogue';
 
 const kinds = {
+  '/ingredients':'ingredients',
+  '/expenses':'expenses',
   '/customers':'customers', '/customers/memberships':'memberships', '/suppliers':'suppliers', '/purchase/orders':'purchase-orders',
   '/purchase/receiving':'receiving', '/purchase/invoices':'invoices',
   '/debt/receivables':'receivables', '/debt/payables':'payables',
   '/products/categories':'categories', '/products/brands':'brands', '/products/units':'units',
   '/products/stock-adjustments':'adjustments', '/products/stock-transfers':'transfers', '/branches':'branches',
 };
-const named = new Set(['customers','suppliers','categories','brands','units','branches','memberships']);
+const named = new Set(['customers','suppliers','categories','brands','units','branches','memberships','ingredients']);
 const collator = new Intl.Collator('id', { numeric:true, sensitivity:'base' });
 
 export async function readCollection(path, options = {}) {

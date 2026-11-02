@@ -1,5 +1,6 @@
 """Settings, Payments config, Integrations, and Branch management routes."""
 import uuid
+import transactions
 from typing import List, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from database import get_db, utcnow
@@ -295,7 +296,12 @@ async def list_branches(user: dict = Depends(require_plan("business"))):
 
 @router.post("/api/branches", response_model=Branch, dependencies=[Depends(require_permission("branches.manage"))])
 async def create_branch(payload: BranchBase, user: dict = Depends(require_plan("business"))):
+    return await transactions.run_transaction(get_db(),lambda session:_create_branch(payload,user))
+
+
+async def _create_branch(payload,user):
     db = get_db()
+    await db.capacity_guards.update_one({'_id':user['store_id']+':branches'},{'$inc':{'revision':1}},upsert=True)
     from plan_limits import check_outlet_capacity
     await check_outlet_capacity(db, user["store_id"], user.get("plan"))
     existing = await db.branches.find_one({"store_id": user["store_id"], "name": payload.name})
@@ -332,7 +338,17 @@ async def update_branch(branch_id: str, payload: BranchBase, user: dict = Depend
 
 @router.delete("/api/branches/{branch_id}", dependencies=[Depends(require_permission("branches.manage"))])
 async def delete_branch(branch_id: str, user: dict = Depends(require_plan("business"))):
+    return await transactions.run_transaction(get_db(),lambda session:_delete_branch(branch_id,user))
+
+
+async def _delete_branch(branch_id,user):
     db = get_db()
+    await db.capacity_guards.update_one({'_id':user['store_id']+':branches'},{'$inc':{'revision':1}},upsert=True)
+    if await db.stock_transfers.find_one({'store_id':user['store_id'],'status':'Shipped','inventory_applied':True,'$or':[{'from_branch_id':branch_id},{'to_branch_id':branch_id}]}):
+        raise HTTPException(409,'Cabang masih memiliki pengiriman. Selesaikan transfer terlebih dahulu.')
+    for target in (db.products,db.ingredients):
+        if await target.find_one({'store_id':user['store_id'],'stock_by_branch.'+branch_id:{'$exists':True,'$ne':0}}):
+            raise HTTPException(409,'Cabang masih memiliki stok. Pindahkan stok ke restoran utama sebelum menghapus cabang.')
     res = await db.branches.delete_one({"id": branch_id, "store_id": user["store_id"]})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Cabang tidak ditemukan")

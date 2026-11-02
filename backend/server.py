@@ -1,6 +1,7 @@
 """Geraina POS by DagangOS - FastAPI server."""
 import os
 import logging
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -37,12 +38,24 @@ from routes_devices import router as devices_router
 from routes_records import router as records_router
 from routes_offline import router as offline_router
 from routes_support import router as support_router
+from routes_guest import router as guest_router, staff_router as table_qr_router
+from routes_stock import router as stock_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("geraina")
 
 app = FastAPI(title="DapurOS by DagangOS")
+app.include_router(stock_router)
 app.add_middleware(ErasureContextMiddleware, default_module="dapuros")
+
+@app.middleware('http')
+async def public_menu_headers(request, call_next):
+    response=await call_next(request)
+    if request.url.path.startswith('/api/public/qr/'):
+        response.headers['Cache-Control']='no-store'
+        response.headers['Referrer-Policy']='no-referrer'
+        response.headers['X-Content-Type-Options']='nosniff'
+    return response
 
 
 # ---------- WebSockets Connection Manager ----------
@@ -54,7 +67,6 @@ class ConnectionManager:
         self.active_connections: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, store_id: str, websocket: WebSocket):
-        await websocket.accept()
         if store_id not in self.active_connections:
             self.active_connections[store_id] = []
         self.active_connections[store_id].append(websocket)
@@ -70,24 +82,45 @@ class ConnectionManager:
 
     async def broadcast(self, store_id: str, message: dict):
         if store_id in self.active_connections:
-            for connection in self.active_connections[store_id]:
+            for connection in list(self.active_connections.get(store_id,[])):
                 try:
                     await connection.send_json(message)
                 except Exception:
-                    pass
+                    self.disconnect(store_id,connection)
 
 ws_manager = ConnectionManager()
 
 
 @app.websocket("/api/ws/{store_id}")
 async def websocket_endpoint(websocket: WebSocket, store_id: str):
-    await ws_manager.connect(store_id, websocket)
+    from auth import get_current_user
+    from fastapi import HTTPException
+    await websocket.accept()
     try:
+        message = await asyncio.wait_for(websocket.receive_json(), timeout=5)
+        token = message.get('token') if isinstance(message, dict) and message.get('type') == 'AUTH' else None
+        if not isinstance(token, str) or len(token) > 8192:
+            raise HTTPException(401)
+        async def validate():
+            from permissions import has_permission
+            user = await get_current_user(token, 'dapuros', request=None)
+            if user.get('store_id') != store_id or not has_permission(user, 'pos.use'):
+                raise HTTPException(403)
+        await validate()
+        await ws_manager.connect(store_id, websocket)
+        await websocket.send_json({'type':'AUTH_OK'})
         while True:
-            # Keep connection alive
-            await websocket.receive_text()
+            await asyncio.wait_for(websocket.receive_text(), timeout=35)
+            await validate()
             await websocket.send_json({"type": "PONG"})
     except WebSocketDisconnect:
+        pass
+    except (HTTPException, asyncio.TimeoutError, ValueError, TypeError):
+        try:
+            await websocket.close(code=1008)
+        except RuntimeError:
+            pass
+    finally:
         ws_manager.disconnect(store_id, websocket)
 
 
@@ -115,7 +148,7 @@ async def health():
     try:
         db = get_db()
         await db.command("ping")
-        return {"ok": True}
+        return {"ok": True,'revision':os.environ.get('VERCEL_GIT_COMMIT_SHA')}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -170,6 +203,15 @@ async def _ensure_indexes():
             await db[coll].create_index(keys)
         except Exception as e:
             logger.warning(f"ensure index {coll} failed: {e}")
+    for coll, key, options in (
+        ('tables','qr_token_hash',{'sparse':True}),
+        ('checkout_attempts','guest_expires_at',{'expireAfterSeconds':0}),
+        ('capacity_guards','guest_rate_expires_at',{'expireAfterSeconds':0}),
+    ):
+        try:
+            await db[coll].create_index(key, **options)
+        except Exception as error:
+            logger.warning('ensure guest index %s failed: %s',coll,error)
 
 
 @app.on_event("shutdown")
@@ -178,5 +220,7 @@ async def _shutdown():
 
 app.include_router(offline_router)
 app.include_router(support_router)
+app.include_router(guest_router)
+app.include_router(table_qr_router)
 
 app.include_router(records_router)

@@ -1,8 +1,18 @@
-import { useEffect, useState } from "react";
+import { readCollection } from '@/api/records';
+import { useEffect, useRef, useState } from "react";
+import { useAuth } from '@/auth/AuthContext';
+import { canManageCustomerRules } from '@/auth/permissions';
+import { isPlanLocked } from '@/navigation/sections';
+import { inventoryError } from '@/api/inventoryItems';
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
 import api from "@/api/client";
 import { Plus, Trash2, Edit } from "lucide-react";
 
 export default function CustomerList() {
+  const { user }=useAuth();const manage=canManageCustomerRules(user?.role);
+  const [error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const writeLock=useRef(false),editingPoints=useRef(null);
   const [customers, setCustomers] = useState([]);
   const [memberships, setMemberships] = useState([]);
 
@@ -13,42 +23,33 @@ export default function CustomerList() {
   const [points, setPoints] = useState(0);
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const table=useTablePage(customers);
 
   const fetchData = () => {
-    api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {});
-    api.get("/customers/memberships").then((r) => setMemberships(r.data)).catch(() => {});
+    readCollection("/customers").then((r) => setCustomers(r.data)).catch(e=>setError(inventoryError(e)));
+    if(!isPlanLocked('business',user?.plan))readCollection("/customers/memberships").then((r) => setMemberships(r.data)).catch(e=>setError(inventoryError(e)));
   };
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (writeLock.current||!name.trim()) return;
 
     const payload = {
       name,
       phone,
       email,
-      membership_tier: tier,
-      loyalty_points: parseInt(points) || 0,
+      ...(manage?{membership_tier:tier,loyalty_points:Number(points),...(editingId?{expected_loyalty_points:editingPoints.current}:{})}:{}),
       notes: notes || null,
       created_at: new Date().toISOString()
     };
 
-    if (editingId) {
-      api.put(`/customers/${editingId}`, payload).then(() => {
-        setEditingId(null);
-        clearForm();
-        fetchData();
-      });
-    } else {
-      api.post("/customers", payload).then(() => {
-        clearForm();
-        fetchData();
-      });
-    }
+    writeLock.current=true;setBusy(true);setError('');
+    try{if(editingId)await api.put(`/customers/${editingId}`,payload);else await api.post('/customers',payload);setEditingId(null);clearForm();fetchData();}
+    catch(error){setError(inventoryError(error));}finally{writeLock.current=false;setBusy(false);}
   };
 
   const clearForm = () => {
@@ -61,6 +62,7 @@ export default function CustomerList() {
   };
 
   const handleEdit = (c) => {
+    editingPoints.current=c.loyalty_points||0;
     setEditingId(c.id);
     setName(c.name);
     setPhone(c.phone || "");
@@ -70,10 +72,10 @@ export default function CustomerList() {
     setNotes(c.notes || "");
   };
 
-  const handleDelete = (id) => {
-    if (confirm("Apakah Anda yakin ingin menghapus pelanggan ini?")) {
-      api.delete(`/customers/${id}`).then(() => fetchData());
-    }
+  const handleDelete = async (id) => {
+    if(!manage||writeLock.current||!confirm('Apakah Anda yakin ingin menghapus pelanggan ini?'))return;
+    writeLock.current=true;setBusy(true);setError('');
+    try{await api.delete(`/customers/${id}`);fetchData();}catch(e){setError(inventoryError(e));}finally{writeLock.current=false;setBusy(false);}
   };
 
   return (
@@ -83,6 +85,7 @@ export default function CustomerList() {
         <h1 className="font-display text-3xl font-bold mt-1">Daftar Pelanggan</h1>
       </div>
 
+      {error&&<p role="alert" className="text-red-700">{error}</p>}
       <div className="grid grid-cols-12 gap-6">
         <form onSubmit={handleSubmit} className="col-span-12 lg:col-span-4 card-surface p-6 space-y-4" data-testid="customer-form">
           <h2 className="font-display font-bold text-lg">{editingId ? "Edit Pelanggan" : "Tambah Pelanggan"}</h2>
@@ -125,9 +128,12 @@ export default function CustomerList() {
               <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Keanggotaan</label>
               <select
                 value={tier}
+                disabled={!manage||busy}
                 onChange={(e) => setTier(e.target.value)}
                 className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-[hsl(var(--foreground))] outline-none text-sm"
               >
+                {!memberships.some(m=>m.name==='Bronze')&&<option value="Bronze">Bronze</option>}
+                {tier!=='Bronze'&&!memberships.some(m=>m.name===tier)&&<option value={tier}>{tier}</option>}
                 {memberships.map(m => (
                   <option key={m.id} value={m.name}>{m.name}</option>
                 ))}
@@ -138,6 +144,7 @@ export default function CustomerList() {
               <input
                 type="number"
                 value={points}
+                disabled={!manage||busy} min="0" max="1000000000"
                 onChange={(e) => setPoints(e.target.value)}
                 placeholder="Poin"
                 className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-[hsl(var(--foreground))] outline-none text-sm"
@@ -157,7 +164,7 @@ export default function CustomerList() {
             />
           </div>
 
-          <button type="submit" className="btn-primary w-full py-2 flex items-center justify-center gap-2" data-testid="customer-submit">
+          <button type="submit" disabled={busy} className="btn-primary w-full py-2 flex items-center justify-center gap-2" data-testid="customer-submit">
             {editingId ? "Simpan Perubahan" : <><Plus size={16} /> Tambah Pelanggan</>}
           </button>
           {editingId && (
@@ -185,7 +192,7 @@ export default function CustomerList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
-                {customers.map((c) => (
+                {table.rows.map((c) => (
                   <tr key={c.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors">
                     <td className="py-3 font-medium text-xs">{c.name}</td>
                     <td className="py-3 text-xs">
@@ -205,9 +212,9 @@ export default function CustomerList() {
                       <button onClick={() => handleEdit(c)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Edit">
                         <Edit size={16} />
                       </button>
-                      <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Hapus">
+                      {manage&&<button disabled={busy} onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Hapus">
                         <Trash2 size={16} />
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 ))}
@@ -218,6 +225,7 @@ export default function CustomerList() {
                 )}
               </tbody>
             </table>
+            <TablePage value={table} label="pelanggan"/>
           </div>
         </div>
       </div>

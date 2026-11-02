@@ -1,6 +1,7 @@
 """Owner-managed staff credentials and authenticated personal attendance."""
 import re
 import uuid
+import transactions
 from datetime import timedelta, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
@@ -90,7 +91,12 @@ async def list_staff(user: dict = Depends(get_current_user)):
 
 @router.post("/api/staff", response_model=Staff)
 async def create_staff(payload: StaffCreate, user: dict = Depends(require_admin)):
+    return await transactions.run_transaction(get_db(),lambda session:_create_staff(payload,user))
+
+
+async def _create_staff(payload,user):
     db = get_db()
+    await db.capacity_guards.update_one({'_id':user['store_id']+':staff'},{'$inc':{'revision':1}},upsert=True)
     from plan_limits import check_capacity
     await check_capacity(db, user["store_id"], user.get("plan"), "staff", "max_employees")
     name, email = payload.name.strip(), str(payload.email).strip().lower()
@@ -117,6 +123,10 @@ async def create_staff(payload: StaffCreate, user: dict = Depends(require_admin)
 
 @router.put("/api/staff/{staff_id}", response_model=Staff)
 async def update_staff(staff_id: str, payload: StaffUpdate, user: dict = Depends(require_admin)):
+    return await transactions.run_transaction(get_db(),lambda session:_update_staff(staff_id,payload,user))
+
+
+async def _update_staff(staff_id,payload,user):
     db = get_db()
     row = await db.staff.find_one({"id": staff_id, "store_id": user["store_id"]}, {"_id": 0})
     if not row:
@@ -171,6 +181,10 @@ async def update_staff(staff_id: str, payload: StaffUpdate, user: dict = Depends
 
 @router.delete("/api/staff/{staff_id}")
 async def delete_staff(staff_id: str, user: dict = Depends(require_admin)):
+    return await transactions.run_transaction(get_db(),lambda session:_delete_staff(staff_id,user))
+
+
+async def _delete_staff(staff_id,user):
     db = get_db()
     row = await db.staff.find_one({"id": staff_id, "store_id": user["store_id"]}, {"_id": 0})
     if not row:

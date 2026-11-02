@@ -1,19 +1,25 @@
-import { useEffect, useState } from "react";
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import { inventoryError } from '@/api/inventoryItems';
+import { readCollection } from '@/api/records';
+import { useEffect, useRef, useState } from "react";
 import api, { fmtIDR } from "@/api/client";
 import { Plus, Check, CreditCard } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function AccountsPayable() {
   const [payables, setPayables] = useState([]);
+  const debtPage=useTablePage(payables);
   const [supplierName, setSupplierName] = useState("");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const paymentAttempt=useRef(null),paymentLock=useRef(false);
 
   const fetchPayables = () => {
-    api.get("/debt/payables").then((r) => setPayables(r.data)).catch(() => {});
+    readCollection("/debt/payables").then((r) => setPayables(r.data)).catch(() => {});
   };
 
   useEffect(() => {
@@ -26,14 +32,14 @@ export default function AccountsPayable() {
     // this just returned silently with zero feedback if left blank.
     if (!supplierName.trim()) { setFormError("Nama Supplier wajib diisi."); return; }
     if (!invoiceNo.trim()) { setFormError("No Faktur / Invoice wajib diisi."); return; }
-    if (!amount || parseInt(amount) <= 0) { setFormError("Jumlah Hutang wajib diisi dan lebih besar dari 0."); return; }
+    if (!amount || Number(amount) <= 0) { setFormError("Jumlah Hutang wajib diisi dan lebih besar dari 0."); return; }
     setFormError("");
     setSaving(true);
 
     api.post("/debt/payables", {
       supplier_name: supplierName,
       invoice_no: invoiceNo,
-      amount: parseInt(amount),
+      amount: Number(amount),
       paid_amount: 0,
       due_date: dueDate || new Date().toISOString().slice(0, 10),
       status: "Unpaid"
@@ -45,25 +51,30 @@ export default function AccountsPayable() {
       fetchPayables();
       toast.success("Catatan Hutang Baru berhasil ditambahkan!");
     }).catch((err) => {
-      setFormError(err?.response?.data?.detail || "Gagal menyimpan catatan hutang.");
+      setFormError(inventoryError(err));
     }).finally(() => setSaving(false));
   };
 
   const handleSettle = (id, currentPaid, totalAmount) => {
+    if(paymentLock.current)return;
     const pay = prompt(`Masukkan jumlah pelunasan / cicilan hutang ke supplier (Total: ${fmtIDR(totalAmount)}):`, totalAmount - currentPaid);
-    if (pay === null || isNaN(pay) || parseInt(pay) <= 0) return;
+    if (pay === null || isNaN(pay) || Number(pay) <= 0) return;
 
-    const newPaid = currentPaid + parseInt(pay);
+    const newPaid = currentPaid + Number(pay);
     const status = newPaid >= totalAmount ? "Paid" : "Partial";
 
     // Same missing-endpoint bug as AccountsReceivable.jsx's handleSettle -- was POSTing to
     // the create endpoint (422, silently uncaught). Real fix: PUT to the record's own URL.
-    api.put(`/debt/payables/${id}`, { paid_amount: newPaid, status }).then(() => {
+    const fingerprint=JSON.stringify([id,currentPaid,newPaid]);
+    if(paymentAttempt.current?.fingerprint!==fingerprint)paymentAttempt.current={fingerprint,id:crypto.randomUUID()};
+    paymentLock.current=true;
+    api.put(`/debt/payables/${id}`, { paid_amount: newPaid, expected_paid_amount:currentPaid,request_id:paymentAttempt.current.id,status }).then(() => {
+      paymentAttempt.current=null;
       fetchPayables();
       toast.success("Pembayaran hutang berhasil dicatat!");
     }).catch((err) => {
-      toast.error(err?.response?.data?.detail || "Gagal mencatat pembayaran hutang.");
-    });
+      toast.error(inventoryError(err));fetchPayables();
+    }).finally(()=>{paymentLock.current=false;});
   };
 
   return (
@@ -141,7 +152,7 @@ export default function AccountsPayable() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
-                {payables.map((p) => {
+                {debtPage.rows.map((p) => {
                   const remaining = p.amount - p.paid_amount;
                   const isPaid = p.status === "Paid";
                   return (
@@ -175,6 +186,7 @@ export default function AccountsPayable() {
                 )}
               </tbody>
             </table>
+            <TablePage value={debtPage} label="utang"/>
           </div>
         </div>
       </div>

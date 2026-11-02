@@ -174,11 +174,15 @@ async def test_catalogue_pages_keep_restaurant_fields_and_exclude_other_products
     await db.products.insert_many([{"id": f"page-{i:04d}", "module": "dapuros", "store_id": USER["store_id"], "name": f"Menu {i}", "price": 10000, "recipe": [{"ingredient_id": "rice", "quantity": 1}]} for i in range(503)])
     await db.products.insert_one({"id": "foreign", "module": "geraina", "store_id": USER["store_id"], "name": "Other product"})
     first = (await http.get("/api/products/catalogue")).json()
-    assert first["total"] == 503 and len(first["items"]) == 500
+    # Two original unlabelled restaurant menus remain visible during upgrades.
+    assert first["total"] == 505 and len(first["items"]) == 500
     final = (await http.get("/api/products/catalogue", params={"cursor": first["next_cursor"]})).json()
-    assert len(final["items"]) == 3 and final["next_cursor"] is None
-    assert all(row["recipe"] for row in first["items"] + final["items"])
-    assert len({row["id"] for row in first["items"] + final["items"]}) == 503
+    assert len(final["items"]) == 5 and final["next_cursor"] is None
+    rows=first['items']+final['items']
+    assert all(row['recipe'] for row in rows if row['id'].startswith('page-'))
+    assert {'meal','coffee'}.issubset({row['id'] for row in rows})
+    assert 'foreign' not in {row['id'] for row in rows}
+    assert len({row["id"] for row in rows}) == 505
 
 
 @pytest.mark.asyncio

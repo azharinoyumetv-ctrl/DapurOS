@@ -3,10 +3,15 @@ const fs=require('node:fs');
 const path=require('node:path');
 const roots={dapuros:path.resolve(__dirname,'../build'),geraina:path.resolve(__dirname,'../../../GerainaOS/frontend/build')};
 const origin='https://dagangos.com';
+const pageErrors=new WeakMap();
+test.afterEach(async({context})=>expect(pageErrors.get(context)||[]).toEqual([]));
 const other=m=>m==='dapuros'?'geraina':'dapuros';
 const account=m=>({id:`${m}-fixture-owner`,store_id:`${m}-fixture-store`,store_name:`${m} fixture`,email:`${m}@example.invalid`,role:'Owner',current_module:m,plan:m==='dapuros'?'starter':'business',trial_ends_at:null});
 async function transport(context,{status=200,delay=0}={}){
  const requests=[];
+ const errors=[];pageErrors.set(context,errors);
+ const watch=page=>page.on('pageerror',error=>errors.push(error.message));
+ context.pages().forEach(watch);context.on('page',watch);
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.origin!==origin)return route.abort();
@@ -18,7 +23,7 @@ async function transport(context,{status=200,delay=0}={}){
     if(delay)await new Promise(r=>setTimeout(r,delay));
     return route.fulfill({status,json:status===200?{...account(m),stores:[{module:m,store_id:`${m}-fixture-store`},{module:other(m),store_id:`${other(m)}-fixture-store`}]}:{detail:'Fixture unavailable'}});
    }
-   const body=url.pathname==='/api/orders/stats'?{today_sales:0,today_orders:0,week_sales:0,month_sales:0,product_count:0}:url.pathname==='/api/settings'?{general:{store_name:`${m} fixture`}}:url.pathname.startsWith('/api/records/')?{items:[],total:0}:[];
+   const body=url.pathname==='/api/orders/stats'?{today_sales:0,today_orders:0,week_sales:0,month_sales:0,product_count:0,low_stock_count:0}:url.pathname==='/api/settings'?{general:{store_name:`${m} fixture`}}:url.pathname.startsWith('/api/records/')||url.pathname==='/api/orders/history'||url.pathname==='/api/products/catalogue'?{items:[],total:0,next_cursor:null}:[];
    return route.fulfill({status:req.method()==='GET'?200:403,json:body});
   }
   const m=url.pathname.split('/')[1];

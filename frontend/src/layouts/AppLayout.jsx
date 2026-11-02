@@ -71,6 +71,7 @@ export const MENU_STRUCTURE = [
     label: "Pelanggan",
     icon: Users,
     key: "customers",
+    minPlan: "pro",
     sub: [
       { to: "/dapuros/app/customers", label: "Daftar Pelanggan" },
       { to: "/dapuros/app/customers/membership", label: "Keanggotaan", minPlan: "business" },
@@ -97,7 +98,6 @@ export const MENU_STRUCTURE = [
     label: "Laporan",
     icon: BarChart3,
     key: "reports",
-    minPlan: "pro",
     sub: sectionMenu("reports")
   },
   {

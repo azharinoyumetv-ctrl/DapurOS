@@ -1,29 +1,15 @@
+from product_scope import product_scope, inventory_scope
 from permissions import require_permission
-"""Reporting endpoints: profit (Laba Rugi), cashflow (Arus Kas), inventory turnover, and
-expense CRUD. Numbers here are computed from the real orders/products/expenses collections --
-no hardcoded demo series like the frontend used to render.
-
-Ported from GerainaOS/backend/routes_reports.py. DapurOS also supports a BOM/recipe system
-(Product.recipe -> Ingredient.stock deduction, see routes_orders.py) but the Ingredient model
-has no per-unit cost field -- there is no "ingredient cost" data anywhere in this codebase to
-compute COGS from. Product.cost is therefore the only real cost figure available for both
-recipe-based and non-recipe products alike (same as GerainaOS), so the COGS calculation below
-is unchanged from the GerainaOS original.
-
-Two known simplifications, documented rather than hidden:
-  1. COGS uses each product's CURRENT `cost` field, not a snapshot of cost-at-time-of-sale
-     (order line items don't persist a cost snapshot). If a product's cost changes, past
-     months' COGS shifts too when recomputed. Fine for a first cut; revisit if exact
-     historical COGS matters later (would need to snapshot cost onto each order item).
-  2. Inventory turnover uses CURRENT stock value as a stand-in for "average inventory value"
-     over the period, since no periodic stock snapshots are kept. A real average-inventory
-     turnover calculation would need those snapshots, which don't exist yet.
+"""Persisted restaurant reports with original sale cost snapshots.
+Legacy orders without a saved cost are labelled unknown. Inventory turnover
+uses current stock value as an explicitly labelled approximation.
 """
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from database import get_db
+from database import get_db, utcnow
+from store_time import store_zone
 from models import Expense, ExpenseCreate
 from auth import get_current_user
 from plan_limits import require_plan
@@ -89,11 +75,12 @@ async def delete_expense(expense_id: str, user: dict = Depends(require_plan("pro
 
 
 # ---------- Profit (Laba Rugi) ----------
-@router.get("/reports/profit", dependencies=[Depends(require_permission('reports.read'))])
+@router.get("/reports/profit", dependencies=[Depends(require_permission("reports.read"))])
 async def report_profit(user: dict = Depends(require_plan("pro")), months: int = Query(6, ge=1, le=24)):
     db = get_db()
     store_id = user["store_id"]
-    now = datetime.now(timezone.utc)
+    zone = await store_zone(db, store_id)
+    now = utcnow().astimezone(zone)
 
     buckets = []
     y, m = now.year, now.month
@@ -104,36 +91,41 @@ async def report_profit(user: dict = Depends(require_plan("pro")), months: int =
             yy -= 1
         buckets.append((yy, mm))
     earliest_year, earliest_month = buckets[0]
-    range_start = datetime(earliest_year, earliest_month, 1, tzinfo=timezone.utc)
+    range_start = datetime(earliest_year, earliest_month, 1, tzinfo=zone).astimezone(timezone.utc)
 
-    orders = await db.orders.find(
-        {"store_id": store_id, "payment_status": "paid", "created_at": {"$gte": range_start.isoformat()}},
-        {"_id": 0, "items": 1, "total": 1, "created_at": 1},
-    ).to_list(length=100000)
-
-    cost_by_id = {}
-    async for p in db.products.find({"store_id": store_id}, {"_id": 0, "id": 1, "cost": 1}):
-        cost_by_id[p["id"]] = p.get("cost") or 0
-
-    monthly = {b: {"revenue": 0.0, "cost": 0.0} for b in buckets}
-    for o in orders:
-        dt = _parse_iso(o.get("created_at"))
+    monthly = {b: {'revenue':0.0,'cost':0.0,'unknown':False} for b in buckets}
+    unknown_orders, estimated_orders = 0, 0
+    async for order in db.orders.find(
+        {'store_id':store_id,'payment_status':'paid','created_at':{'$gte':range_start.isoformat(),'$lte':utcnow().isoformat()}},
+        {'_id':0,'items':1,'total':1,'created_at':1}):
+        dt = _parse_iso(order.get('created_at'))
         if not dt:
             continue
-        key = (dt.year, dt.month)
+        dt = dt.astimezone(zone)
+        key = (dt.year,dt.month)
         if key not in monthly:
             continue
-        monthly[key]["revenue"] += o.get("total") or 0
-        for it in o.get("items", []):
-            monthly[key]["cost"] += cost_by_id.get(it.get("product_id"), 0) * (it.get("quantity") or 0)
+        monthly[key]['revenue'] += order.get('total') or 0
+        unknown, estimated = False, False
+        for line in order.get('items',[]):
+            if line.get('unit_cost') is None:
+                unknown = True
+                continue
+            monthly[key]['cost'] += line['unit_cost'] * line.get('quantity',0)
+            estimated = estimated or line.get('cost_snapshot_source') in ('sync_time','offline_catalogue')
+        if unknown:
+            monthly[key]['unknown'] = True
+            unknown_orders += 1
+        if estimated:
+            estimated_orders += 1
 
-    expenses = await db.expenses.find(
+    expenses = db.expenses.find(
         {"store_id": store_id, "expense_date": {"$gte": f"{earliest_year:04d}-{earliest_month:02d}-01"}},
         {"_id": 0, "amount": 1, "expense_date": 1},
-    ).to_list(length=100000)
+    )
 
     monthly_opex = {b: 0.0 for b in buckets}
-    for e in expenses:
+    async for e in expenses:
         d = str(e.get("expense_date") or "")
         try:
             key = (int(d[0:4]), int(d[5:7]))
@@ -155,9 +147,9 @@ async def report_profit(user: dict = Depends(require_plan("pro")), months: int =
             "month": MONTH_LABELS_ID[mm - 1],
             "year": yy,
             "revenue": round(revenue, 2),
-            "cost": round(cogs, 2),
+            "cost": None if monthly[b]["unknown"] else round(cogs, 2),
             "operating_expenses": round(opex, 2),
-            "profit": round(net, 2),
+            "profit": None if monthly[b]["unknown"] else round(net, 2),
         })
         totals["revenue"] += revenue
         totals["cogs"] += cogs
@@ -165,7 +157,14 @@ async def report_profit(user: dict = Depends(require_plan("pro")), months: int =
         totals["gross_profit"] += gross
         totals["net_profit"] += net
 
-    return {"series": series, "totals": {k: round(v, 2) for k, v in totals.items()}}
+    values = {k:round(v,2) for k,v in totals.items()}
+    if unknown_orders:
+        for field in ('cogs','gross_profit','net_profit'):
+            values[field] = None
+    return {'series':series,'totals':values,'cost_complete':not unknown_orders,
+            'unknown_cost_orders':unknown_orders,'estimated_cost_orders':estimated_orders,'timezone':str(zone),
+            'cost_policy':'snapshot_at_sale',
+            'notice':f'{unknown_orders} transaksi lama tidak memiliki snapshot HPP. Laba tidak ditampilkan untuk menghindari perkiraan dari harga modal saat ini.' if unknown_orders else ''}
 
 
 # ---------- Cashflow (Arus Kas) ----------
@@ -238,14 +237,17 @@ async def report_inventory_turnover(user: dict = Depends(require_plan("pro")), d
         {"_id": 0, "items": 1},
     ).to_list(length=100000)
 
-    products = await db.products.find({"store_id": store_id}, {"_id": 0, "id": 1, "cost": 1, "stock": 1}).to_list(length=100000)
+    products = await db.products.find(product_scope(store_id), {"_id": 0, "id": 1, "cost": 1, "stock": 1}).to_list(length=100000)
     cost_by_id = {p["id"]: (p.get("cost") or 0) for p in products}
     current_inventory_value = sum((p.get("cost") or 0) * (p.get("stock") or 0) for p in products)
 
     cogs_period = 0.0
     for o in orders:
         for it in o.get("items", []):
-            cogs_period += cost_by_id.get(it.get("product_id"), 0) * (it.get("quantity") or 0)
+            unit_cost = it.get('unit_cost')
+            if unit_cost is None:
+                unit_cost = cost_by_id.get(it.get('product_id'), 0)
+            cogs_period += unit_cost * (it.get("quantity") or 0)
 
     turnover_ratio_period = (cogs_period / current_inventory_value) if current_inventory_value > 0 else None
     turnover_ratio_monthly_est = (

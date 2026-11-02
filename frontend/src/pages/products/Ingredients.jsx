@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import api from "@/api/client";
+import { readCollection } from '@/api/records';
 import { Plus, Edit3, Trash2, X, AlertCircle, RefreshCw, Clipboard } from "lucide-react";
 
 export default function Ingredients() {
@@ -10,6 +11,7 @@ export default function Ingredients() {
   const [selectedIng, setSelectedIng] = useState(null);
   const [form, setForm] = useState({ name: "", stock: 0, safety_stock: 0, unit: "g" });
   const writeLock = useRef(false);
+  const wasteAttempt = useRef(null);
   const [saving, setSaving] = useState(false);
 
   // Spoilage log state
@@ -32,7 +34,7 @@ export default function Ingredients() {
   ];
   const loadUnits = async () => {
     try {
-      const res = await api.get("/products/units");
+      const res = await readCollection("/products/units");
       setUnits(Array.isArray(res.data) && res.data.length ? res.data : DEFAULT_UNITS);
     } catch (e) {
       setUnits(DEFAULT_UNITS);
@@ -50,7 +52,7 @@ export default function Ingredients() {
 
   const loadIngredients = async () => {
     setLoading(true);setErr('');
-    try {const res=await api.get('/ingredients');if(!Array.isArray(res.data))throw Error('Invalid ingredients response');setIngredients(res.data);}
+    try {const res=await readCollection('/ingredients');if(!Array.isArray(res.data))throw Error('Invalid ingredients response');setIngredients(res.data);}
     catch {setErr('Bahan baku belum dapat dimuat. Periksa koneksi lalu coba lagi.');}
     finally {setLoading(false);}
   };
@@ -80,7 +82,7 @@ export default function Ingredients() {
 
   const handleSave = async e => {
     e.preventDefault();if(writeLock.current)return;writeLock.current=true;setSaving(true);setErr('');
-    const payload={name:form.name,stock:Number(form.stock),safety_stock:Number(form.safety_stock),unit:form.unit};
+    const payload={name:form.name,stock:Number(form.stock),safety_stock:Number(form.safety_stock),unit:form.unit,...(selectedIng?{expected_stock:selectedIng.stock}:{})};
     try {
       const res=selectedIng?await api.put(`/ingredients/${selectedIng.id}`,payload):await api.post('/ingredients',payload);
       if(!res.data?.id)throw Error('Jawaban penyimpanan tidak valid.');
@@ -91,11 +93,12 @@ export default function Ingredients() {
   const handleDelete = async id => {
     if(!window.confirm('Apakah Anda yakin ingin menghapus bahan baku ini?'))return;
     try{await api.delete(`/ingredients/${id}`);setIngredients(rows=>rows.filter(row=>row.id!==id));}
-    catch{setErr('Bahan baku belum dihapus. Periksa koneksi lalu coba lagi.');}
+    catch(e){setErr(typeof e?.response?.data?.detail==='string'?e.response.data.detail:'Bahan baku belum dihapus. Periksa koneksi lalu coba lagi.');}
   };
 
   const handleWasteSubmit = async (e) => {
     e.preventDefault();
+    if(writeLock.current)return;
     setSaving(true);
     setErr("");
     const ing = ingredients.find((i) => i.id === wasteForm.ingredientId);
@@ -111,23 +114,23 @@ export default function Ingredients() {
       return;
     }
 
+    writeLock.current=true;
+    const fingerprint=JSON.stringify([ing.id,wasteQty,wasteForm.reason]);
+    if(wasteAttempt.current?.fingerprint!==fingerprint)wasteAttempt.current={fingerprint,id:crypto.randomUUID()};
     try {
       const res = await api.post(`/ingredients/${ing.id}/spoilage`, {
         quantity_lost: wasteQty,
         reason: wasteForm.reason,
+        request_id:wasteAttempt.current.id,
       });
-      // Sinkronkan state dari respons server (atomik & akurat)
-      setIngredients((prev) =>
-        prev.map((item) =>
-          item.id === ing.id ? { ...item, stock: Math.max(0, item.stock - wasteQty) } : item
-        )
-      );
-      setSpoilageLogs((prev) => [res?.data, ...(Array.isArray(prev) ? prev : [])].filter(Boolean));
+      wasteAttempt.current=null;await loadIngredients();
+      setSpoilageLogs((prev) => [res.data,...prev.filter(row=>row.id!==res.data.id)]);
       setWasteOpen(false);
       setWasteForm({ ingredientId: "", qty: 0, reason: SPOILAGE_REASONS[0] });
     } catch (e2) {
       setErr(typeof e2?.response?.data?.detail === 'string' ? e2.response.data.detail : 'Bahan terbuang belum dicatat. Stok tidak diubah. Periksa koneksi lalu coba lagi.');
     } finally {
+      writeLock.current=false;
       setSaving(false);
     }
   };

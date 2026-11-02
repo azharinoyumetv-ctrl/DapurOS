@@ -1,3 +1,6 @@
+import useTablePage from '@/hooks/useTablePage';
+import TablePage from '@/components/TablePage';
+import { readCollection } from '@/api/records';
 import { useEffect, useState } from "react";
 import api from "@/api/client";
 import { Plus, Trash2, Edit } from "lucide-react";
@@ -5,13 +8,14 @@ import { toast } from "@/components/ui/sonner";
 
 export default function BranchManagement() {
   const [branches, setBranches] = useState([]);
+  const branchPage=useTablePage(branches);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [editingId, setEditingId] = useState(null);
 
   const fetchBranches = () => {
-    api.get("/branches").then((r) => setBranches(r.data)).catch(() => {});
+    readCollection("/branches").then((r) => setBranches(r.data)).catch(() => {});
   };
 
   useEffect(() => {
@@ -135,7 +139,7 @@ export default function BranchManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
-                {branches.map((b) => (
+                {branchPage.rows.map((b) => (
                   <tr key={b.id} className="hover:bg-[hsl(var(--background))]/50 transition-colors">
                     <td className="py-3 font-semibold text-xs text-[hsl(var(--primary))]">{b.name}</td>
                     <td className="py-3 text-xs">{b.phone || "-"}</td>
@@ -152,6 +156,7 @@ export default function BranchManagement() {
                 ))}
               </tbody>
             </table>
+            <TablePage value={branchPage} label="cabang"/>
           </div>
         </div>
       </div>

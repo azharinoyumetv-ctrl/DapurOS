@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api, { fmtIDR } from "@/api/client";
 import { useAuth } from "@/auth/AuthContext";
+import { isPlanLocked } from '@/navigation/sections';
+import { canAccessPath } from '@/auth/permissions';
+import { readCollection } from '@/api/records';
 import {
   TrendingUp, Package, ShoppingCart, Calendar, Sparkles,
   ArrowRight, Crown, DollarSign, Percent, BarChart3,
@@ -34,6 +37,9 @@ const COLORS = ["hsl(151,39%,17%)", "hsl(9,65%,55%)", "hsl(37,90%,55%)", "hsl(14
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const can = (permission, plan) => !isPlanLocked(plan, user?.plan) && (user?.role === 'Owner' || user?.capabilities?.includes('*') || user?.capabilities?.includes(permission) || (!user?.capabilities && user?.role === 'Manager' && permission !== 'branches.manage'));
+  const showDebt = can('debt.read', 'pro'), showReports = can('reports.read', 'pro'), showAttendance = can('attendance.team', 'business'), showBranches = can('branches.manage', 'business');
+  const [loadError, setLoadError] = useState(''), [revision, setRevision] = useState(0);
   
   // Dashboard states
   const [stats, setStats] = useState(null);
@@ -50,19 +56,23 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (window.__dapurosAndroid) return;
+    let active = true;
+    setLoadError('');
+    const failed = () => { if(active) setLoadError('Sebagian data dasbor belum dapat diperbarui. Periksa koneksi lalu coba lagi.'); };
+    const read = (path, setter) => readCollection(path).then(r => { if(active) setter(r.data); }).catch(failed);
     // Parallel fetching for dashboard widgets
-    api.get("/orders/stats").then((r) => setStats(r.data)).catch(() => {});
-    api.get("/orders?limit=5").then((r) => setRecent(r.data)).catch(() => {});
-    api.get("/products").then((r) => setProducts(r.data)).catch(() => {});
-    api.get("/debt/receivables").then((r) => setReceivables(r.data)).catch(() => {});
-    api.get("/debt/payables").then((r) => setPayables(r.data)).catch(() => {});
-    api.get("/attendance").then((r) => setAttendance(r.data)).catch(() => {});
-    api.get("/branches").then((r) => setBranches(r.data)).catch(() => {});
-    api.get("/orders/sales-trend?days=7").then((r) => setSalesTrend(r.data)).catch(() => setSalesTrend([]));
-    api.get("/orders/payment-methods?days=7").then((r) => setPaymentMethods(r.data)).catch(() => setPaymentMethods([]));
-    api.get("/orders/payment-methods?days=1").then((r) => setTodayPaymentMethods(r.data)).catch(() => setTodayPaymentMethods([]));
-    api.get("/reports/cashflow?weeks=4").then((r) => setCashflowReport(r.data)).catch(() => setCashflowReport(null));
-  }, []);
+    read('/orders/stats', setStats);
+    api.get('/orders/history?limit=5').then(r => { if(active) setRecent(r.data.items); }).catch(failed);
+    read('/products', setProducts);
+    if(showDebt) { read('/debt/receivables', setReceivables); read('/debt/payables', setPayables); }
+    if(showAttendance) read('/attendance', setAttendance);
+    if(showBranches) read('/branches', setBranches);
+    read('/orders/sales-trend?days=7', setSalesTrend);
+    read('/orders/payment-methods?days=7', setPaymentMethods);
+    read('/orders/payment-methods?days=1', setTodayPaymentMethods);
+    if(showReports) read('/reports/cashflow?weeks=4', setCashflowReport);
+    return () => { active = false; };
+  }, [user?.id, user?.store_id, user?.role, user?.plan, revision]);
 
   const days = user?.trial_ends_at ? Math.max(0, Math.ceil((new Date(user.trial_ends_at).getTime() - Date.now()) / 86400000)) : 14;
   const isTrial = (user?.plan || "trial") === "trial";
@@ -106,12 +116,12 @@ export default function Dashboard() {
           <Link to="/dapuros/app/pos" className="btn-primary flex items-center gap-1 text-xs py-2 px-3.5" data-testid="dashboard-buka-kasir-btn">
             <ShoppingCart size={14} /> Buka Kasir
           </Link>
-          <Link to="/dapuros/app/kds" className="bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-kds-btn">
+          {canAccessPath(user?.role,'/kds') && <Link to="/dapuros/app/kds" className="bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-kds-btn">
             <ChefHat size={14} /> Layar Dapur (KDS)
-          </Link>
-          <Link to="/dapuros/app/qr-menu" className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-qr-menu-btn">
+          </Link>}
+          {canAccessPath(user?.role,'/qr-menu') && !isPlanLocked('pro',user?.plan) && <Link to="/dapuros/app/qr-menu" className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1 text-xs py-2 px-3.5 rounded-xl shadow-md transition-all" data-testid="dashboard-buka-qr-menu-btn">
             <QrCode size={14} /> Menu QR Code
-          </Link>
+          </Link>}
         </div>
       </div>
 
@@ -138,21 +148,22 @@ export default function Dashboard() {
         </div>
       )}
 
+      {loadError && <div role="alert" className="card-surface p-4 text-amber-900">{loadError} <button className="underline font-bold" onClick={() => setRevision(v => v + 1)}>Coba lagi</button></div>}
       {/* 5 KPI Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           label="Pendapatan Hari Ini"
-          value={fmtIDR(stats?.today_sales || 0)}
+          value={stats ? fmtIDR(stats.today_sales) : '—'}
           icon={TrendingUp}
           hint={`${stats?.today_orders || 0} transaksi hari ini`}
           testid="stat-revenue"
           colorClass="bg-emerald-50 text-emerald-700"
         />
         <StatCard
-          label="Keuntungan Hari Ini"
-          value={fmtIDR((stats?.today_sales || 0) * 0.4)} // Estimated 40% margin
+          label="Laba Kotor Menu Hari Ini"
+          value={typeof stats?.today_gross_profit === 'number' ? fmtIDR(stats.today_gross_profit) : '—'}
           icon={Percent}
-          hint="Est. Margin Kotor 40%"
+          hint={stats?.today_cost_complete === false ? 'Biaya transaksi lama belum lengkap' : 'Penjualan menu dikurangi biaya tersimpan; sebelum pajak dan layanan'}
           testid="stat-profit"
           colorClass="bg-blue-50 text-blue-700"
         />
@@ -325,7 +336,7 @@ export default function Dashboard() {
         </div>
 
         {/* 7. Cashflow Summary Widget */}
-        <div className="col-span-12 lg:col-span-4 card-surface p-6 h-60 flex flex-col justify-between">
+        {showReports && <div className="col-span-12 lg:col-span-4 card-surface p-6 h-60 flex flex-col justify-between">
           <h3 className="font-display font-bold text-sm">Arus Kas Ringkas (4 Minggu)</h3>
           <div className="flex-1 mt-3">
             {cashflowReport === null ? (
@@ -343,10 +354,10 @@ export default function Dashboard() {
               </ResponsiveContainer>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* 8 & 9. Receivables & Payables Ledger Summaries */}
-        <div className="col-span-12 lg:col-span-4 card-surface p-6 flex flex-col justify-between">
+        {showDebt && <div className="col-span-12 lg:col-span-4 card-surface p-6 flex flex-col justify-between">
           <h3 className="font-display font-bold text-sm flex items-center gap-1.5 text-[hsl(var(--primary))]">
             <Landmark size={16} /> Hutang Piutang Dagang
           </h3>
@@ -366,10 +377,10 @@ export default function Dashboard() {
               <Link to="/dapuros/app/debt/payable" className="text-[10px] font-bold text-[hsl(var(--primary))] bg-[hsl(var(--primary))]/8 px-2.5 py-1 rounded">Kelola</Link>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* 10. Staff Performance Widget */}
-        <div className="col-span-12 lg:col-span-4 card-surface p-6 flex flex-col justify-between">
+        {showAttendance && <div className="col-span-12 lg:col-span-4 card-surface p-6 flex flex-col justify-between">
           <h3 className="font-display font-bold text-sm flex items-center gap-1.5 text-[hsl(var(--primary))]">
             <Briefcase size={16} /> Keaktifan & Shift Staf
           </h3>
@@ -392,10 +403,10 @@ export default function Dashboard() {
           <Link to="/dapuros/app/staff/management" className="btn-outline w-full py-1.5 text-center text-[10px] font-semibold block">
             Kelola Karyawan & Peran
           </Link>
-        </div>
+        </div>}
 
         {/* 11. Branch Comparison Chart */}
-        <div className="col-span-12 lg:col-span-4 card-surface p-6 h-60 flex flex-col justify-between">
+        {showBranches && <div className="col-span-12 lg:col-span-4 card-surface p-6 h-60 flex flex-col justify-between">
           <h3 className="font-display font-bold text-sm">Perbandingan Penjualan Cabang</h3>
           <div className="flex-1 mt-3 flex items-center justify-center text-center px-2">
             <p className="text-xs text-[hsl(var(--muted))]">
@@ -404,7 +415,7 @@ export default function Dashboard() {
               {branches.length > 0 && ` (${branches.length} cabang terdaftar)`}
             </p>
           </div>
-        </div>
+        </div>}
 
       </div>
     </div>

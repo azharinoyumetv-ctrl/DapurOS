@@ -185,6 +185,7 @@ def test_failed_staff_insert_does_not_leave_an_orphan_login(fixture, monkeypatch
         async def insert_one(self, document):
             raise RuntimeError("isolated insert failure")
     class DatabaseProxy:
+        _transaction_test_db = db
         staff = StaffProxy()
         def __getattr__(self, name):
             return getattr(db, name)

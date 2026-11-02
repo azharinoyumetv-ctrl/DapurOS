@@ -29,7 +29,7 @@ export default function About() {
                 </span>
               </div>
               <p className="text-sm text-[hsl(var(--muted))]">
-                Modul POS Grosir & Ritel di dalam platform bisnis DagangOS.
+                POS restoran dan kafe di dalam platform bisnis DagangOS.
               </p>
             </div>
             <span className="pill pill-success" data-testid="about-version">{appInfo?.versionName ? `v${appInfo.versionName}` : "Web"}</span>
@@ -54,7 +54,7 @@ export default function About() {
               <div>
                 <p className="text-[10px] uppercase tracking-wider font-semibold text-[hsl(var(--muted))]">Nama Bisnis / Toko</p>
                 <p className="text-sm font-semibold text-[hsl(var(--foreground))]" data-testid="about-store-name">
-                  {user?.store_name || "Toko Kelontong Anda"}
+                  {user?.store_name || "Restoran Anda"}
                 </p>
               </div>
             </div>

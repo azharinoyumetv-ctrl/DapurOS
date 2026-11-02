@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from database import get_db
 from auth import get_current_user
+from permissions import require_permission
 from escpos import build_sample_escpos, build_receipt_escpos
 
-router = APIRouter(prefix="/api/printer", tags=["printer"])
+router = APIRouter(prefix="/api/printer", tags=["printer"],dependencies=[Depends(require_permission('pos.use'))])
 
 
 @router.get("/test-escpos")
