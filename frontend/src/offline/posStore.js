@@ -76,7 +76,10 @@ export async function recordCashSale(user, payload) {
     request.onsuccess = () => {
       if (request.result) {
         const snapshot = request.result;
-        snapshot.data = snapshot.data.map(product => ({ ...product, stock: Number(product.stock || 0) - items.filter(item => item.product_id === product.id).reduce((sum, item) => sum + item.quantity, 0) }));
+        snapshot.data = snapshot.data.map(product => product.recipe?.length ? product : ({
+          ...product,
+          stock: Number(product.stock || 0) - items.filter(item => item.product_id === product.id).reduce((sum, item) => sum + item.quantity, 0),
+        }));
         tx.objectStore("cache").put(snapshot);
       }
       tx.objectStore("sales").add(record);

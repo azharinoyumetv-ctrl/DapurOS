@@ -29,11 +29,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 from server import app
 from database import get_raw_db
 from fastapi import Header, HTTPException, Request
+import routes_orders
+
+# Only the isolated fixture uses this adapter. The real payment policy,
+# persistence, callbacks and POS run unchanged.
+async def fixture_merchant_checkout(provider, config, order, channels):
+    assert provider == 'xendit' and config['secret_key'] == 'fixture-only-secret'
+    reference = order['gateway_reference']
+    return {'gateway_checkout_url': 'https://checkout.example.invalid/pay/' + reference,
+            'gateway_reference': reference, 'gateway_session_id': 'fixture-' + reference}
+
+routes_orders.create_merchant_checkout = fixture_merchant_checkout
 
 async def fixture(request: Request, x_e2e_fixture: str = Header(default='')):
     if request.client.host not in ('127.0.0.1', '::1') or x_e2e_fixture != os.environ['E2E_FIXTURE_KEY']:
         raise HTTPException(404)
     assert get_raw_db().name == os.environ['DB_NAME']
+
+
+@app.post('/__e2e/gateway')
+async def gateway(request: Request, x_e2e_fixture: str = Header(default='')):
+    await fixture(request, x_e2e_fixture)
+    body = await request.json()
+    db = get_raw_db()
+    scope = {'store_id': body['store_id']}
+    if not await db.stores.find_one({'id': scope['store_id'], 'module': 'dapuros'}):
+        raise HTTPException(404)
+    await db.integrations.update_one(scope, {'$set': {'xendit': {'is_active': True, 'secret_key': 'fixture-only-secret',
+        'webhook_token': 'fixture-' + scope['store_id']}}}, upsert=True)
+    await db.payments_config.update_one(scope, {'$set': {'va': {'is_active': True, 'provider': 'Xendit'}}}, upsert=True)
+    return {'ok': True}
 
 @app.post('/__e2e/plan')
 async def plan(request: Request, x_e2e_fixture: str = Header(default='')):

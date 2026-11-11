@@ -26,10 +26,10 @@ function run(command,args,options={}){return new Promise((resolve,reject)=>{cons
  fs.writeFileSync(runtime,JSON.stringify({base,fixtureKey,dbName}));
  console.error('Real DapurOS backend and isolated MongoDB replica are ready.');
  const args=process.argv.slice(2),withSockets=args.includes('--with-sockets'),withContracts=args.includes('--with-contracts'),withTransactions=args.includes('--with-transactions');
- const editor=args.includes('--editor'),nativeEditor=args.includes('--editor-native');
- const selectedArgs=args.filter(arg=>!['--with-sockets','--with-contracts','--with-transactions','--editor','--editor-native'].includes(arg));
- process.exitCode=nativeEditor
-  ?await run(process.execPath,['android-app/scripts/verify-product-editor-android.cjs',...selectedArgs],{stdio:'inherit'})
+ const editor=args.includes('--editor'),nativeEditor=args.includes('--editor-native'),nativePayment=args.includes('--payment-native');
+ const selectedArgs=args.filter(arg=>!['--with-sockets','--with-contracts','--with-transactions','--editor','--editor-native','--payment-native'].includes(arg));
+ process.exitCode=nativeEditor||nativePayment
+  ?await run(process.execPath,[nativePayment?'android-app/scripts/verify-table-payment-android.cjs':'android-app/scripts/verify-product-editor-android.cjs',...selectedArgs],{stdio:'inherit'})
   :await run(process.execPath,['frontend/node_modules/@playwright/test/cli.js','test','--config',editor?'frontend/playwright.product-editor.config.js':'frontend/playwright.full-local.config.js',...selectedArgs],{stdio:'inherit'});
  if(withSockets){
   const socketLog=fs.openSync(path.join(root,'tmp/full-e2e-sockets.log'),'w');

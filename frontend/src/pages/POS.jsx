@@ -8,7 +8,8 @@ import { offlineAvailable, scopeFor, cached, cache, recordCashSale, synchronize,
 import { canonicalRole, canManageProducts } from "@/auth/permissions";
 import BankQrisPayment from "@/payments/BankQrisPayment";
 import TableReservationDialog from '@/components/TableReservationDialog';
-import { useEffect, useMemo, useState, useRef } from "react";
+import TableGatewayPayment from '@/payments/TableGatewayPayment';
+import { lazy, Suspense, useEffect, useMemo, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import api, { fmtIDR, downloadPdf } from "@/api/client";
 import { useAuth } from "@/auth/AuthContext";
@@ -17,8 +18,10 @@ import {
   Search, Plus, Minus, Trash2, X, Printer, Download, CheckCircle2,
   Banknote, QrCode, Smartphone, RefreshCw, Barcode, Store, ChefHat,
   CreditCard, ChevronRight, Layers, ArrowLeft, RefreshCw as LoopIcon, Wifi, WifiOff, Edit, Edit3,
-  Landmark
+  Landmark, CalendarDays
 } from "lucide-react";
+
+const ReservationCalendar = lazy(() => import("@/components/ReservationCalendar"));
 
 // HISTORY: these used to carry the old "ID_" prefix (ID_OVO, ID_DANA, ...) left over from
 // Xendit's deprecated /ewallets/charges API. The backend's xendit_client.py was migrated to
@@ -193,9 +196,11 @@ export default function POS() {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [reservationTable,setReservationTable]=useState(null);
+  const [reservationCalendar, setReservationCalendar] = useState(null);
   const reservationLock=useRef(false);
   const canReserve=!isPlanLocked('business',user?.plan);
   const [activeSession, setActiveSession] = useState(null);
+  const tableReadSequence = useRef(0);
   const [websocketConnected, setWebsocketConnected] = useState(false);
 
   // Catalog & Cart state
@@ -222,6 +227,9 @@ export default function POS() {
 
   // Settle (bayar & tutup meja dine-in)
   const [settleOpen, setSettleOpen] = useState(false);
+  const [tablePayment, setTablePayment] = useState(null);
+  const [tableWallet, setTableWallet] = useState("");
+  const returnChecked = useRef(false);
 
   // Split bill states
   const [splitOpen, setSplitOpen] = useState(false);
@@ -377,8 +385,10 @@ export default function POS() {
     if (!window.confirm("Apakah Anda yakin ingin menghapus menu produk ini?")) return;
     try {
       await api.delete(`/products/${productId}`);
-    } catch (err) {}
-    setProducts(prev => prev.filter(p => p.id !== productId));
+      setProducts(prev => prev.filter(p => p.id !== productId));
+    } catch (err) {
+      toast.error(typeof err.response?.data?.detail === "string" ? err.response.data.detail : "Menu belum dapat dihapus. Coba lagi.");
+    }
   };
 
   const loadFloors = async () => {
@@ -400,17 +410,20 @@ export default function POS() {
   };
 
   const loadActiveTableSession = async (tableId) => {
+    const read = ++tableReadSequence.current;
     try {
       const res = await api.get(`/tables/${tableId}/session`);
+      if (read !== tableReadSequence.current) return;
       if (res.data && Array.isArray(res.data.items)) {
-        setActiveSession(res.data);
-      } else if (res.data && res.data.session && Array.isArray(res.data.items)) {
         setActiveSession(res.data);
       } else {
         setActiveSession(null); toast.error("Sesi meja belum dapat dimuat. Buka kembali meja saat terhubung.");
       }
     } catch (e) {
-      setActiveSession(null); toast.error("Sesi meja belum dapat dimuat. Buka kembali meja saat terhubung.");
+      if (read === tableReadSequence.current) {
+        setActiveSession(null);
+        if (e?.response?.status !== 404) toast.error("Sesi meja belum dapat dimuat. Buka kembali meja saat terhubung.");
+      }
     }
   };
 
@@ -435,6 +448,24 @@ export default function POS() {
   }, []);
 
   useEffect(() => {
+    if (returnChecked.current || !tables.length) return;
+    returnChecked.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const table = tables.find(row => row.id === params.get("table"));
+    const paymentId = params.get("payment");
+    if (!table || !paymentId) return;
+    params.delete("table"); params.delete("payment");
+    window.history.replaceState(window.history.state, "", window.location.pathname + (params.size ? `?${params}` : ""));
+    api.get(`/tables/${table.id}/gateway-payment/${encodeURIComponent(paymentId)}`).then(({data}) => {
+      setSelectedTable(table);
+      setTablePayment(data);
+      setSettleOpen(true);
+      if (data.payment_status !== "paid" && !['Vacant', 'Reserved'].includes(table.status)) loadActiveTableSession(table.id);
+    }).catch(() => toast.error("Status pembayaran belum dapat dimuat. Pilih meja untuk memeriksa tagihan."));
+  }, [tables]);
+  useEffect(() => setBankConfirmed(false), [activeSession?.session?.id, activeSession?.grand_total, settleOpen]);
+
+  useEffect(() => {
     const scanned = e => { if (e.detail?.target !== 'pos') return; const product = products.find(p => p.sku === e.detail.value || p.id === e.detail.value); if (product) addToCart(product); else toast.error('Barcode tidak ditemukan dalam katalog.'); };
     window.addEventListener('dapuros-barcode', scanned);
     const beforeSwitch = e => { if (cart.length) {e.preventDefault(); toast.error("Selesaikan atau kosongkan pesanan sebelum mengganti pengguna.");} };
@@ -454,6 +485,7 @@ export default function POS() {
     return subscribeStore(user.store_id, async () => {
       const rows=await loadTables();
       const current=rows?.find(table=>table.id===selectedTable?.id);
+      if(current)setSelectedTable(table=>table?.id===current.id?current:table);
       if(current&&!['Vacant','Reserved'].includes(current.status))await loadActiveTableSession(current.id);
       else if(rows)setActiveSession(null);
     }, setWebsocketConnected);
@@ -505,7 +537,44 @@ export default function POS() {
     return arr.slice(0, pageLimit);
   }, [products, activeCat, q, pageLimit]);
 
+  const visibleRecipeIds = JSON.stringify(filtered.filter(product => product.recipe?.length).map(product => product.id));
+  useEffect(() => {
+    const ids = JSON.parse(visibleRecipeIds);
+    if (!online || viewMode !== "catalog" || !ids.length) return;
+    const controller = new AbortController();
+    let reading = false;
+    const refresh = async () => {
+      if (reading || document.hidden) return;
+      reading = true;
+      try {
+        const availability = {};
+        for (let offset = 0; offset < ids.length; offset += 100) {
+          const params = new URLSearchParams(ids.slice(offset, offset + 100).map(id => ["ids", id]));
+          const { data } = await api.get("/products/recipe-availability?" + params, { signal: controller.signal, timeout: 8000 });
+          Object.assign(availability, data);
+        }
+        if (!controller.signal.aborted) {
+          setProducts(current => current.map(product => {
+            const count = availability[product.id];
+            return Number.isInteger(count) && count !== product.available_portions ? { ...product, available_portions: count } : product;
+          }));
+        }
+      } catch {
+        // The catalogue remains usable and checkout still validates inventory.
+      } finally {
+        reading = false;
+      }
+    };
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => { controller.abort(); clearInterval(interval); };
+  }, [visibleRecipeIds, online, viewMode, receipt?.id]);
+
   const addToCart = (p) => {
+    if (online && p.recipe?.length && p.available_portions === 0) {
+      toast.error("Bahan menu ini habis.");
+      return;
+    }
     setCart((c) => {
       const i = c.findIndex((it) => it.product_id === p.id);
       if (i >= 0) {
@@ -622,7 +691,8 @@ export default function POS() {
       }
 
       let r;
-      if (offlineAvailable() && !isDineIn && payload.payment_method === 'cash') {
+      const hasRecipe = cart.some(item => products.find(product => product.id === item.product_id)?.recipe?.length);
+      if (offlineAvailable() && !isDineIn && payload.payment_method === 'cash' && (!navigator.onLine || !hasRecipe)) {
         const saved = await recordCashSale(user, payload); r = {data: saved.order};
         synchronize(scope, api).catch(() => {});
       } else {
@@ -672,29 +742,56 @@ export default function POS() {
 
   // Bayar & tutup meja: settle semua order sesi jadi lunas, lalu kosongkan meja.
   const settleDineIn = async (method) => {
-    if (!selectedTable) return;
+    if (!selectedTable || !activeSession?.session?.id || checkoutLock.current) return;
+    checkoutLock.current = true;
     setSubmitting(true);
     try {
-      await api.post(`/tables/${selectedTable.id}/checkout`, { payment_method: method, expected_session_id: activeSession?.session?.id || activeSession?.id, expected_total:activeSession?.grand_total, checked_in_bank: method === "qris_bank" && bankConfirmed, received_amount: activeSession?.grand_total });
+      const payload = { payment_method: method, expected_session_id: activeSession.session.id, expected_total: activeSession.grand_total };
+      if (!["cash", "qris_bank"].includes(method)) {
+        const {data} = await api.post(`/tables/${selectedTable.id}/gateway-payment`, {...payload, ewallet_channel: method === "ewallet" ? tableWallet || payments.options?.ewallet_channels?.[0]?.code : undefined});
+        onTablePaymentStatus(data);
+        return;
+      }
+      await api.post(`/tables/${selectedTable.id}/checkout`, { ...payload, checked_in_bank: method === "qris_bank" && bankConfirmed, received_amount: method === "qris_bank" ? activeSession.grand_total : undefined });
       setSettleOpen(false);
       setSelectedTable(null);
       setActiveSession(null);
       setViewMode("floor");
       await loadTables();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal menyelesaikan pembayaran meja");
+      toast.error(typeof e?.response?.data?.detail === "string" ? e.response.data.detail : "Status belum dapat diperiksa. Muat ulang tagihan sebelum mencoba lagi.");
       await loadActiveTableSession(selectedTable.id);
     } finally {
-      setSubmitting(false);
+      setSubmitting(false); checkoutLock.current = false;
     }
   };
 
+  const onTablePaymentStatus = data => {
+    setTablePayment(data);
+    if (data.payment_status === "paid") {
+      tableReadSequence.current++;
+      setActiveSession(null);
+      loadTables();
+    } else if (data.payment_status !== "pending" && selectedTable) {
+      loadTables();
+      loadActiveTableSession(selectedTable.id);
+    }
+  };
+
+  const closeTablePayment = () => {
+    if (submitting) return;
+    if (tablePayment?.payment_status === "paid") setSelectedTable(null);
+    else if (selectedTable && tablePayment?.id) loadActiveTableSession(selectedTable.id);
+    setTablePayment(null);
+    setSettleOpen(false);
+  };
+
   const handleSelectTable = (table) => {
+    tableReadSequence.current++;
+    setActiveSession(null);
     setSelectedTable(table);
     if (!['Vacant','Reserved'].includes(table.status)) {
       loadActiveTableSession(table.id);
-    } else {
-      setActiveSession(null);
     }
   };
 
@@ -806,7 +903,7 @@ export default function POS() {
         // FLOOR LAYOUT VIEW
         <div className="p-6 grid grid-cols-12 gap-6 text-left">
           <div className="col-span-12 lg:col-span-8 space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap gap-3 items-center justify-between">
               <div>
                 <h1 className="font-display text-2xl font-bold flex items-center gap-2">
                   <Store className="text-[hsl(var(--primary))]" /> Layout Meja & FOH
@@ -815,7 +912,11 @@ export default function POS() {
                   Pilih meja untuk mengatur tagihan dining, pesanan kustom, atau check-out.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className="btn-outline text-xs py-2 px-3 flex items-center gap-1" disabled={!online}
+                  onClick={() => setReservationCalendar({ tableId: selectedTable?.id })} data-testid="reservation-calendar-open">
+                  <CalendarDays size={15} /> Kalender reservasi
+                </button>
                 <button
                   onClick={handleOpenAddTable}
                   className="btn-primary text-xs py-2 px-3 flex items-center gap-1 bg-amber-600 hover:bg-amber-700 border-amber-600 font-bold"
@@ -900,6 +1001,7 @@ export default function POS() {
                     <span className="font-display font-black text-base text-[hsl(var(--foreground))] mt-2">{t.label}</span>
                     <span className="text-[10px] font-semibold mt-1 opacity-70">{statusText}</span>
                     {t.reservation&&<div className="text-xs mt-2 space-y-1 break-words max-w-full" data-testid={`table-reservation-${t.id}`}><p className="font-bold">{t.reservation.customer_name}</p><p>{t.reservation.party_size} tamu{t.reservation.arrival_at?` · ${new Date(t.reservation.arrival_at).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}</p></div>}
+                    {t.scheduled_due && <p className="text-xs font-bold mt-2" data-testid={`table-scheduled-${t.id}`}>Jadwal reservasi aktif</p>}
 
                     {canManageProducts(user?.role)&&!t.reservation&&<div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1 bg-white/90 p-1 rounded-md shadow border border-slate-200">
                       <button onClick={(e) => handleOpenEditTable(t, e)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit Meja"><Edit3 size={12} /></button>
@@ -976,16 +1078,20 @@ export default function POS() {
                   <div className="grid grid-cols-2 gap-2">
                     {selectedTable.status==='Reserved'?<><button className="btn-primary col-span-2 py-3 text-xs" disabled={submitting||!online} onClick={()=>handleOpenTableSession(selectedTable)} data-testid="reservation-seat">Tempatkan tamu &amp; buka meja</button><button className="btn-outline text-xs" disabled={submitting||!online||!canReserve} onClick={()=>setReservationTable(selectedTable)} data-testid="reservation-edit">Ubah reservasi</button><button className="btn-outline text-xs text-red-700" disabled={submitting||!online} onClick={cancelReservation} data-testid="reservation-cancel">Batalkan reservasi</button></>:selectedTable.status === "Vacant" ? (<>
                       <button
-                        disabled={submitting}
+                        disabled={submitting || !!selectedTable.scheduled_due}
                         onClick={() => handleOpenTableSession(selectedTable)}
                         className="btn-primary col-span-2 py-3 text-xs"
                       >
                         Buka Meja / Tempatkan Tamu
                       </button>
-                      <button className="btn-outline col-span-2 py-3 text-xs" disabled={!canReserve||!online||submitting} title={canReserve?'Reservasi atas nama pelanggan':'Reservasi tersedia di paket Business'} onClick={()=>setReservationTable(selectedTable)} data-testid="reservation-open">Reservasi meja{!canReserve?' · Business':''}</button>
+                      <button className="btn-outline col-span-2 py-3 text-xs" disabled={!canReserve||!online||submitting||selectedTable.scheduled_due} title={canReserve?'Tahan meja sekarang atas nama pelanggan':'Reservasi tersedia di paket Business'} onClick={()=>setReservationTable(selectedTable)} data-testid="reservation-open">Tahan meja sekarang{!canReserve?' · Business':''}</button>
+                      <button className="btn-outline col-span-2 py-3 text-xs" disabled={!online} onClick={() => setReservationCalendar({tableId: selectedTable.id})}>
+                        {selectedTable.scheduled_due ? "Lihat jadwal reservasi aktif" : "Jadwalkan reservasi"}
+                      </button>
                     </>) : (
                       <>
                         <button
+                          disabled={!activeSession || !!activeSession.gateway_payment}
                           onClick={() => {
                             // Populate cart with existing active items to allow edits/additions
                             setCart([]);
@@ -996,16 +1102,18 @@ export default function POS() {
                           Ambil Pesanan
                         </button>
 
-                        {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 ? (
+                        {activeSession?.items?.length > 0 || activeSession?.gateway_payment ? (
                           <button
-                            onClick={() => setSettleOpen(true)}
+                            disabled={!!activeSession.split_orders?.length}
+                            onClick={() => { setTablePayment(activeSession.gateway_payment || null); setTableWallet(""); setSettleOpen(true); }}
                             className="btn-primary py-2.5 text-xs font-bold"
                             data-testid="settle-open-btn"
                           >
-                            Bayar &amp; Tutup Meja
+                            {activeSession.gateway_payment ? "Lanjutkan pembayaran" : "Bayar & Tutup Meja"}
                           </button>
                         ) : (
                           <button
+                            disabled={!activeSession || !!activeSession.split_orders?.length}
                             onClick={async () => {
                               // Reset vacant
                               try{await api.post(`/tables/${selectedTable.id}/close-empty`, { expected_session_id:activeSession?.session?.id||activeSession?.id });setSelectedTable(null);setActiveSession(null);loadTables();}
@@ -1017,7 +1125,7 @@ export default function POS() {
                           </button>
                         )}
 
-                        {activeSession && Array.isArray(activeSession.items) && activeSession.items.length > 0 && (
+                        {!!activeSession?.items?.length && !activeSession.gateway_payment && (
                           <button
                             onClick={() => {
                               setSplitWays(2);
@@ -1126,7 +1234,9 @@ export default function POS() {
                     <div className="flex items-start justify-between gap-2 mt-1">
                       <span className="pill pill-muted text-[9px] px-1 py-0.5">{p.category}</span>
                       {p.recipe && p.recipe.length > 0 ? (
-                        <span className="pill pill-warning text-[9px] px-1 py-0.5">Resep (BOM)</span>
+                        <span className="pill pill-warning text-[9px] px-1 py-0.5">
+                          {!online || p.available_portions == null ? "Stok bahan belum diperiksa" : p.available_portions === 0 ? "Bahan habis" : `${p.available_portions} porsi`}
+                        </span>
                       ) : (
                         <span className="text-[10px] text-[hsl(var(--muted))]">Stok {p.stock}</span>
                       )}
@@ -1316,6 +1426,17 @@ export default function POS() {
       {viewMode === "catalog" && <button className="restaurant-cart-dock btn-primary" data-testid="mobile-cart-open" onClick={() => setCartOpen(true)}>Keranjang ({cart.reduce((s,i) => s+i.quantity,0)}) · {fmtIDR(total)}</button>}
       {receipt && <ReceiptDialog order={receipt} onClose={() => setReceipt(null)} />}
       {reservationTable&&<TableReservationDialog table={reservationTable} onClose={()=>setReservationTable(null)} onSaved={table=>{applyReservationTable(table);setReservationTable(null);loadTables();}}/>}
+      {reservationCalendar && <Suspense fallback={<p role="status" className="fixed bottom-4 right-4 card-surface p-4">Memuat kalender…</p>}>
+        <ReservationCalendar canBook={canReserve} floors={floors} initialTableId={reservationCalendar.tableId}
+        onClose={() => setReservationCalendar(null)} onChanged={loadTables} onSeated={table => {
+          setReservationCalendar(null);
+          setSelectedFloorId(table.floor_id);
+          setSelectedTable({ ...table, status: "Seated", scheduled_due: false });
+          setActiveSession(null);
+          loadTables();
+          loadActiveTableSession(table.id);
+        }} />
+      </Suspense>}
 
       {/* EDC / card payment — MANUAL confirmation on the merchant's own terminal */}
       {cardConfirmOpen && (
@@ -1345,23 +1466,36 @@ export default function POS() {
       )}
 
       {/* Settle Meja (Bayar & Tutup) Modal */}
-      {settleOpen && selectedTable && activeSession && (
-        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" onClick={() => setSettleOpen(false)}>
-          <div className="card-surface bg-white p-6 w-full max-w-sm space-y-4 text-left" onClick={(e) => e.stopPropagation()} data-testid="settle-modal">
+      {settleOpen && selectedTable && (activeSession || tablePayment) && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4" onClick={closeTablePayment}>
+          <div className="card-surface bg-white p-6 w-full max-w-sm max-h-[90dvh] overflow-y-auto space-y-4 text-left" role="dialog" aria-label="Pembayaran meja" onClick={(e) => e.stopPropagation()} data-testid="settle-modal">
             <div className="border-b border-[hsl(var(--border))] pb-3">
               <h2 className="font-display text-lg font-bold">Bayar &amp; Tutup Meja</h2>
-              <span className="text-[11px] text-[hsl(var(--muted))]">Meja {selectedTable.label} · Total {fmtIDR(activeSession.grand_total || 0)}</span>
+              <span className="text-[11px] text-[hsl(var(--muted))]">Meja {selectedTable.label} · Total {fmtIDR(tablePayment?.total ?? activeSession?.grand_total ?? 0)}</span>
             </div>
-            <p className="text-xs text-[hsl(var(--muted))]">Konfirmasi hanya setelah nominal tagihan diterima dari pelanggan.</p>
+            {tablePayment || activeSession?.gateway_payment ? <TableGatewayPayment tableId={selectedTable.id}
+              key={(tablePayment || activeSession.gateway_payment).id} payment={tablePayment || activeSession.gateway_payment} onStatus={onTablePaymentStatus} onClose={closeTablePayment} /> : <>
+            <p className="text-xs text-[hsl(var(--muted))]">Pilih metode pembayaran. Konfirmasi tunai atau QRIS bank hanya setelah dana diterima.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[{m:"ewallet",l:"E-Wallet"},{m:"va",l:"Virtual Account"},{m:"credit_card",l:"Kartu Kredit"},{m:"doku",l:"Checkout gateway"}]
+                .filter(({m}) => payments.options?.methods?.[m]?.enabled).map(({m,l}) => (
+                  <button key={m} type="button" className="btn-primary text-sm py-3" data-testid={`settle-${m}`} disabled={submitting || !online} onClick={() => settleDineIn(m)}>{l}</button>
+                ))}
+            </div>
+            {!!payments.options?.ewallet_channels?.length && <label className="block text-xs">Kanal E-Wallet
+              <select className="block w-full border rounded p-2 mt-1" aria-label="Kanal E-Wallet" value={tableWallet || payments.options.ewallet_channels[0].code}
+                onChange={e => setTableWallet(e.target.value)}>{payments.options.ewallet_channels.map(c => <option value={c.code} key={c.code}>{c.label}</option>)}</select>
+            </label>}
             {payments.options?.methods?.qris_bank?.enabled && bankConfig?.qr_payload && <div className="text-center"><QRCodeSVG value={bankConfig.qr_payload} size={180} className="mx-auto"/><p>{bankConfig.merchant_name} · {bankConfig.bank_name}</p><label className="flex gap-2 text-xs"><input type="checkbox" checked={bankConfirmed} onChange={e => setBankConfirmed(e.target.checked)}/>Saya sudah memeriksa penerimaan {fmtIDR(activeSession.grand_total)} di aplikasi bank merchant.</label></div>}
             <div className="grid grid-cols-2 gap-2">
               {[{ m: "cash", l: "Tunai diterima" }, { m: "qris_bank", l: "Konfirmasi QRIS bank" }].filter(({m}) => payments.options?.methods?.[m]?.enabled).map(({ m, l }) => (
-                <button key={m} type="button" disabled={submitting || (m === "qris_bank" && !bankConfirmed)} onClick={() => settleDineIn(m)}
+                <button key={m} type="button" disabled={submitting || !online || (m === "qris_bank" && !bankConfirmed)} onClick={() => settleDineIn(m)}
                         className="py-3 rounded-xl border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] text-sm font-bold disabled:opacity-60"
                         data-testid={`settle-${m}`}>{l}</button>
               ))}
             </div>
-            <button type="button" onClick={() => setSettleOpen(false)} className="btn-ghost w-full text-xs py-2">Batal</button>
+            <button type="button" onClick={closeTablePayment} className="btn-ghost w-full text-xs py-2">Batal</button>
+            </>}
           </div>
         </div>
       )}

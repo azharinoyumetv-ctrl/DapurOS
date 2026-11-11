@@ -30,7 +30,7 @@ export default function GuestQrOrder(){
    if(recover&&restored.current){
     try{const saved=await request('/orders/'+attempt.current.id);setOrder(saved);setCart([]);setUncertain(false);}
     catch{setError('Periksa pesanan sebelumnya. Jika belum ditemukan, kirim ulang dengan referensi yang sama.');}
-   }else if(!append){setCart([]);attempt.current=null;clearSaved();}
+   }
   }catch(e){setError(e.message);}finally{setLoading(false);}
  }
  useEffect(()=>{if(!/^[a-f0-9]{64}$/.test(token)){setLoading(false);setError('QR tidak valid. Minta QR terbaru kepada staf.');return;}load(false,true);},[token]);
@@ -62,7 +62,7 @@ export default function GuestQrOrder(){
   <div className="max-w-3xl mx-auto space-y-5">
    <header className="space-y-1"><p className="text-xs font-bold text-[hsl(var(--primary))]">DapurOS · Menu meja</p><h1 className="font-display text-2xl font-bold">{menu?.restaurant||'Menu restoran'}</h1>{menu&&<p>{menu.table} · Bayar di kasir</p>}</header>
    {error&&<section role="alert" className="card-surface p-4 space-y-3" data-testid="guest-menu-error"><p>{error}</p><button className="btn-outline" disabled={loading||busy} onClick={()=>uncertain?send():load()}>{uncertain?'Coba kirim lagi':'Perbarui menu'}</button>{uncertain&&<p className="text-sm">Pesanan belum dapat dikonfirmasi. Keranjang tetap disimpan; pengiriman ulang memakai referensi yang sama.</p>}</section>}
-   {order?<section className="card-surface p-5 space-y-3" data-testid="guest-order-success"><h2 className="text-xl font-bold">Pesanan diterima</h2><p data-testid="guest-order-reference">{order.reference}</p><p className="font-bold">{money(order.total)}</p><p data-testid="guest-order-status">{statusLabel[order.status]||'Silakan hubungi staf'}</p><button className="btn-primary" onClick={()=>{setOrder(null);attempt.current=null;load();}}>Tambah pesanan</button></section>:<>
+   {order?<section className="card-surface p-5 space-y-3" data-testid="guest-order-success"><h2 className="text-xl font-bold">Pesanan diterima</h2><p data-testid="guest-order-reference">{order.reference}</p><p className="font-bold">{money(order.total)}</p><p data-testid="guest-order-status">{statusLabel[order.status]||'Silakan hubungi staf'}</p><button className="btn-primary" onClick={()=>{setOrder(null);attempt.current=null;clearSaved();load();}}>Tambah pesanan</button></section>:<>
     {menu&&!menu.session_active&&<p role="status" className="card-surface p-4">Meja belum dibuka. Minta staf membuka sesi meja sebelum mengirim pesanan.</p>}
     <form className="flex gap-2" onSubmit={event=>{event.preventDefault();load();}}><input className="input-field flex-1" aria-label="Cari menu" value={q} disabled={busy||uncertain} onChange={e=>setQ(e.target.value)} placeholder="Cari menu restoran"/><button className="btn-outline" disabled={loading||busy||uncertain}>Cari</button></form>
     {loading&&<p role="status">Memuat menu…</p>}

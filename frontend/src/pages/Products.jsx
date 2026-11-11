@@ -751,7 +751,10 @@ export default function Products() {
                 <td className="px-5 py-3 text-[hsl(var(--muted))] text-xs">{p.sku || "—"}</td>
                 <td className="px-5 py-3"><span className="pill pill-muted">{p.category}</span></td>
                 <td className="px-5 py-3 text-right font-display font-bold num-display">{fmtIDR(p.price)}</td>
-                <td className="px-5 py-3 text-right num-display">{p.stock} <span className="text-xs text-[hsl(var(--muted))]">{p.unit}</span></td>
+                <td className="px-5 py-3 text-right num-display">
+                  {p.recipe?.length ? (p.available_portions == null ? "—" : `${p.available_portions} porsi`)
+                    : <>{p.stock} <span className="text-xs text-[hsl(var(--muted))]">{p.unit}</span></>}
+                </td>
                 <td className="px-5 py-3 text-right">
                   {editable&&<><button onClick={() => { setDialogIdentity(identity); setEditing(p); setShowForm(true); loadCategories(); loadUnits(); }} className="btn-ghost p-1.5" data-testid={`edit-product-${p.id}`}><Edit3 size={15} /></button>
                   <button onClick={() => remove(p)} className="btn-ghost p-1.5 text-[hsl(var(--destructive))]" data-testid={`delete-product-${p.id}`}><Trash2 size={15} /></button></>}

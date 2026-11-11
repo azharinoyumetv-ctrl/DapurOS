@@ -165,6 +165,104 @@ async function dining(request,session){
 }
 
 const booking=(extra={})=>({customer_name:'E2E Booking Guest',phone:'0812345678',party_size:2,arrival_at:'2026-11-03T10:30:00Z',note:'Window seat',request_id:require('node:crypto').randomUUID(),...extra});
+
+function nextMonth(day) {
+ const [year,month]=day.split('-').map(Number);
+ return new Date(Date.UTC(year,month,1)).toISOString().slice(0,10);
+}
+function calendarTime(instant, timeZone) {
+ const parts=new Intl.DateTimeFormat('en-GB',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(instant);
+ const get=key=>parts.find(part=>part.type===key).value;
+ return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+const scheduled=(table,local_start,extra={})=>({table_id:table.id,local_start,duration_minutes:90,customer_name:'Tamu Kalender',party_size:2,
+ request_id:require('node:crypto').randomUUID(),...extra});
+
+test('calendar creates a future reservation on a phone, keeps today free, and reschedules and cancels it',async({page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner);
+ await api(request,owner,'post','/settings',{general:{timezone:'Asia/Makassar'}});
+ const {today,timezone}=await api(request,owner,'get','/tables/schedule'),future=nextMonth(today);
+ await page.setViewportSize({width:414,height:896});
+ await page.goto('/dapuros/app/pos');
+ await page.getByTestId('reservation-calendar-open').click();
+ const calendar=page.getByTestId('reservation-calendar');
+ await expect(calendar.getByTestId('calendar-timezone')).toHaveText(timezone);
+ await calendar.getByRole('button',{name:'Bulan berikutnya'}).click();
+ await expect.poll(async()=>calendar.getByTestId('calendar-agenda-day').textContent()).toContain(new Date(future+'T12:00:00').toLocaleDateString('id-ID',{month:'long'}));
+ await calendar.getByTestId('calendar-new').click();
+ await calendar.getByTestId('calendar-table').selectOption(table.id);
+ await calendar.getByTestId('calendar-start').fill(future+'T19:00');
+ await calendar.getByTestId('calendar-name').fill('Tamu Besok');
+ await calendar.getByTestId('calendar-save').click();
+ await expect(calendar.getByText('Tamu Besok',{exact:true})).toBeVisible();
+ const [row]=(await api(request,owner,'get','/tables/schedule?day='+future)).bookings;
+ expect(timezone).toBe('Asia/Makassar');
+ expect(row.table_id).toBe(table.id);expect(row.start_at).toContain('T11:00:00');
+ expect((await api(request,owner,'get','/tables')).find(t=>t.id===table.id).status).toBe('Vacant');
+ const walkIn=await api(request,owner,'post',`/tables/${table.id}/session`,{});
+ expect(walkIn.reservation).toBeNull();
+ await api(request,owner,'post',`/tables/${table.id}/close-empty`,{expected_session_id:walkIn.id});
+ await calendar.getByTestId('calendar-edit-'+row.id).click();
+ await calendar.getByTestId('calendar-start').fill(future+'T20:00');
+ await calendar.getByTestId('calendar-save').click();
+ await expect(calendar.getByTestId('calendar-booking-'+row.id)).toContainText('20:00');
+ await calendar.screenshot({path:path.join(root,'tmp/scheduled-reservation-phone.png')});
+ await calendar.getByTestId('calendar-new').click();
+ await calendar.getByTestId('calendar-table').selectOption(table.id);
+ await calendar.getByTestId('calendar-start').fill(future+'T20:15');
+ await expect(calendar.getByTestId('calendar-availability')).toContainText('Waktu sudah dipesan');
+ await expect(calendar.getByTestId('calendar-save')).toBeDisabled();
+ await calendar.getByRole('button',{name:'Batal',exact:true}).click();
+ await calendar.getByTestId('calendar-cancel-'+row.id).click();
+ await expect(calendar.getByTestId('calendar-booking-'+row.id)).toContainText('Dibatalkan');
+});
+
+test('scheduled table windows prevent concurrent overlaps, allow adjacent bookings and protect the table',async({page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner);
+ const {today}=await api(request,owner,'get','/tables/schedule'),future=nextMonth(today);
+ const nextDay=future.slice(0,8)+'02';
+ const requestFor=(method,url,data)=>request[method](runtime.base+'/api'+url,{headers:owner.headers,data});
+ const path='/tables/schedule';
+ const simultaneous=await Promise.all(Array.from({length:4},()=>requestFor('post',path,scheduled(table,future+'T23:30'))));
+ expect(simultaneous.filter(result=>result.ok())).toHaveLength(1);
+ expect(simultaneous.filter(result=>result.status()===409)).toHaveLength(3);
+ expect((await requestFor('post',path,scheduled(table,nextDay+'T00:15'))).status()).toBe(409);
+ expect((await requestFor('post',path,scheduled(table,nextDay+'T01:00'))).ok()).toBe(true);
+ const nextAgenda=await api(request,owner,'get',path+'?day='+nextDay);
+ expect(nextAgenda.bookings).toHaveLength(2);
+ const slots=await api(request,owner,'get',path+'/availability?local_start='+encodeURIComponent(nextDay+'T00:15')+'&duration_minutes=30&party_size=2');
+ expect(slots[table.id]).toBe('Waktu sudah dipesan');
+ expect((await requestFor('post',path,scheduled(table,future+'T18:00',{party_size:999}))).status()).toBe(422);
+ expect((await requestFor('delete','/tables/'+table.id)).status()).toBe(409);
+ expect((await requestFor('put','/tables/'+table.id,{capacity:1})).status()).toBe(409);
+ expect((await requestFor('post','/tables/'+table.id+'/session',{scheduled_reservation_id:nextAgenda.bookings[0].id,expected_version:1})).status()).toBe(409);
+ const saved=await simultaneous.find(result=>result.ok()).json();
+ const replay=scheduled(table,future+'T23:30',{request_id:saved.id});
+ expect((await api(request,owner,'post',path,replay)).id).toBe(saved.id);
+});
+
+test('a due booking blocks walk-ins and seats the named guest into the real bill once',async({page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner),dish=await product(request,owner);
+ const {server_now,timezone}=await api(request,owner,'get','/tables/schedule');
+ const start=calendarTime(new Date(server_now),timezone);
+ const row=await api(request,owner,'post','/tables/schedule',scheduled(table,start,{customer_name:'Tamu Jadwal Aktif'}));
+ const denied=await request.post(runtime.base+`/api/tables/${table.id}/session`,{headers:owner.headers,data:{}});
+ expect(denied.status()).toBe(409);
+ await page.goto('/dapuros/app/pos');
+ await expect(page.getByTestId('table-scheduled-'+table.id)).toBeVisible();
+ await page.getByTestId('reservation-calendar-open').click();
+ await page.getByTestId('calendar-seat-'+row.id).click();
+ await expect(page.getByTestId('seated-reservation-name')).toContainText('Tamu Jadwal Aktif');
+ const bill=await api(request,owner,'get',`/tables/${table.id}/session`);
+ expect(bill.session.reservation.id).toBe(row.id);
+ const replay=await api(request,owner,'post',`/tables/${table.id}/session`,{scheduled_reservation_id:row.id,expected_version:1});
+ expect(replay.id).toBe(bill.session.id);
+ const order=await api(request,owner,'post','/orders',{session_id:bill.session.id,payment_method:'cash',
+  items:[{product_id:dish.id,name:dish.name,price:dish.price,quantity:1,subtotal:dish.price}]});
+ expect(order.customer_name).toBe('Tamu Jadwal Aktif');
+ expect((await api(request,owner,'get','/tables/schedule')).bookings[0].status).toBe('seated');
+});
+
 test('Business cashiers reserve named tables, edit, reload and seat the correct guest',async({page,request})=>{
  const owner=await register(page,request),table=await dining(request,owner),p=await product(request,owner),cashier=await employee(request,owner,'Cashier');
  await page.evaluate(session=>{localStorage.setItem('dapuros_token',session.token);localStorage.setItem('dapuros_user',JSON.stringify({...session.user,current_module:'dapuros'}));},cashier);
@@ -183,6 +281,11 @@ test('Business cashiers reserve named tables, edit, reload and seat the correct 
 for(const plan of ['starter','pro'])test(`${plan} cannot create Business reservations through the UI or direct API`,async({page,request})=>{
  const owner=await register(page,request,{plan}),table=await dining(request,owner);await page.goto('/dapuros/app/pos');await page.getByTestId('table-card-'+table.id).click();await expect(page.getByTestId('reservation-open')).toBeDisabled();await expect(page.getByTestId('reservation-open')).toContainText('Business');
  const response=await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:owner.headers,data:booking()});expect(response.status()).toBe(403);expect(await response.text()).toContain('Business');
+ const {today}=await api(request,owner,'get','/tables/schedule');
+ const schedule=await request.post(runtime.base+'/api/tables/schedule',{headers:owner.headers,data:scheduled(table,nextMonth(today)+'T19:00')});
+ expect(schedule.status()).toBe(403);
+ await page.getByTestId('reservation-calendar-open').click();
+ await expect(page.getByTestId('calendar-new')).toBeDisabled();
  expect((await api(request,owner,'get','/tables'))[0].status).toBe('Vacant');
 });
 test('concurrent reservations, repeated requests and stale cancellation cannot overwrite another booking',async({page,request})=>{
@@ -199,6 +302,11 @@ test('reservations enforce table capacity, staff roles, store ownership and prot
  const owner=await register(page,request),table=await dining(request,owner),warehouse=await employee(request,owner,'Warehouse');
  expect((await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:warehouse.headers,data:booking()})).status()).toBe(403);
  const other=await register(page,request),foreign=await dining(request,other),held=await api(request,other,'post',`/tables/${foreign.id}/reservation`,booking());
+ const {today}=await api(request,other,'get','/tables/schedule'),future=nextMonth(today);
+ const foreignSchedule=await api(request,other,'post','/tables/schedule',scheduled(foreign,future+'T19:00'));
+ expect((await api(request,owner,'get','/tables/schedule?day='+future)).bookings).toHaveLength(0);
+ expect((await request.post(runtime.base+'/api/tables/schedule/'+foreignSchedule.id+'/close',{headers:owner.headers,data:{status:'cancelled',expected_version:1}})).status()).toBe(404);
+ expect((await request.post(runtime.base+'/api/tables/schedule',{headers:owner.headers,data:scheduled(foreign,future+'T18:00')})).status()).toBe(404);
  for(const [path,data] of [[`/tables/${foreign.id}/reservation`,booking()],[`/tables/${foreign.id}/reservation/cancel`,{expected_reservation_id:held.reservation.id}],[`/tables/${foreign.id}/session`,{expected_reservation_id:held.reservation.id}]])expect((await request.post(runtime.base+'/api'+path,{headers:owner.headers,data})).status()).toBe(404);
  expect((await api(request,other,'get','/tables'))[0].reservation.id).toBe(held.reservation.id);
  for(const change of [{customer_name:'   '},{party_size:5},{party_size:0},{arrival_at:'2026-11-03T19:30:00'}])expect((await request.post(runtime.base+`/api/tables/${table.id}/reservation`,{headers:owner.headers,data:booking(change)})).status()).toBe(422);
@@ -292,6 +400,47 @@ test('public QR validates session, prices, tenant scope, retries and revocation'
  await api(request,session,'post',`/tables/${table.id}/qr-link`,{enabled:true,rotate:true});
  expect((await request.get(runtime.base+'/api/public/qr/'+token)).status()).toBe(404);
 });
+test('fractional recipe portions remain on the cashier and QR menu through sales, restock and void',async({context,page,request})=>{
+ const owner=await register(page,request),table=await dining(request,owner);
+ const ingredient=await api(request,owner,'post','/ingredients',{name:'Kaldu resep',unit:'L',stock:0.3});
+ const dish=await product(request,owner,{name:'Sup Kaldu',stock:0,recipe:[{ingredient_id:ingredient.id,quantity:0.1}]});
+ const opened=await api(request,owner,'post',`/tables/${table.id}/session`);
+ const qr=await api(request,owner,'post',`/tables/${table.id}/qr-link`,{enabled:true});
+ const guest=await context.newPage();
+ const items=[{product_id:dish.id,name:dish.name,price:dish.price,quantity:1,subtotal:dish.price}];
+ const sale=()=>api(request,owner,'post','/orders',{session_id:opened.id,payment_method:'cash',items});
+ await sale();await sale();
+ await guest.goto(qr.url);
+ await expect(guest.getByTestId('guest-add-'+dish.id)).toBeEnabled();
+ await guest.getByTestId('guest-add-'+dish.id).click();
+ await guest.getByRole('textbox',{name:'Cari menu',exact:true}).fill('Sup');
+ await guest.getByRole('button',{name:'Cari',exact:true}).click();
+ await expect(guest.getByRole('button',{name:'Cari',exact:true})).toBeEnabled();
+ await expect(guest.getByTestId('guest-cart')).toContainText(dish.name);
+ await guest.getByTestId('guest-send-order').click();
+ await expect(guest.getByTestId('guest-order-success')).toBeVisible();
+ await guest.getByRole('button',{name:'Tambah pesanan',exact:true}).click();
+ await expect(guest.getByTestId('guest-product-'+dish.id)).toBeVisible();
+ await expect(guest.getByTestId('guest-add-'+dish.id)).toHaveText('Habis');
+ const rejected=await request.post(runtime.base+'/api/orders',{headers:owner.headers,data:{session_id:opened.id,payment_method:'cash',items}});
+ expect(rejected.status()).toBe(409);
+ expect(await api(request,owner,'get','/kds')).toHaveLength(3);
+ await page.goto('/dapuros/app/pos');await page.getByText('Langsung Takeaway').click();
+ const card=page.getByTestId('pos-product-'+dish.id);
+ await expect(card).toContainText('Bahan habis');
+ const third=(await api(request,owner,'get','/orders')).find(row=>row.cashier_id.startsWith('guest:'));
+ await api(request,owner,'post',`/orders/${third.id}/void`);
+ await expect(card).toContainText('1 porsi');
+ await guest.reload();await expect(guest.getByTestId('guest-add-'+dish.id)).toBeEnabled();
+ await api(request,owner,'put',`/ingredients/${ingredient.id}`,{stock:0.3});
+ await expect(card).toContainText('3 porsi');
+ await api(request,owner,'put',`/ingredients/${ingredient.id}`,{stock:0.09999999999999998});
+ await expect(card).toContainText('1 porsi');
+ await sale();
+ expect((await api(request,owner,'get','/ingredients')).find(row=>row.id===ingredient.id).stock).toBe(0);
+ expect((await api(request,owner,'get','/products')).find(row=>row.id===dish.id).recipe).toEqual(dish.recipe);
+});
+
 test('a lost guest response and page refresh recover the same order without a duplicate',async({context,page,request})=>{
  const owner=await register(page,request),p=await product(request,owner),table=await dining(request,owner);
  await api(request,owner,'post',`/tables/${table.id}/session`);
@@ -343,6 +492,45 @@ test('staff can split a real table bill by item and settle both portions without
  expect((await api(request,owner,'get','/orders')).filter(x=>x.payment_status==='paid').reduce((sum,x)=>sum+x.total,0)).toBe(23100);
  expect((await api(request,owner,'get','/tables')).find(x=>x.id===table.id).status).toBe('Vacant');
  expect((await api(request,owner,'get','/products'))[0].stock).toBe(18);
+});
+
+test('dine-in and takeaway open the gateway; only a verified exact payment closes the table',async({context,page,request})=>{
+ const owner=await register(page,request),p=await product(request,owner),table=await dining(request,owner);
+ const fixture=await request.post(runtime.base+'/__e2e/gateway',{headers:{'X-E2E-Fixture':runtime.fixtureKey},data:{store_id:owner.user.store_id}});
+ expect(fixture.ok()).toBeTruthy();
+ const opened=await api(request,owner,'post',`/tables/${table.id}/session`);
+ const items=[{product_id:p.id,name:p.name,price:p.price,quantity:2,subtotal:2*p.price}];
+ const order=await api(request,owner,'post','/orders',{session_id:opened.id,payment_method:'cash',items});
+ await context.route('https://checkout.example.invalid/**',route=>route.fulfill({contentType:'text/html',body:'<h1>Isolated merchant payment page</h1>'}));
+ await page.goto('/dapuros/app/pos');await page.getByText(table.label,{exact:true}).click();
+ await page.getByTestId('settle-open-btn').click();await page.getByTestId('settle-va').click();
+ const [gateway]=await Promise.all([context.waitForEvent('page'),page.getByTestId('table-gateway-open').click()]);
+ await expect(gateway.getByRole('heading',{name:'Isolated merchant payment page'})).toBeVisible();await gateway.close();
+ const {gateway_payment:payment}=await api(request,owner,'get',`/tables/${table.id}/session`);
+ expect(payment.total).toBe(23100);
+ const readOrder=()=>api(request,owner,'get',`/orders/${order.id}`);
+ const send=amount=>request.post(runtime.base+'/api/webhooks/xendit',{headers:{'x-callback-token':'fixture-'+owner.user.store_id},data:{
+  event:'payment_session.completed',data:{reference_id:payment.reference,payment_session_id:'fixture-'+payment.reference,session_type:'PAY',currency:'IDR',amount,status:'COMPLETED'}
+ }});
+ expect((await send(23000)).ok()).toBeTruthy();expect((await readOrder()).payment_status).toBe('pending');
+ expect((await request.post(runtime.base+`/api/tables/${table.id}/checkout`,{headers:owner.headers,data:{payment_method:'cash',expected_session_id:opened.id,expected_total:23100}})).status()).toBe(409);
+ await page.setViewportSize({width:430,height:920});
+ await page.reload();await page.getByText(table.label,{exact:true}).click();await page.getByRole('button',{name:'Lanjutkan pembayaran',exact:true}).click();
+ await expect(page.getByTestId('table-gateway-open')).toHaveAttribute('href',payment.gateway_checkout_url);
+ expect((await send(23100)).ok()).toBeTruthy();await expect.poll(async()=>(await readOrder()).payment_status).toBe('paid');
+ await page.getByTestId('table-gateway-refresh').click();
+ await expect(page.getByTestId('table-gateway-status')).toContainText('Pembayaran diterima');
+ expect((await api(request,owner,'get','/tables')).find(x=>x.id===table.id).status).toBe('Vacant');
+ expect(await api(request,owner,'get','/orders')).toHaveLength(1);
+ expect(await api(request,owner,'get','/kds')).toHaveLength(1);
+ expect((await api(request,owner,'get','/products'))[0].stock).toBe(18);
+ await page.getByRole('button',{name:'Kembali ke meja',exact:true}).click();
+ await page.getByText('Langsung Takeaway').click();await page.getByTestId(`pos-product-${p.id}`).click();
+ await page.getByTestId('pm-va').click();await page.getByTestId('checkout-btn').click();
+ const [takeawayGateway]=await Promise.all([context.waitForEvent('page'),page.getByTestId('gateway-open-link').click()]);
+ await expect(takeawayGateway.getByRole('heading',{name:'Isolated merchant payment page'})).toBeVisible();
+ await takeawayGateway.close();
+ expect((await api(request,owner,'get','/orders')).find(o=>o.dining_option==='Takeaway').payment_status).toBe('pending');
 });
 
 test('offline cash survives a reload and reconnects to the real backend exactly once',async({context,page,request})=>{
