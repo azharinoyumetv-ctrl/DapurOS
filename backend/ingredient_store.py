@@ -3,10 +3,18 @@ from uuid import uuid4
 from fastapi import HTTPException
 from database import utcnow
 from stock_ledger import movement
+from ingredient_units import stock_quantity
+
+
+def convert_stock_inputs(values, base_unit, input_unit):
+    for field in ("stock", "safety_stock"):
+        if field in values:
+            values[field] = stock_quantity(values[field], input_unit, base_unit)
 
 
 async def save(db,user,values,session,identifier=None,expected_stock=None):
     store=user['store_id'];values=dict(values);at=utcnow().isoformat()
+    input_unit = values.pop('quantity_unit', None)
     for field in ('name','unit'):
         if field in values:
             values[field]=values[field].strip()
@@ -20,10 +28,17 @@ async def save(db,user,values,session,identifier=None,expected_stock=None):
         if not record:raise HTTPException(404,'Bahan baku tidak ditemukan.')
         if expected_stock is not None and record['stock']!=expected_stock:raise HTTPException(409,'Stok bahan telah berubah. Muat ulang sebelum mengubah stok.')
         if 'unit' in values and values['unit']!=record['unit'] and await db.products.find_one({'store_id':store,'recipe.ingredient_id':identifier},session=session):raise HTTPException(409,'Satuan bahan masih digunakan dalam resep. Perbarui resep sebelum mengganti satuan.')
+        if 'unit' in values and values['unit'] != record['unit']:
+            pending = {'store_id': store, 'items.product_id': identifier}
+            if (await db.stock_transfers.find_one({**pending, 'status': 'Shipped'}, session=session)
+                    or await db.purchase_orders.find_one({**pending, 'status': {'$in': ['Ordered', 'Partial']}}, session=session)):
+                raise HTTPException(409, 'Selesaikan transfer atau PO sebelum mengganti satuan bahan.')
+        convert_stock_inputs(values, values.get('unit', record['unit']), input_unit)
         delta=values.get('stock',record['stock'])-record['stock']
         await db.ingredients.update_one(scope,{'$set':{**values,'updated_at':at}},session=session)
         record={**record,**values,'updated_at':at}
     else:
+        convert_stock_inputs(values, values['unit'], input_unit)
         identifier=str(uuid4());record={**values,'id':identifier,'store_id':store,'created_at':at,'updated_at':at}
         delta=values.get('stock',0)
         await db.ingredients.insert_one(dict(record),session=session)

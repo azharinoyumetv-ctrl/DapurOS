@@ -1,5 +1,6 @@
 from product_scope import product_scope, inventory_scope
 """Restaurant inventory and kitchen effects within the caller's sale transaction."""
+import re
 import uuid
 from fastapi import HTTPException
 from database import utcnow
@@ -60,6 +61,17 @@ async def restore(db, store_id, line, session):
                                      {"$inc": {"stock": line["quantity"]}}, session=session)
 
 
+def ticket_station(product):
+    configured = product.get("ticket_station")
+    if configured in ("Bar", "Kitchen"):
+        return configured
+    category = str(product.get("category") or "").casefold()
+    words = set(re.findall(r"[^\W_]+", category))
+    if words & {"bar", "kopi", "coffee"} or any(word in category for word in ("minuman", "beverage", "drink")):
+        return "Bar"
+    return "Kitchen"
+
+
 async def kitchen(db, user, order, session, session_id=None):
     from restaurant_billing import lock_bill
     table_label = "Takeaway"
@@ -74,10 +86,15 @@ async def kitchen(db, user, order, session, session_id=None):
         table_label = table["label"]
         await db.tables.update_one({"id": table["id"], "store_id": user["store_id"]}, {"$set": {"status": "Dining"}}, session=session)
     groups = {"Bar": [], "Kitchen": []}
+    ids = list({line["product_id"] for line in order["items"]})
+    products = await db.products.find(
+        product_scope(user["store_id"], id={"$in": ids}),
+        {"_id": 0, "id": 1, "ticket_station": 1, "category": 1},
+        session=session,
+    ).to_list(None)
+    stations = {product["id"]: ticket_station(product) for product in products}
     for line in order["items"]:
-        product = await db.products.find_one(product_scope(user["store_id"],id=line["product_id"]), session=session)
-        category = str((product or {}).get("category", "")).lower()
-        station = "Bar" if any(word in category for word in ("minuman", "beverage", "drink", "bar")) else "Kitchen"
+        station = stations.get(line["product_id"], "Kitchen")
         groups[station].append({"product_id":line['product_id'],"name": line["name"], "qty": line["quantity"], "notes": line.get("note"), "status": "Pending"})
     for station, items in groups.items():
         if items:

@@ -74,7 +74,7 @@ async def reservation_agenda(day: Optional[date] = None, user: dict = Depends(ge
 
 @router.get("/schedule/availability")
 async def scheduled_table_availability(local_start: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$"),
-                                       duration_minutes: int = Query(ge=15, le=480), party_size: int = Query(ge=1, le=1000),
+                                       duration_minutes: int = Query(ge=15, le=reservation_calendar.MAX_BOOKING_MINUTES), party_size: int = Query(ge=1, le=1000),
                                        exclude: Optional[uuid.UUID] = None, user: dict = Depends(get_current_user)):
     try:
         value = reservation_calendar.parse_local_start(local_start)

@@ -306,8 +306,9 @@ async def bulk_import(
                 existing = await db.products.find_one(product_scope(user["store_id"],sku=doc["sku"]))
 
             if existing:
-                # CSV imports do not contain recipes. Updating a SKU must retain its BOM.
+                # Importing a SKU must retain its existing recipe and ticket station.
                 validated.pop('recipe', None)
+                validated.pop('ticket_station', None)
                 for field in ('cost','stock','category','unit','description','image_url','active'):
                     if not _is_not_empty(row.get(field)):validated.pop(field,None)
                 await transactions.run_transaction(db,lambda session:save_product(db,user,validated,session,existing['id'],existing.get('stock',0) if 'stock' in validated else None))

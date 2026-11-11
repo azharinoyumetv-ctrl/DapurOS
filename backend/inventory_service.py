@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from database import utcnow
 from stock_ledger import movement
-from purchase_service import collection, quantity
+from purchase_service import collection, inventory_quantity
 from plan_limits import plan_rank
 
 def identity(store,kind,key,body):
@@ -24,7 +24,7 @@ async def adjustment(db,payload,user,session):
     records=await target.find(scope,session=session).limit(2).to_list(2)
     if not records:raise HTTPException(404,'Barang atau bahan tidak ditemukan di restoran ini.')
     if len(records)!=1:raise HTTPException(409,'SKU duplikat. Pilih ulang barang dengan ID.')
-    record=records[0];qty=quantity(payload.adjustment_qty,payload.kind)
+    record=records[0];qty=inventory_quantity(payload.adjustment_qty,payload.kind,payload.quantity_unit,record)
     if payload.kind=='product' and record.get('recipe'):raise HTTPException(422,'Untuk menu resep, sesuaikan stok bahan bakunya.')
     key,digest=identity(user['store_id'],'adjustment',payload.request_id,{'id':record['id'],'kind':payload.kind,'qty':qty,'type':payload.type,'reason':payload.reason})
     prior=await db.stock_adjustments.find_one({'_id':key},session=session)
@@ -38,7 +38,7 @@ async def adjustment(db,payload,user,session):
     if not changed.modified_count:raise HTTPException(409,'Stok tidak cukup untuk pengurangan ini.')
     identifier=str(uuid4());at=utcnow().isoformat()
     doc={'_id':key,'id':identifier,'store_id':user['store_id'],'product_id':record['id'],'kind':payload.kind,
-         'product_name':record['name'],'sku':record.get('sku'),'adjustment_qty':qty,'type':payload.type,'reason':payload.reason,
+         'product_name':record['name'],'sku':record.get('sku'),'adjustment_qty':qty,'quantity_unit':record.get('unit') if payload.kind=='ingredient' else None,'type':payload.type,'reason':payload.reason,
          'created_by':user.get('email') or user['id'],'created_at':at,'request_hash':digest}
     await db.stock_adjustments.insert_one(dict(doc),session=session)
     await movement(db,session,identifier=identifier+':adjustment',store_id=user['store_id'],product_id=record['id'],name=record['name'],quantity=delta,reference='ADJ-'+identifier[:8].upper(),kind='ingredient_adjustment' if payload.kind=='ingredient' else 'adjustment',actor=user['id'],at=at)
@@ -57,21 +57,23 @@ async def ship(db,payload,user,session):
     if source['id']==destination['id']:raise HTTPException(422,'Cabang asal dan tujuan harus berbeda.')
     keys=[(item.kind,item.product_id) for item in payload.items]
     if len(set(keys))!=len(keys):raise HTTPException(422,'Barang transfer duplikat.')
-    key,digest=identity(store,'transfer',payload.request_id,{'from':source['id'],'to':destination['id'],'items':[item.model_dump() for item in payload.items]})
+    key,digest=identity(store,'transfer',payload.request_id,{'from':source['id'],'to':destination['id'],'items':[item.model_dump(exclude={'quantity_unit'} if item.quantity_unit is None else None) for item in payload.items]})
     prior=await db.stock_transfers.find_one({'_id':key},session=session)
     if prior:
         if prior.get('request_hash')!=digest:raise HTTPException(409,'Referensi transfer sudah dipakai untuk rincian berbeda.')
         return public(prior)
     identifier=str(uuid4());at=utcnow().isoformat();lines=[]
     for item in payload.items:
-        qty=quantity(item.qty,item.kind);target=collection(db,item.kind);scope=inventory_scope(store,item.kind,id=item.product_id)
+        target=collection(db,item.kind);scope=inventory_scope(store,item.kind,id=item.product_id)
         record=await target.find_one(scope,session=session)
         if not record:raise HTTPException(404,'Barang atau bahan transfer tidak ditemukan.')
         if item.kind=='product' and record.get('recipe'):raise HTTPException(422,'Pindahkan bahan baku untuk menu resep.')
+        qty = inventory_quantity(item.qty, item.kind, item.quantity_unit, record)
         field=stock_field(source['id'])
         changed=await target.update_one({**scope,field:{'$gte':qty}},{'$inc':{field:-qty}},session=session)
         if not changed.modified_count:raise HTTPException(409,'Stok di cabang asal tidak cukup.')
-        lines.append({'product_id':record['id'],'kind':item.kind,'name':record['name'],'qty':qty})
+        lines.append({'product_id':record['id'],'kind':item.kind,'name':record['name'],'qty':qty,
+                      'quantity_unit':record.get('unit') if item.kind=='ingredient' else None})
         await movement(db,session,identifier=f'{identifier}:ship:{item.kind}:{record["id"]}',store_id=store,product_id=record['id'],name=record['name'],quantity=-qty,reference='TR-'+identifier[:8].upper(),kind='transfer_shipped',actor=user['id'],at=at,branch_id=source['id'])
     doc={'_id':key,'id':identifier,'store_id':store,'from_branch':source['name'],'to_branch':destination['name'],'from_branch_id':source['id'],'to_branch_id':destination['id'],'items':lines,'status':'Shipped','inventory_applied':True,'created_at':at,'request_hash':digest}
     await db.stock_transfers.insert_one(dict(doc),session=session)

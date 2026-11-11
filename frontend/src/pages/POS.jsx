@@ -9,7 +9,9 @@ import { canonicalRole, canManageProducts } from "@/auth/permissions";
 import BankQrisPayment from "@/payments/BankQrisPayment";
 import TableReservationDialog from '@/components/TableReservationDialog';
 import TableGatewayPayment from '@/payments/TableGatewayPayment';
-import { lazy, Suspense, useEffect, useMemo, useState, useRef } from "react";
+import ReservationCalendar from '@/components/ReservationCalendar';
+import TicketStationSelect from '@/components/TicketStationSelect';
+import { useEffect, useMemo, useState, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import api, { fmtIDR, downloadPdf } from "@/api/client";
 import { useAuth } from "@/auth/AuthContext";
@@ -20,8 +22,6 @@ import {
   CreditCard, ChevronRight, Layers, ArrowLeft, RefreshCw as LoopIcon, Wifi, WifiOff, Edit, Edit3,
   Landmark, CalendarDays
 } from "lucide-react";
-
-const ReservationCalendar = lazy(() => import("@/components/ReservationCalendar"));
 
 // HISTORY: these used to carry the old "ID_" prefix (ID_OVO, ID_DANA, ...) left over from
 // Xendit's deprecated /ewallets/charges API. The backend's xendit_client.py was migrated to
@@ -253,7 +253,7 @@ export default function POS() {
   // Product Management Modal States
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [productForm, setProductForm] = useState({ name: "", price: 25000, category: "Makanan Utama", stock: 50 });
+  const [productForm, setProductForm] = useState({ name: "", price: 25000, category: "Makanan Utama", ticket_station: "Auto", stock: 50 });
 
   const handleManualBarcodeScan = (e) => {
     e.preventDefault();
@@ -345,14 +345,14 @@ export default function POS() {
 
   const handleOpenAddProduct = () => {
     setEditingProduct(null);
-    setProductForm({ name: "", price: 25000, category: activeCat !== "all" ? activeCat : "Makanan Utama", stock: 50 });
+    setProductForm({ name: "", price: 25000, category: activeCat !== "all" ? activeCat : "Makanan Utama", ticket_station: "Auto", stock: 50 });
     setProductModalOpen(true);
   };
 
   const handleOpenEditProduct = (p, e) => {
     if (e) e.stopPropagation();
     setEditingProduct(p);
-    setProductForm({ name: p.name, price: p.price, category: p.category, stock: p.stock });
+    setProductForm({ name: p.name, price: p.price, category: p.category, ticket_station: p.ticket_station || "Auto", stock: p.stock });
     setProductModalOpen(true);
   };
 
@@ -1426,8 +1426,7 @@ export default function POS() {
       {viewMode === "catalog" && <button className="restaurant-cart-dock btn-primary" data-testid="mobile-cart-open" onClick={() => setCartOpen(true)}>Keranjang ({cart.reduce((s,i) => s+i.quantity,0)}) · {fmtIDR(total)}</button>}
       {receipt && <ReceiptDialog order={receipt} onClose={() => setReceipt(null)} />}
       {reservationTable&&<TableReservationDialog table={reservationTable} onClose={()=>setReservationTable(null)} onSaved={table=>{applyReservationTable(table);setReservationTable(null);loadTables();}}/>}
-      {reservationCalendar && <Suspense fallback={<p role="status" className="fixed bottom-4 right-4 card-surface p-4">Memuat kalender…</p>}>
-        <ReservationCalendar canBook={canReserve} floors={floors} initialTableId={reservationCalendar.tableId}
+      {reservationCalendar && <ReservationCalendar canBook={canReserve} floors={floors} initialTableId={reservationCalendar.tableId}
         onClose={() => setReservationCalendar(null)} onChanged={loadTables} onSeated={table => {
           setReservationCalendar(null);
           setSelectedFloorId(table.floor_id);
@@ -1436,7 +1435,7 @@ export default function POS() {
           loadTables();
           loadActiveTableSession(table.id);
         }} />
-      </Suspense>}
+      }
 
       {/* EDC / card payment — MANUAL confirmation on the merchant's own terminal */}
       {cardConfirmOpen && (
@@ -1788,6 +1787,7 @@ export default function POS() {
                 </select>
               </div>
             </div>
+            <TicketStationSelect value={productForm.ticket_station} onChange={ticket_station => setProductForm(current => ({ ...current, ticket_station }))} />
             <div>
               <label className="label-tiny block mb-1">Stok Porsi</label>
               <input

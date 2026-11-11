@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import api from "@/api/client";
+import IngredientUnitSelect from "@/components/IngredientUnitSelect";
+import { convertIngredientQuantity, formatIngredientStock } from "@/lib/ingredientUnits";
 import { readCollection } from '@/api/records';
 import { Plus, Edit3, Trash2, X, AlertCircle, RefreshCw, Clipboard } from "lucide-react";
 
@@ -8,6 +10,8 @@ export default function Ingredients() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [stockUnit, setStockUnit] = useState("");
+  const [wasteUnit, setWasteUnit] = useState("");
   const [selectedIng, setSelectedIng] = useState(null);
   const [form, setForm] = useState({ name: "", stock: 0, safety_stock: 0, unit: "g" });
   const writeLock = useRef(false);
@@ -24,10 +28,12 @@ export default function Ingredients() {
   const [wasteForm, setWasteForm] = useState({ ingredientId: "", qty: 0, reason: SPOILAGE_REASONS[0] });
   const [spoilageLogs, setSpoilageLogs] = useState([]);
   const [units, setUnits] = useState([]);
+  const wasteIngredient = ingredients.find(ingredient => ingredient.id === wasteForm.ingredientId);
 
   const DEFAULT_UNITS = [
     { name: "Gram", short_name: "g" },
     { name: "Mililiter", short_name: "ml" },
+    { name: "Liter", short_name: "L" },
     { name: "Pieces", short_name: "pcs" },
     { name: "Kilogram", short_name: "kg" },
     { name: "Botol", short_name: "btl" },
@@ -64,13 +70,17 @@ export default function Ingredients() {
   }, []);
 
   const openAdd = () => {
+    setErr("");
     setSelectedIng(null);
+    setStockUnit("");
     setForm({ name: "", stock: 0, safety_stock: 0, unit: "g" });
     setFormOpen(true);
   };
 
   const openEdit = (ing) => {
+    setErr("");
     setSelectedIng(ing);
+    setStockUnit("");
     setForm({
       name: ing.name,
       stock: ing.stock,
@@ -80,9 +90,19 @@ export default function Ingredients() {
     setFormOpen(true);
   };
 
+  const changeStockUnit = unit => {
+    const current = stockUnit || form.unit;
+    setForm(values => ({
+      ...values,
+      stock: convertIngredientQuantity(values.stock, current, unit),
+      safety_stock: convertIngredientQuantity(values.safety_stock, current, unit),
+    }));
+    setStockUnit(unit);
+  };
+
   const handleSave = async e => {
     e.preventDefault();if(writeLock.current)return;writeLock.current=true;setSaving(true);setErr('');
-    const payload={name:form.name,stock:Number(form.stock),safety_stock:Number(form.safety_stock),unit:form.unit,...(selectedIng?{expected_stock:selectedIng.stock}:{})};
+    const payload={name:form.name,stock:Number(form.stock),safety_stock:Number(form.safety_stock),unit:form.unit,quantity_unit:stockUnit || undefined,...(selectedIng?{expected_stock:selectedIng.stock}:{})};
     try {
       const res=selectedIng?await api.put(`/ingredients/${selectedIng.id}`,payload):await api.post('/ingredients',payload);
       if(!res.data?.id)throw Error('Jawaban penyimpanan tidak valid.');
@@ -115,17 +135,19 @@ export default function Ingredients() {
     }
 
     writeLock.current=true;
-    const fingerprint=JSON.stringify([ing.id,wasteQty,wasteForm.reason]);
+    const fingerprint=JSON.stringify([ing.id,wasteQty,wasteUnit,wasteForm.reason]);
     if(wasteAttempt.current?.fingerprint!==fingerprint)wasteAttempt.current={fingerprint,id:crypto.randomUUID()};
     try {
       const res = await api.post(`/ingredients/${ing.id}/spoilage`, {
         quantity_lost: wasteQty,
+        quantity_unit: wasteUnit || undefined,
         reason: wasteForm.reason,
         request_id:wasteAttempt.current.id,
       });
       wasteAttempt.current=null;await loadIngredients();
       setSpoilageLogs((prev) => [res.data,...prev.filter(row=>row.id!==res.data.id)]);
       setWasteOpen(false);
+      setWasteUnit("");
       setWasteForm({ ingredientId: "", qty: 0, reason: SPOILAGE_REASONS[0] });
     } catch (e2) {
       setErr(typeof e2?.response?.data?.detail === 'string' ? e2.response.data.detail : 'Bahan terbuang belum dicatat. Stok tidak diubah. Periksa koneksi lalu coba lagi.');
@@ -163,7 +185,7 @@ export default function Ingredients() {
         </div>
       </div>
 
-      {err && (
+      {err && !formOpen && !wasteOpen && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-lg flex items-center gap-2">
           <AlertCircle size={16} />
           <span>{err}</span>
@@ -193,10 +215,10 @@ export default function Ingredients() {
                   <tr key={ing.id} className="hover:bg-[hsl(var(--secondary))]/20">
                     <td className="p-4 font-bold text-[hsl(var(--foreground))]">{ing.name}</td>
                     <td className="p-4 text-right font-mono font-bold text-slate-800">
-                      {Number(ing.stock || 0).toLocaleString()} {ing.unit}
+                      {formatIngredientStock(ing.stock, ing.unit)}
                     </td>
                     <td className="p-4 text-right font-mono text-[hsl(var(--muted))]">
-                      {Number(ing.safety_stock || 0).toLocaleString()} {ing.unit}
+                      {formatIngredientStock(ing.safety_stock, ing.unit)}
                     </td>
                     <td className="p-4 text-center">
                       {isLow ? (
@@ -284,7 +306,7 @@ export default function Ingredients() {
       {/* Ingredient Modal Form */}
       {formOpen && (
         <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" onClick={() => setFormOpen(false)}>
-          <form onSubmit={handleSave} className="card-surface bg-white p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+          <form onSubmit={handleSave} className="card-surface bg-white p-6 w-full max-w-md max-h-[90dvh] overflow-y-auto space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
               <h2 className="font-display text-lg font-bold">
                 {selectedIng ? "Edit Bahan Baku" : "Bahan Baku Baru"}
@@ -294,25 +316,39 @@ export default function Ingredients() {
               </button>
             </div>
             
+            {err && <p role="alert" className="text-sm text-red-700">{err}</p>}
             <div className="space-y-3 text-xs">
               <div>
-                <label className="label-tiny">Nama Bahan</label>
+                <label className="label-tiny" htmlFor="ingredient-name">Nama Bahan</label>
                 <input
                   type="text"
                   required
                   className="input-field mt-1"
                   placeholder="Cth: Biji Kopi Gayo"
-                  value={form.name}
+                  id="ingredient-name" value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </div>
 
+              <div>
+                <label className="label-tiny" htmlFor="ingredient-recipe-unit">Satuan resep</label>
+                <select id="ingredient-recipe-unit" className="input-field mt-1" value={form.unit}
+                  onChange={event => { setForm({ ...form, unit: event.target.value }); setStockUnit(""); }}>
+                  {(units.length ? units : DEFAULT_UNITS).map(u => (
+                    <option key={u.short_name || u.id} value={u.short_name}>{u.name} ({u.short_name})</option>
+                  ))}
+                  {form.unit && !(units.length ? units : DEFAULT_UNITS).some(u => u.short_name === form.unit) && (
+                    <option value={form.unit}>{form.unit}</option>
+                  )}
+                </select>
+              </div>
+              <IngredientUnitSelect base={form.unit} value={stockUnit} onChange={changeStockUnit} label="Satuan input stok" />
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label-tiny">Stok Awal</label>
+                  <label className="label-tiny" htmlFor="ingredient-stock">{selectedIng ? "Stok saat ini" : "Stok awal"}</label>
                   <input
                     type="number"
-                    step="0.01"
+                    id="ingredient-stock" min="0" step="any"
                     required
                     className="input-field mt-1"
                     value={form.stock}
@@ -320,10 +356,10 @@ export default function Ingredients() {
                   />
                 </div>
                 <div>
-                  <label className="label-tiny">Batas Aman (Safety)</label>
+                  <label className="label-tiny" htmlFor="ingredient-safety-stock">Batas aman</label>
                   <input
                     type="number"
-                    step="0.01"
+                    id="ingredient-safety-stock" min="0" step="any"
                     required
                     className="input-field mt-1"
                     value={form.safety_stock}
@@ -332,22 +368,7 @@ export default function Ingredients() {
                 </div>
               </div>
 
-              <div>
-                <label className="label-tiny">Satuan Unit</label>
-                <select
-                  className="input-field mt-1"
-                  value={form.unit}
-                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                >
-                  {(units.length ? units : DEFAULT_UNITS).map((u) => (
-                    <option key={u.short_name || u.id} value={u.short_name}>{u.name} ({u.short_name})</option>
-                  ))}
-                  {form.unit && !(units.length ? units : DEFAULT_UNITS).some((u) => u.short_name === form.unit) && (
-                    <option value={form.unit}>{form.unit}</option>
-                  )}
-                </select>
-                <p className="text-[10px] text-[hsl(var(--muted))] mt-1">Kelola daftar satuan di menu Produk → Satuan.</p>
-              </div>
+              <p className="text-xs text-[hsl(var(--muted))]">Stok dan batas aman dikonversi ke satuan resep secara otomatis.</p>
             </div>
 
             <div className="flex gap-2 pt-3 border-t border-[hsl(var(--border))]">
@@ -365,7 +386,7 @@ export default function Ingredients() {
       {/* Spoilage / Waste log modal */}
       {wasteOpen && (
         <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" onClick={() => setWasteOpen(false)}>
-          <form onSubmit={handleWasteSubmit} className="card-surface bg-white p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+          <form onSubmit={handleWasteSubmit} className="card-surface bg-white p-6 w-full max-w-md max-h-[90dvh] overflow-y-auto space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
               <h2 className="font-display text-lg font-bold text-red-700">Catat Bahan Terbuang (Spoilage)</h2>
               <button type="button" onClick={() => setWasteOpen(false)} className="btn-ghost p-1">
@@ -373,26 +394,28 @@ export default function Ingredients() {
               </button>
             </div>
 
+            {err && <p role="alert" className="text-sm text-red-700">{err}</p>}
             <div className="space-y-3 text-xs">
               <div>
-                <label className="label-tiny">Pilih Bahan Baku</label>
+                <label className="label-tiny" htmlFor="ingredient-waste-item">Pilih Bahan Baku</label>
                 <select
                   required
                   className="input-field mt-1"
-                  value={wasteForm.ingredientId}
-                  onChange={(e) => setWasteForm({ ...wasteForm, ingredientId: e.target.value })}
+                  id="ingredient-waste-item" value={wasteForm.ingredientId}
+                  onChange={event => { setWasteForm({ ...wasteForm, ingredientId: event.target.value }); setWasteUnit(""); }}
                 >
                   {ingredients.map(i => (
-                    <option key={i.id} value={i.id}>{i.name} ({i.stock} {i.unit})</option>
+                    <option key={i.id} value={i.id}>{i.name} ({formatIngredientStock(i.stock, i.unit)})</option>
                   ))}
                 </select>
               </div>
 
+              <IngredientUnitSelect base={wasteIngredient?.unit} value={wasteUnit} onChange={setWasteUnit} />
               <div>
-                <label className="label-tiny">Jumlah Terbuang / Rusak</label>
+                <label className="label-tiny" htmlFor="ingredient-waste-qty">Jumlah Terbuang / Rusak</label>
                 <input
                   type="number"
-                  step="0.01"
+                  id="ingredient-waste-qty" min="0" step="any"
                   required
                   className="input-field mt-1"
                   value={wasteForm.qty}

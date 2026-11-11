@@ -1,3 +1,4 @@
+import IngredientUnitSelect from "@/components/IngredientUnitSelect";
 import useTablePage from '@/hooks/useTablePage';
 import TablePage from '@/components/TablePage';
 import { readCollection } from '@/api/records';
@@ -19,6 +20,8 @@ export default function StockAdjustment() {
   
   const [productId, setProductId] = useState("");
   const [qty, setQty] = useState("");
+  const [quantityUnit, setQuantityUnit] = useState("");
+  const selectedIngredient = products.find(item => item.key === productId && item.kind === "ingredient");
   const [type, setType] = useState("add"); // add | subtract
   const [reason, setReason] = useState("");
 
@@ -43,6 +46,7 @@ export default function StockAdjustment() {
       product_name: prod.name,
       sku: prod.sku,
       adjustment_qty: Number(qty),
+      quantity_unit: quantityUnit || undefined,
       type,
       reason,
     };
@@ -77,7 +81,7 @@ export default function StockAdjustment() {
             <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Pilih Produk</label>
             <select
               value={productId}
-              onChange={(e) => setProductId(e.target.value)}
+              onChange={event => { setProductId(event.target.value); setQuantityUnit(""); setQty(""); }}
               className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-[hsl(var(--foreground))] outline-none text-sm"
               data-testid="adjustment-product-select"
             >
@@ -88,6 +92,7 @@ export default function StockAdjustment() {
             </select>
           </div>
 
+          <IngredientUnitSelect base={selectedIngredient?.unit} value={quantityUnit} onChange={setQuantityUnit} />
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Tipe</label>
@@ -149,7 +154,7 @@ export default function StockAdjustment() {
                     <td className="py-3 font-medium">{a.product_name}</td>
                     <td className="py-3 font-mono">{a.sku}</td>
                     <td className={`py-3 text-center font-bold ${a.type === "add" ? "text-emerald-600" : "text-red-500"}`}>
-                      {a.type === "add" ? "+" : "-"}{a.adjustment_qty}
+                      {a.type === "add" ? "+" : "-"}{a.adjustment_qty} {a.quantity_unit}
                     </td>
                     <td className="py-3">{a.reason || "-"}</td>
                     <td className="py-3 text-xs text-[hsl(var(--muted))]">{a.created_by}</td>

@@ -55,6 +55,9 @@ class RecipeItem(BaseModel):
     ingredient_id: str
     quantity: float = Field(gt=0, le=1_000_000, allow_inf_nan=False)
 
+TicketStation = Literal["Auto", "Kitchen", "Bar"]
+
+
 class ProductBase(BaseModel):
     name: str
     sku: Optional[str] = None
@@ -62,6 +65,7 @@ class ProductBase(BaseModel):
     cost: float = Field(default=0, ge=0, le=1_000_000_000_000, allow_inf_nan=False)
     stock: int = Field(default=0, ge=0)
     category: Optional[str] = "Umum"
+    ticket_station: TicketStation = "Auto"
     unit: Optional[str] = "pcs"
     image_url: Optional[str] = None
     description: Optional[str] = None
@@ -81,6 +85,7 @@ class ProductUpdate(BaseModel):
     stock: Optional[int] = Field(default=None, ge=0)
     expected_stock: Optional[int] = Field(default=None, ge=-1_000_000_000)
     category: Optional[str] = None
+    ticket_station: Optional[TicketStation] = None
     unit: Optional[str] = None
     image_url: Optional[str] = None
     description: Optional[str] = None
@@ -216,12 +221,16 @@ class Unit(UnitBase):
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)
 
+QuantityUnit = Annotated[str, Field(min_length=1, max_length=40)]
+
+
 class StockAdjustmentCreate(BaseModel):
     product_id: Optional[str] = Field(default=None, max_length=200)
     kind: Literal['product', 'ingredient'] = 'product'
     product_name: str = Field(default='', max_length=200)
     sku: Optional[str] = Field(default=None, max_length=200)
     adjustment_qty: float = Field(gt=0, le=100000, allow_inf_nan=False)
+    quantity_unit: Optional[QuantityUnit] = None
     type: Literal['add', 'sub']
     reason: str = Field(min_length=1, max_length=1000)
     created_by: str = Field(default='', max_length=200)
@@ -241,6 +250,7 @@ class StockTransferItem(BaseModel):
     kind: Literal['product','ingredient'] = 'product'
     name: str = Field(default='', max_length=200)
     qty: float = Field(gt=0, le=100000, allow_inf_nan=False)
+    quantity_unit: Optional[QuantityUnit] = None
 
 class StockTransferCreate(BaseModel):
     from_branch: str
@@ -280,11 +290,13 @@ class PurchaseLine(BaseModel):
     qty: float = Field(gt=0, le=100000, allow_inf_nan=False, validation_alias=AliasChoices('qty', 'quantity'))
     cost: float = Field(ge=0, le=1_000_000_000_000, allow_inf_nan=False, validation_alias=AliasChoices('cost','price','unit_cost'))
     received_qty: float = Field(default=0, ge=0, allow_inf_nan=False)
+    quantity_unit: Optional[QuantityUnit] = None
 
 class ReceivingLine(BaseModel):
     product_id: str = Field(min_length=1, max_length=200)
     kind: Literal['product', 'ingredient'] = 'product'
     qty: float = Field(gt=0, le=100000, allow_inf_nan=False, validation_alias=AliasChoices('qty','quantity'))
+    quantity_unit: Optional[QuantityUnit] = None
 
 class PurchaseOrderCreate(BaseModel):
     po_no: str
@@ -477,7 +489,7 @@ class IngredientBase(BaseModel):
     unit: str = Field(min_length=1, max_length=40)
 
 class IngredientCreate(IngredientBase):
-    pass
+    quantity_unit: Optional[QuantityUnit] = None
 
 class IngredientUpdate(BaseModel):
     name: Optional[str] = None
@@ -485,6 +497,7 @@ class IngredientUpdate(BaseModel):
     expected_stock: Optional[float] = Field(default=None, ge=-1_000_000_000, le=1_000_000_000, allow_inf_nan=False)
     safety_stock: Optional[float] = Field(default=None, ge=0, le=1_000_000_000, allow_inf_nan=False)
     unit: Optional[str] = None
+    quantity_unit: Optional[QuantityUnit] = None
 
 class Ingredient(IngredientBase):
     # Offline cash sales are retained even if reconciliation reveals a shortage.
@@ -515,6 +528,7 @@ SPOILAGE_REASON_ALIASES = {
 
 class SpoilageCreate(BaseModel):
     quantity_lost: float = Field(gt=0, le=1_000_000_000, allow_inf_nan=False)
+    quantity_unit: Optional[QuantityUnit] = None
     reason: str
     notes: Optional[str] = None
     request_id: Optional[str] = Field(default=None,min_length=1,max_length=200)

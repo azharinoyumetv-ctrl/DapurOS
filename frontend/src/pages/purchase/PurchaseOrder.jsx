@@ -1,3 +1,4 @@
+import IngredientUnitSelect from "@/components/IngredientUnitSelect";
 import useTablePage from '@/hooks/useTablePage';
 import TablePage from '@/components/TablePage';
 import { useEffect, useRef, useState } from "react";
@@ -18,6 +19,8 @@ export default function PurchaseOrder() {
   const [supplierId, setSupplierId] = useState("");
   const [productId, setProductId] = useState("");
   const [qty, setQty] = useState("");
+  const [quantityUnit, setQuantityUnit] = useState("");
+  const selectedIngredient = products.find(item => item.key === productId && item.kind === "ingredient");
   const [cost, setCost] = useState("");
   const [poItems, setPoItems] = useState([]);
 
@@ -42,6 +45,7 @@ export default function PurchaseOrder() {
       product_id: prod.id, kind: prod.kind,
       name: prod.name,
       qty: Number(qty),
+      quantity_unit: selectedIngredient ? quantityUnit || selectedIngredient.unit : undefined,
       cost: Number(cost),
       subtotal: Math.round(Number(qty)*Number(cost)*100)/100
     };
@@ -49,6 +53,7 @@ export default function PurchaseOrder() {
     if(poItems.some(it=>it.product_id===prod.id&&it.kind===prod.kind)){setError('Barang sudah ada pada PO. Hapus baris lama untuk mengganti jumlah.');return;}
     setError('');setPoItems([...poItems, newItem]);
     setProductId("");
+    setQuantityUnit("");
     setQty("");
     setCost("");
   };
@@ -59,7 +64,7 @@ export default function PurchaseOrder() {
     const sup = suppliers.find(s => s.id === supplierId);
     if (!sup) return;
 
-    const total = poItems.reduce((acc, it) => acc + it.subtotal, 0);
+    const total = Math.round(poItems.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
 
     const payload = {
       supplier_id: supplierId,
@@ -93,9 +98,9 @@ export default function PurchaseOrder() {
           <h2 className="font-display font-bold text-lg">Buat PO Baru</h2>
           
           <div className="flex flex-col space-y-1">
-            <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Pilih Supplier</label>
+            <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase" htmlFor="po-supplier">Pilih Supplier</label>
             <select
-              value={supplierId}
+              id="po-supplier" value={supplierId}
               onChange={(e) => setSupplierId(e.target.value)}
               className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-[hsl(var(--foreground))] outline-none text-sm"
             >
@@ -110,11 +115,13 @@ export default function PurchaseOrder() {
             <h3 className="text-xs font-bold text-[hsl(var(--muted))] uppercase mb-3">Tambah Item Barang</h3>
             <form onSubmit={handleAddItem} className="space-y-3">
               <div className="flex flex-col space-y-1">
-                <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Produk</label>
+                <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase" htmlFor="po-item">Produk</label>
                 <select
-                  value={productId}
+                  id="po-item" value={productId}
                   onChange={(e) => {
                     setProductId(e.target.value);
+                    setQuantityUnit("");
+                    setQty("");
                     const prod = products.find(p => p.key === e.target.value);
                     if (prod) setCost(prod.cost || "");
                   }}
@@ -126,22 +133,23 @@ export default function PurchaseOrder() {
                   ))}
                 </select>
               </div>
+              <IngredientUnitSelect base={selectedIngredient?.unit} value={quantityUnit} onChange={setQuantityUnit} />
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Qty</label>
+                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase" htmlFor="po-qty">Jumlah</label>
                   <input
                     type="number"
-                    value={qty} min={productId.startsWith('ingredient:')?'0.000001':'1'} step={productId.startsWith('ingredient:')?'any':'1'} required
+                    id="po-qty" value={qty} min={productId.startsWith('ingredient:')?'0.000001':'1'} step={productId.startsWith('ingredient:')?'any':'1'} required
                     onChange={(e) => setQty(e.target.value)}
                     placeholder="Contoh: 100"
                     className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-[hsl(var(--foreground))] outline-none text-xs"
                   />
                 </div>
                 <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase">Harga Beli</label>
+                  <label className="text-[10px] font-semibold text-[hsl(var(--muted))] uppercase" htmlFor="po-unit-price">Harga per {quantityUnit || selectedIngredient?.unit || "unit"}</label>
                   <input
                     type="number"
-                    value={cost} min="0" step="0.01" required
+                    id="po-unit-price" value={cost} min="0" step="0.01" required
                     onChange={(e) => setCost(e.target.value)}
                     placeholder="Rp"
                     className="border border-[hsl(var(--border))] rounded-md px-3 py-1.5 bg-white text-[hsl(var(--foreground))] outline-none text-xs"
@@ -161,7 +169,7 @@ export default function PurchaseOrder() {
                 <div key={idx} className="flex justify-between py-2 text-xs">
                   <div>
                     <p className="font-semibold">{it.name}</p>
-                    <p className="text-[hsl(var(--muted))]">{it.qty} x {fmtIDR(it.cost)}</p>
+                    <p className="text-[hsl(var(--muted))]">{it.qty}{it.quantity_unit ? " " + it.quantity_unit : ""} × {fmtIDR(it.cost)}</p>
                   </div>
                   <div><p className="font-bold">{fmtIDR(it.subtotal)}</p><button disabled={busy} className="underline" onClick={()=>setPoItems(rows=>rows.filter((_,i)=>i!==idx))}>Hapus</button></div>
                 </div>

@@ -11,6 +11,7 @@ import { canManageProducts } from '@/auth/permissions';
 import useTablePage from '@/hooks/useTablePage';
 import TablePage from '@/components/TablePage';
 import ReadState from '@/components/ReadState';
+import TicketStationSelect from '@/components/TicketStationSelect';
 
 function ProductForm({ product, categories, categoriesLoading, categoriesError, onRetryCategories, productUnits, unitsLoading, unitsError, onRetryUnits, onClose, onSaved }) {
   const { user } = useAuth();
@@ -23,6 +24,7 @@ function ProductForm({ product, categories, categoriesLoading, categoriesError, 
     cost: product?.cost || 0,
     stock: product?.stock || 0,
     category: product?.category || "Umum",
+    ticket_station: product?.ticket_station || "Auto",
     unit: product?.unit || "pcs",
     description: product?.description || "",
     active: product?.active !== false,
@@ -275,6 +277,7 @@ function ProductForm({ product, categories, categoriesLoading, categoriesError, 
               <p>{unitsError}</p><button type="button" className="underline mt-1" onClick={onRetryUnits}>Coba lagi</button>
             </div>}              </div>
             </div>
+            <TicketStationSelect value={form.ticket_station} onChange={ticket_station => setForm(current => ({ ...current, ticket_station }))} />
             <div>
               <label className="label-tiny block mb-1.5">Foto Produk</label>
             {form.image_url ? (

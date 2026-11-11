@@ -1,4 +1,5 @@
 """Timed reservations in the restaurant's timezone, independent of live table holds."""
+import asyncio
 import calendar
 import hashlib
 import json
@@ -19,6 +20,9 @@ def parse_local_start(value):
     return local
 
 
+MAX_BOOKING_MINUTES = 480
+
+
 class BookingInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     table_id: str = Field(min_length=1, max_length=200)
@@ -26,7 +30,7 @@ class BookingInput(BaseModel):
     phone: str = Field(default="", max_length=64)
     party_size: int = Field(ge=1, le=1000, strict=True)
     local_start: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
-    duration_minutes: int = Field(ge=15, le=480, strict=True)
+    duration_minutes: int = Field(ge=15, le=MAX_BOOKING_MINUTES, strict=True)
     note: str = Field(default="", max_length=1000)
     request_id: UUID
 
@@ -71,20 +75,31 @@ def overlap(start, end):
     return {"start_at": {"$lt": end}, "end_at": {"$gt": start}}
 
 
+def agenda_overlap(start, end):
+    # Reservations can span midnight, but no valid booking can start earlier than this bound.
+    bounds = overlap(start, end)
+    bounds["start_at"]["$gte"] = (datetime.fromisoformat(start) - timedelta(minutes=MAX_BOOKING_MINUTES)).isoformat()
+    return bounds
+
+
 async def slot_tables(db, store_id, local_start, duration, party_size, exclude):
     zone = await store_zone(db, store_id)
     start = instant(local_start, zone)
     end = start + timedelta(minutes=duration)
     scope = {"store_id": store_id, "status": {"$in": ["booked", "seated"]}, **overlap(start.isoformat(), end.isoformat())}
-    unchanged_table = None
     if exclude:
         scope["id"] = {"$ne": str(exclude)}
-        existing = await db.table_bookings.find_one(booking_scope(store_id, exclude), {"start_at": 1, "table_id": 1})
-        if existing and existing["start_at"] == start.isoformat():
-            unchanged_table = existing["table_id"]
-    occupied = set(await db.table_bookings.distinct("table_id", scope))
+    reads = [
+        db.table_bookings.distinct("table_id", scope),
+        db.tables.find({"store_id": store_id}, {"_id": 0, "id": 1, "capacity": 1, "status": 1}).to_list(None),
+    ]
+    if exclude:
+        reads.append(db.table_bookings.find_one(booking_scope(store_id, exclude), {"start_at": 1, "table_id": 1}))
+    occupied_ids, tables, *excluded = await asyncio.gather(*reads)
+    occupied = set(occupied_ids)
+    existing = excluded[0] if excluded else None
+    unchanged_table = existing["table_id"] if existing and existing["start_at"] == start.isoformat() else None
     now = utcnow()
-    tables = await db.tables.find({"store_id": store_id}, {"_id": 0, "id": 1, "capacity": 1, "status": 1}).to_list(None)
     return {table["id"]: (
         "Kapasitas kurang" if table.get("capacity", 0) < party_size else
         "Waktu sudah dipesan" if table["id"] in occupied else
@@ -103,16 +118,18 @@ async def agenda(db, store_id, day):
     month_end = month_start + timedelta(days=calendar.monthrange(day.year, day.month)[1])
     start, end = day_start(day, zone), day_start(day + timedelta(days=1), zone)
     scope = {"store_id": store_id}
-    rows = await db.table_bookings.find({**scope, **overlap(start, end)}).sort("start_at", 1).limit(501).to_list(501)
+    rows, tables, month = await asyncio.gather(
+        db.table_bookings.find({**scope, **agenda_overlap(start, end)}).sort("start_at", 1).limit(501).to_list(501),
+        db.tables.find(scope, {"_id": 0, "id": 1, "label": 1, "capacity": 1, "status": 1, "floor_id": 1}).sort("label", 1).to_list(None),
+        db.table_bookings.find(
+            {**scope, **agenda_overlap(day_start(month_start, zone), day_start(month_end, zone)),
+             "status": {"$in": ["booked", "seated"]}},
+            {"_id": 0, "start_at": 1, "end_at": 1},
+        ).limit(5001).to_list(5001),
+    )
     if len(rows) > 500:
         raise HTTPException(409, "Terlalu banyak reservasi untuk hari ini.")
-    tables = await db.tables.find(scope, {"_id": 0, "id": 1, "label": 1, "capacity": 1, "status": 1, "floor_id": 1}).sort("label", 1).to_list(None)
     labels = {table["id"]: table["label"] for table in tables}
-    month = await db.table_bookings.find(
-        {**scope, **overlap(day_start(month_start, zone), day_start(month_end, zone)),
-         "status": {"$in": ["booked", "seated"]}},
-        {"_id": 0, "start_at": 1, "end_at": 1},
-    ).limit(5001).to_list(5001)
     marked_days = set()
     for row in month[:5000]:
         first = datetime.fromisoformat(row["start_at"]).astimezone(zone).date()

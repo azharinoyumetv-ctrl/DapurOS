@@ -1,3 +1,5 @@
+import IngredientUnitSelect from "@/components/IngredientUnitSelect";
+import { convertIngredientQuantity } from "@/lib/ingredientUnits";
 import useTablePage from '@/hooks/useTablePage';
 import TablePage from '@/components/TablePage';
 import { useEffect, useRef, useState } from "react";
@@ -7,9 +9,14 @@ import { inventoryError } from '@/api/inventoryItems';
 import { Check, ClipboardCheck } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
+const lineKey = (po, line) => [po.id, line.kind || 'product', line.product_id].join(':');
+const remainingQuantity = line => Number((line.qty - (line.received_qty || 0)).toPrecision(15));
+
 export default function GoodsReceiving() {
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[quantities,setQuantities]=useState({});
   const lock=useRef(false),attempt=useRef(null);
+  const [quantityUnits, setQuantityUnits] = useState({});
+  const [ingredients, setIngredients] = useState([]);
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const historyPage=useTablePage(receivings);
@@ -19,7 +26,11 @@ export default function GoodsReceiving() {
     // Get POs that are not yet marked as Received
     readCollection("/purchase/orders").then((r) => {
       const list = r.data || [];
-      setOrders(list.filter(po => ['Ordered','Partial'].includes(po.status)));
+      const pending = list.filter(po => ['Ordered','Partial'].includes(po.status));
+      setOrders(pending);
+      if (pending.some(po => po.items?.some(line => line.kind === 'ingredient' && !line.quantity_unit))) {
+        readCollection('/ingredients').then(response => setIngredients(response.data)).catch(() => {});
+      }
     }).catch(e=>setError(inventoryError(e)));
     readCollection("/purchase/receiving").then((r) => setReceivings(r.data)).catch(e=>setError(inventoryError(e)));
   };
@@ -28,9 +39,31 @@ export default function GoodsReceiving() {
     fetchData();
   }, []);
 
+  const orderUnit = line => line.kind === 'ingredient'
+    ? line.quantity_unit || ingredients.find(ingredient => ingredient.id === line.product_id)?.unit
+    : undefined;
+
+  const receiveQuantity = (po, line) => {
+    const key = lineKey(po, line);
+    const base = orderUnit(line);
+    return quantities[key] ?? convertIngredientQuantity(remainingQuantity(line), base, quantityUnits[key] || base);
+  };
+
+  const changeUnit = (po, line, unit) => {
+    const key = lineKey(po, line);
+    setQuantities(values => ({ ...values,
+      [key]: convertIngredientQuantity(receiveQuantity(po, line), quantityUnits[key] || orderUnit(line), unit),
+    }));
+    setQuantityUnits(values => ({ ...values, [key]: unit }));
+  };
+
   const handleReceive = async (po) => {
     if(lock.current)return;
-    const items=po.items?.map(line=>({product_id:line.product_id,kind:line.kind||'product',qty:Number(quantities[po.id+':'+line.product_id]??Number((line.qty-(line.received_qty||0)).toFixed(9)))})).filter(line=>line.qty>0);
+    const items = po.items?.map(line => ({
+      product_id: line.product_id, kind: line.kind || 'product',
+      qty: Number(receiveQuantity(po, line)),
+      quantity_unit: quantityUnits[lineKey(po, line)] || undefined,
+    })).filter(line => line.qty > 0);
     if(!items?.length){setError('Isi jumlah barang yang sudah diterima.');return;}
     const payload = {
       po_no: po.po_no,items,
@@ -40,6 +73,9 @@ export default function GoodsReceiving() {
     lock.current=true;setBusy(true);setError('');
     try{
       await api.post('/purchase/receiving',{...payload,request_id:attempt.current.id});attempt.current=null;
+      const retainOtherOrders = values => Object.fromEntries(Object.entries(values).filter(([key]) => !key.startsWith(po.id + ':')));
+      setQuantities(retainOtherOrders);
+      setQuantityUnits(retainOtherOrders);
       fetchData();
       toast.success(`Barang masuk dari PO ${po.po_no} berhasil diterima dan stok ditambahkan!`);
     }catch(e){setError(inventoryError(e));}finally{lock.current=false;setBusy(false);}
@@ -66,7 +102,29 @@ export default function GoodsReceiving() {
                   </div>
                   <span className="text-xs font-mono font-bold">{fmtIDR(po.total)}</span>
                 </div>
-                <div className="space-y-2 mt-3">{po.items?.map(line=><label key={line.product_id} className="flex justify-between gap-2 items-center text-xs">{line.name} · sisa {Number((line.qty-(line.received_qty||0)).toFixed(9))}<input type="number" className="input-field w-24" min="0" max={line.qty-(line.received_qty||0)} step={line.kind==='ingredient'?'any':'1'} aria-label={`Terima ${line.name}`} disabled={busy} value={quantities[po.id+':'+line.product_id]??Number((line.qty-(line.received_qty||0)).toFixed(9))} onChange={e=>setQuantities(q=>({...q,[po.id+':'+line.product_id]:e.target.value}))}/></label>)}{!po.items?.length&&<p className="text-amber-800 text-xs">PO lama belum memiliki rincian barang. Buat PO dengan rincian yang benar sebelum menerima stok.</p>}</div>
+                <div className="space-y-2 mt-3">
+                  {po.items?.map(line => {
+                    const key = lineKey(po, line);
+                    const base = orderUnit(line);
+                    const remaining = remainingQuantity(line);
+                    return <div key={key} className="space-y-2">
+                      <p className="text-xs">{line.name} · sisa {remaining} {base}</p>
+                      {remaining > 0 && <div className="grid grid-cols-2 gap-2 items-end">
+                        <label className="block">
+                          <span className="label-tiny">Terima {line.name}</span>
+                          <input type="number" className="input-field mt-1" min="0"
+                            max={convertIngredientQuantity(remaining, base, quantityUnits[key] || base)}
+                            step={line.kind === 'ingredient' ? 'any' : '1'}
+                            aria-label={`Terima ${line.name}`} disabled={busy} value={receiveQuantity(po, line)}
+                            onChange={event => setQuantities(values => ({ ...values, [key]: event.target.value }))} />
+                        </label>
+                        <IngredientUnitSelect base={base} value={quantityUnits[key]} onChange={unit => changeUnit(po, line, unit)}
+                          label={`Satuan terima ${line.name}`} disabled={busy} />
+                      </div>}
+                    </div>;
+                  })}
+                  {!po.items?.length && <p className="text-amber-800 text-xs">PO lama belum memiliki rincian barang. Buat PO dengan rincian yang benar sebelum menerima stok.</p>}
+                </div>
                 <div className="border-t border-[hsl(var(--border))]/50 pt-2 mt-3 flex justify-between items-center">
                   <span className="text-[10px] text-[hsl(var(--muted))]">Tgl PO: {new Date(po.created_at).toLocaleDateString("id-ID")}</span>
                   <button disabled={busy||!po.items?.length} onClick={() => handleReceive(po)} className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1 font-semibold">

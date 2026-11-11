@@ -16,6 +16,7 @@ from plan_limits import require_plan
 import transactions
 import ingredient_store
 from stock_ledger import movement
+from ingredient_units import stock_quantity
 from erasure_guard import session_context
 
 router = APIRouter(prefix="/api/ingredients", tags=["ingredients"])
@@ -53,7 +54,7 @@ async def create_ingredient(payload: IngredientCreate, user: dict = Depends(requ
 async def update_ingredient(ingredient_id: str, payload: IngredientUpdate, user: dict = Depends(require_plan("pro"))):
     db = get_db()
     update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None and k!='expected_stock'}
-    if not update:
+    if not set(update) - {'quantity_unit'}:
         raise HTTPException(status_code=400, detail="Tidak ada perubahan data")
     
     res=await transactions.run_transaction(db,lambda session:ingredient_store.save(db,user,update,session,ingredient_id,payload.expected_stock))
@@ -100,22 +101,26 @@ async def _log_spoilage(ingredient_id, payload, user):
             detail=f"Alasan tidak valid. Pilihan resmi: {', '.join(SPOILAGE_REASONS)}",
         )
 
-    request_hash=hashlib.sha256(json.dumps({'ingredient':ingredient_id,'qty':payload.quantity_lost,'reason':reason,'notes':payload.notes,'actor':user['id']},sort_keys=True).encode()).hexdigest()
+    request = {'ingredient':ingredient_id,'qty':payload.quantity_lost,'reason':reason,'notes':payload.notes,'actor':user['id']}
+    if payload.quantity_unit is not None:
+        request['quantity_unit'] = payload.quantity_unit
+    request_hash=hashlib.sha256(json.dumps(request,sort_keys=True).encode()).hexdigest()
     identifier=user['store_id']+':spoilage:'+hashlib.sha256((payload.request_id or str(uuid.uuid4())).encode()).hexdigest()
     prior=await db.spoilage_logs.find_one({'_id':identifier},session=session_context.get())
     if prior:
         if prior.get('request_hash')!=request_hash:raise HTTPException(409,'Referensi bahan terbuang sudah digunakan untuk data berbeda.')
         return {key:value for key,value in prior.items() if key not in ('_id','request_hash')}
 
-    # Potong stok secara atomik — hanya jika stok mencukupi
+    scope = {"id": ingredient_id, "store_id": user["store_id"]}
+    record = await db.ingredients.find_one(scope, {"unit": 1}, session=session_context.get())
+    if not record:
+        raise HTTPException(404, "Bahan baku tidak ditemukan")
+    lost = stock_quantity(payload.quantity_lost, payload.quantity_unit, record.get("unit"))
+    # Potong stok secara atomik hanya jika stok mencukupi.
     ing = await db.ingredients.find_one_and_update(
+        {**scope, "stock": {"$gte": lost}},
         {
-            "id": ingredient_id,
-            "store_id": user["store_id"],
-            "stock": {"$gte": payload.quantity_lost},
-        },
-        {
-            "$inc": {"stock": -payload.quantity_lost},
+            "$inc": {"stock": -lost},
             "$set": {"updated_at": utcnow().isoformat()},
         },
         return_document=True,
@@ -134,7 +139,7 @@ async def _log_spoilage(ingredient_id, payload, user):
         "ingredient_id": ingredient_id,
         "ingredient_name": ing.get("name", "-"),
         "unit": ing.get("unit", "-"),
-        "quantity_lost": payload.quantity_lost,
+        "quantity_lost": lost,
         "reason": reason,
         "notes": payload.notes,
         "created_by": user.get("email"),
@@ -142,7 +147,7 @@ async def _log_spoilage(ingredient_id, payload, user):
     }
     await db.spoilage_logs.insert_one(dict(log))
     # The quantity and audit event commit together with the stock decrement.
-    await movement(db,session_context.get(),identifier=identifier,store_id=user['store_id'],product_id=ingredient_id,name=ing['name'],quantity=-payload.quantity_lost,reference='WASTE-'+log['id'][:8].upper(),kind='ingredient_spoilage',actor=user['id'],at=log['created_at'])
+    await movement(db,session_context.get(),identifier=identifier,store_id=user['store_id'],product_id=ingredient_id,name=ing['name'],quantity=-lost,reference='WASTE-'+log['id'][:8].upper(),kind='ingredient_spoilage',actor=user['id'],at=log['created_at'])
     return {key:value for key,value in log.items() if key not in ('_id','request_hash')}
 
 

@@ -79,7 +79,13 @@ export default function ReservationCalendar({ canBook, initialTableId, floors, o
   }, [slotKey, revision]);
 
   const refresh = () => setRevision(current => current + 1);
-  const navigateDay = value => { setDay(value); setActionError(""); };
+  const navigateDay = value => {
+    if (value !== day) {
+      setDay(value);
+      setReadError("");
+    }
+    setActionError("");
+  };
   const startForm = booking => {
     const next = localDateTime(new Date(Date.parse(agenda.server_now) + 15 * 60000), agenda.timezone);
     const localStart = agenda.day === agenda.today ? next : agenda.day + "T18:00";
@@ -145,7 +151,10 @@ export default function ReservationCalendar({ canBook, initialTableId, floors, o
   });
 
   const setField = (field, value) => setForm(current => ({ ...current, [field]: value }));
-  const selected = agenda && calendarDate(agenda.day);
+  const selectedDay = day || agenda?.today || dateKey(new Date());
+  const selected = calendarDate(selectedDay);
+  const agendaReady = agenda?.day === selectedDay;
+  const monthMarkers = agenda?.day.slice(0, 7) === selectedDay.slice(0, 7) ? agenda.marked_days : [];
   const now = agenda ? Date.parse(agenda.server_now) : 0;
   const selectedTable = form && agenda?.tables.find(table => table.id === form.table_id);
   const minStart = agenda && localDateTime(agenda.server_now, agenda.timezone);
@@ -160,28 +169,29 @@ export default function ReservationCalendar({ canBook, initialTableId, floors, o
       </header>
       {readError && <div role="alert" className="text-sm space-x-2">{readError}<button className="btn-outline" onClick={refresh}>Coba lagi</button></div>}
       {actionError && <div role="alert" className="text-sm text-red-700" data-testid="calendar-action-error">{actionError}</div>}
-      {loading && <p role="status" className="text-sm">Memuat jadwal…</p>}
-      {agenda && <div className="grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)]">
+      <div className="grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="card-surface p-2 self-start">
           <Calendar mode="single" required locale={indonesian} weekStartsOn={1} month={selected} selected={selected}
+            disableNavigation={Boolean(form || busy)} disabled={Boolean(form || busy)}
             labels={{ labelPrevious: () => "Bulan sebelumnya", labelNext: () => "Bulan berikutnya" }}
             onSelect={value => value && navigateDay(dateKey(value))}
             onMonthChange={value => navigateDay(dateKey(new Date(value.getFullYear(), value.getMonth(), 1)))}
-            today={calendarDate(agenda.today)} modifiers={{ booked: agenda.marked_days.map(calendarDate) }}
+            today={agenda ? calendarDate(agenda.today) : undefined} modifiers={{ booked: monthMarkers.map(calendarDate) }}
             modifiersClassNames={{ booked: "underline decoration-amber-600 decoration-2 underline-offset-4" }} />
           <div className="flex flex-wrap items-center justify-between gap-2 p-2">
-            <button className="btn-outline text-xs" onClick={() => navigateDay(agenda.today)}>Hari ini</button>
-            <span className="text-xs" data-testid="calendar-timezone">{agenda.timezone}</span>
+            <button className="btn-outline text-xs" disabled={!agenda || Boolean(form) || busy} onClick={() => navigateDay(agenda.today)}>Hari ini</button>
+            {agenda && <span className="text-xs" data-testid="calendar-timezone">{agenda.timezone}</span>}
           </div>
         </aside>
         <section className="space-y-3 min-w-0">
           <div className="flex flex-wrap gap-2 items-center justify-between">
             <h3 className="font-bold" data-testid="calendar-agenda-day">{selected.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h3>
-            {!form && <button type="button" className="btn-primary text-sm" data-testid="calendar-new"
+            {agendaReady && !form && <button type="button" className="btn-primary text-sm" data-testid="calendar-new"
               disabled={!canBook || busy || loading || Boolean(readError) || agenda.day < agenda.today || !agenda.tables.length}
               onClick={() => startForm()}>{canBook ? "Reservasi baru" : "Reservasi baru · Business"}</button>}
           </div>
-          {form ? <form className="card-surface p-3 space-y-3" onSubmit={save} data-testid="calendar-booking-form">
+          {(loading || (!agendaReady && !readError)) && <p role="status" className="text-sm">Memuat jadwal…</p>}
+          {agendaReady && (form ? <form className="card-surface p-3 space-y-3" onSubmit={save} data-testid="calendar-booking-form">
             <h4 className="font-bold">{form.id ? "Ubah jadwal" : "Reservasi baru"}</h4>
             <label className="block text-sm">Meja<select className="input-field block w-full mt-1" required value={form.table_id} onChange={e => setField("table_id", e.target.value)} data-testid="calendar-table">
               <option value="">Pilih meja</option>
@@ -229,9 +239,9 @@ export default function ReservationCalendar({ canBook, initialTableId, floors, o
                 </div>}
               </article>;
             })}
-          </>}
+          </>)}
         </section>
-      </div>}
+      </div>
     </DialogContent>
   </Dialog>;
 }

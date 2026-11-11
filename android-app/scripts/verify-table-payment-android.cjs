@@ -7,8 +7,8 @@ const runtime = JSON.parse(fs.readFileSync(path.join(__dirname, '../../tmp/full-
 assert(runtime.base.startsWith('http://127.0.0.1:') && runtime.dbName.startsWith('dapuros_e2e_'));
 const serial = 'emulator-5570', app = 'com.dagangos.dapuros';
 const adbExe = 'C:/Users/azhar/AppData/Local/Android/Sdk/platform-tools/adb.exe';
-const apk = path.resolve(process.argv[2] || path.join(__dirname, '../releases/DapurOS-POS-1.0.8.apk'));
-const output = path.join(__dirname, '../app/build/reports/table-payment-native');
+const apk = path.resolve(process.argv[2] || path.join(__dirname, '../releases/DapurOS-POS-1.0.10.apk'));
+const output = path.join(__dirname, '../app/build/reports', 'table-payment-native-' + path.basename(apk, '.apk'));
 fs.mkdirSync(output, {recursive:true});
 
 function adb(args) {
@@ -54,7 +54,12 @@ let device, safeEmulator=false;
   await bench.start(adb, output);
   device = (await _android.devices({omitDriverInstall:true})).find(d=>d.serial()===serial);
   assert(device);
-  const page = await (await device.webView({pkg:app},{timeout:30000})).page();
+  const pid = adb(['shell','pidof',app]);
+  assert.match(pid, /^\d+$/);
+  const socketName = 'webview_devtools_remote_' + pid;
+  await until(() => adb(['shell','cat','/proc/net/unix']).includes('@'+socketName),
+    'The test instrumentation did not expose the expected DapurOS WebView.');
+  const page = await (await device.webView({socketName},{timeout:30000})).page();
   page.setDefaultTimeout(20000);
   // The API is online through the isolated route below while Android radios are off.
   await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', {get:()=>true}));
@@ -70,10 +75,22 @@ let device, safeEmulator=false;
     localStorage.setItem('dapuros_user',JSON.stringify({...session.user,current_module:'dapuros'}));
     localStorage.removeItem('dapuros_signed_out');
   },session);
+  await page.goto('https://dagangos.com/dapuros/app/products/ingredients',{waitUntil:'domcontentloaded'});
+  await page.getByRole('button',{name:'Tambah Bahan'}).click();
+  await page.getByLabel('Nama Bahan',{exact:true}).fill('Native Biji Curah');
+  await page.getByRole('combobox',{name:'Satuan input stok',exact:true}).selectOption('kg');
+  await page.getByLabel('Stok awal',{exact:true}).fill('5');
+  await page.getByLabel('Batas aman',{exact:true}).fill('0.5');
+  await page.getByRole('button',{name:'Simpan',exact:true}).click();
+  const bulkRow = page.getByRole('row').filter({hasText:'Native Biji Curah'});
+  await bulkRow.getByText('5 kg',{exact:true}).waitFor();
+  const bulk = (await api('/api/ingredients', undefined, auth)).find(row=>row.name==='Native Biji Curah');
+  assert.deepEqual([bulk.stock,bulk.safety_stock,bulk.unit],[5000,500,'g']);
   await page.goto('https://dagangos.com/dapuros/app/pos',{waitUntil:'domcontentloaded'});
   const {today} = await api('/api/tables/schedule', undefined, auth);
   const future = new Date(Date.parse(today+'T00:00:00Z') + 2 * 86400000).toISOString().slice(0,10);
   await page.getByTestId('reservation-calendar-open').click();
+  await page.getByRole('button',{name:'Bulan berikutnya'}).waitFor();
   await page.getByTestId('calendar-new').click();
   await page.getByTestId('calendar-start').fill(future+'T19:30');
   await page.getByTestId('calendar-table').selectOption(table.id);
@@ -85,6 +102,25 @@ let device, safeEmulator=false;
   assert.equal((await api(`/api/tables/${table.id}/session`,undefined,auth)).session.id,opened.id);
   await page.getByTestId('reservation-calendar').getByRole('button',{name:'Close',exact:true}).click();
   await page.getByText('Langsung Takeaway',{exact:false}).click();
+  await page.getByRole('button',{name:'Menu Baru',exact:true}).click();
+  await page.getByTestId('product-name-input').fill('Native Bar Coffee');
+  await page.getByTestId('product-ticket-station').selectOption('Bar');
+  const saveCoffee = page.getByRole('button',{name:'Simpan Menu',exact:true});
+  await saveCoffee.click();
+  await saveCoffee.waitFor({state:'hidden'});
+  const coffee = (await api('/api/products', undefined, auth)).find(product=>product.name==='Native Bar Coffee');
+  assert.equal(coffee.ticket_station, 'Bar');
+  await page.getByTestId('pos-product-'+coffee.id).click();
+  const coffeeCart = page.getByTestId('mobile-cart-open');
+  if (await coffeeCart.isVisible()) await coffeeCart.click();
+  await page.getByTestId('cart-cash-received').fill('40000');
+  await page.getByTestId('checkout-btn').click();
+  await page.getByTestId('receipt-close').click();
+  const hasCoffee = tickets => tickets.some(ticket=>ticket.items.some(item=>item.name===coffee.name));
+  await until(async () => hasCoffee(await api('/api/kds?station=Bar', undefined, auth)),
+    'The synced Android sale did not send the coffee to Bar.');
+  const kitchenTickets = await api('/api/kds?station=Kitchen', undefined, auth);
+  assert(!hasCoffee(kitchenTickets));
   const dishCard = page.getByTestId('pos-product-'+dish.id);
   for (const portions of [3, 2, 1]) {
     await dishCard.getByText(portions+' porsi',{exact:true}).waitFor();
@@ -122,7 +158,7 @@ let device, safeEmulator=false;
   assert.equal(tables.find(t=>t.id===table.id).status,'Vacant');
   const result={status:'passed',apkSha256:sha256,checks:['signed-app-installed','native-external-payment-handoff',
     'merchant-confirmation-closes-table','three-native-cash-sales-deduct-fractional-recipe','sold-out-recipe-stays-visible',
-    'future-reservation-created-in-android-with-live-session-intact'],productionCharges:0};
+    'future-reservation-created-in-android-with-live-session-intact','pos-product-editor-routes-coffee-to-bar','android-stock-entry-converts-kg-to-grams'],productionCharges:0};
   fs.writeFileSync(path.join(output,'verification.json'), JSON.stringify(result,null,2)+'\n');
   console.log(JSON.stringify(result));
 })().catch(error=>{console.error(error.stack);process.exitCode=1;}).finally(async()=>{

@@ -102,6 +102,88 @@ test('inventory transfer UI applies shipment, receive and cancellation once; fra
  expect((await api(request,session,'get','/purchase/orders'))[0].status).toBe('Received');
  expect((await api(request,session,'get','/ingredients'))[0].stock).toBeCloseTo(0.3,9);
 });
+test('bulk ingredient units survive stock edits, PO receiving, transfer, waste and recipe sales',async({page,request})=>{
+ const owner=await register(page,request);
+ await page.setViewportSize({width:393,height:852});
+ await page.goto('/dapuros/app/products/ingredients');
+ await page.getByRole('button',{name:'Tambah Bahan'}).click();
+ await page.getByLabel('Nama Bahan',{exact:true}).fill('Biji Kopi Curah');
+ await page.getByLabel('Satuan resep',{exact:true}).selectOption('g');
+ await page.getByRole('combobox',{name:'Satuan input stok',exact:true}).selectOption('kg');
+ await page.getByLabel('Stok awal',{exact:true}).fill('5');
+ await page.getByLabel('Batas aman',{exact:true}).fill('0.5');
+ await page.getByRole('button',{name:'Simpan',exact:true}).click();
+ const coffeeRow=page.getByRole('row').filter({hasText:'Biji Kopi Curah'});
+ await expect(coffeeRow).toContainText('5 kg');
+ const [coffee]=await api(request,owner,'get','/ingredients');
+ expect(coffee).toMatchObject({stock:5000,safety_stock:500,unit:'g'});
+ await coffeeRow.getByRole('button',{name:'Edit',exact:true}).click();
+ await page.getByRole('combobox',{name:'Satuan input stok',exact:true}).selectOption('kg');
+ await expect(page.getByLabel('Stok saat ini',{exact:true})).toHaveValue('5');
+ await page.getByLabel('Stok saat ini',{exact:true}).fill('6');
+ await page.getByRole('button',{name:'Simpan',exact:true}).click();
+ await expect(coffeeRow).toContainText('6 kg');
+
+ const milk=await api(request,owner,'post','/ingredients',{name:'Susu Curah',unit:'ml',stock:2.5,quantity_unit:'liter'});
+ const rice=await api(request,owner,'post','/ingredients',{name:'Beras Curah',unit:'g',stock:1,quantity_unit:'ton'});
+ expect([milk.stock,rice.stock]).toEqual([2500,1000000]);
+ const wrongUnit=await request.put(runtime.base+'/api/ingredients/'+milk.id,{headers:owner.headers,data:{stock:2,quantity_unit:'kg'}});
+ expect(wrongUnit.status()).toBe(422);
+
+ await page.goto('/dapuros/app/products/stock-adjustment');
+ await page.getByTestId('adjustment-product-select').selectOption('ingredient:'+coffee.id);
+ await page.getByRole('combobox',{name:'Satuan jumlah',exact:true}).selectOption('kg');
+ const adjustment=page.getByTestId('adjustment-form');
+ await adjustment.locator('input[type=number]').fill('1.25');
+ await adjustment.locator('textarea').fill('Stok dari pemasok');
+ await adjustment.locator('button[type=submit]').click();
+ await expect.poll(async()=>(await api(request,owner,'get','/ingredients')).find(row=>row.id===coffee.id).stock).toBe(7250);
+
+ const supplier=await api(request,owner,'post','/suppliers',{name:'Pemasok Curah'});
+ await page.goto('/dapuros/app/purchase/orders');
+ await page.getByLabel('Pilih Supplier',{exact:true}).selectOption(supplier.id);
+ await page.getByLabel('Produk',{exact:true}).selectOption('ingredient:'+coffee.id);
+ await page.getByRole('combobox',{name:'Satuan jumlah',exact:true}).selectOption('kg');
+ await page.getByLabel('Jumlah',{exact:true}).fill('2.5');
+ await page.getByLabel('Harga per kg',{exact:true}).fill('40000');
+ await page.getByRole('button',{name:'Tambah ke Daftar PO'}).click();
+ await page.getByRole('button',{name:'Kirim PO'}).click();
+ await expect(page.getByTestId('po-list')).toContainText('Pemasok Curah');
+ const [po]=await api(request,owner,'get','/purchase/orders');
+ expect(po.total).toBe(100000);
+ expect(po.items[0]).toMatchObject({qty:2.5,quantity_unit:'kg',cost:40000});
+ await page.goto('/dapuros/app/purchase/receiving');
+ await expect(page.getByText(/sisa 2.5 kg/)).toBeVisible();
+ await page.getByRole('combobox',{name:'Satuan terima Biji Kopi Curah',exact:true}).selectOption('g');
+ await page.getByRole('spinbutton',{name:'Terima Biji Kopi Curah',exact:true}).fill('1000');
+ await page.getByRole('button',{name:'Terima Barang'}).click();
+ await expect(page.getByText(/sisa 1.5 kg/)).toBeVisible();
+ await page.getByRole('spinbutton',{name:'Terima Biji Kopi Curah',exact:true}).fill('1.5');
+ await page.getByRole('button',{name:'Terima Barang'}).click();
+ await expect(page.getByText('Tidak ada penerimaan PO tertunda.')).toBeVisible();
+
+ const branch=await api(request,owner,'post','/branches',{name:'Cabang Curah'});
+ const transfer=await api(request,owner,'post','/products/stock-transfers',{from_branch:'main',to_branch:branch.id,items:[{product_id:coffee.id,kind:'ingredient',qty:0.25,quantity_unit:'kg'}],request_id:'bulk-transfer'});
+ expect(transfer.items[0]).toMatchObject({qty:250,quantity_unit:'g'});
+ await api(request,owner,'post','/products/stock-transfers/'+transfer.id+'/receive');
+ await page.goto('/dapuros/app/products/ingredients');
+ await expect(page.getByText('Susu Curah',{exact:true})).toBeVisible();
+ await page.getByTestId('open-spoilage-btn').click();
+ await page.getByLabel('Pilih Bahan Baku',{exact:true}).selectOption(milk.id);
+ await page.getByRole('combobox',{name:'Satuan jumlah',exact:true}).selectOption('L');
+ await page.getByLabel('Jumlah Terbuang / Rusak').fill('0.5');
+ await page.getByRole('button',{name:'Catat Pembuangan'}).click();
+ await expect(page.getByTestId('spoilage-log-list')).toContainText('-500 ml');
+
+ const drink=await product(request,owner,{name:'Kopi Susu Resep',recipe:[{ingredient_id:coffee.id,quantity:18},{ingredient_id:milk.id,quantity:125}]});
+ await api(request,owner,'post','/orders',{payment_method:'cash',cash_received:20000,
+  items:[{product_id:drink.id,name:drink.name,price:drink.price,quantity:1,subtotal:drink.price}]});
+ const remaining=await api(request,owner,'get','/ingredients');
+ expect(remaining.find(row=>row.id===coffee.id).stock).toBe(9482);
+ expect(remaining.find(row=>row.id===milk.id).stock).toBe(1875);
+ expect((await api(request,owner,'get','/products')).find(row=>row.id===drink.id).recipe).toEqual(drink.recipe);
+});
+
 test('recipe stock, spoilage, CSV import, historical profit and idempotent loyalty survive edits',async({page,request})=>{
  const session=await register(page,request),ing=await api(request,session,'post','/ingredients',{name:'E2E Resep Bahan',stock:20,safety_stock:2,unit:'ml'});
  await page.goto('/dapuros/app/products');await page.getByTestId('new-product-btn').click();
@@ -177,6 +259,28 @@ function calendarTime(instant, timeZone) {
 }
 const scheduled=(table,local_start,extra={})=>({table_id:table.id,local_start,duration_minutes:90,customer_name:'Tamu Kalender',party_size:2,
  request_id:require('node:crypto').randomUUID(),...extra});
+
+test('calendar month navigation responds before its first agenda request finishes',async({page,request})=>{
+ const owner=await register(page,request);
+ await dining(request,owner);
+ const {today}=await api(request,owner,'get','/tables/schedule');
+ const next=nextMonth(today);
+ await page.goto('/dapuros/app/pos');
+ let release;
+ const pending=new Promise(resolve=>{release=resolve;});
+ await page.route(url=>url.pathname==='/api/tables/schedule'&&!url.searchParams.has('day'),async route=>{
+  await pending;
+  await route.abort().catch(()=>{});
+ });
+ try {
+  await page.getByTestId('reservation-calendar-open').click();
+  const calendar=page.getByTestId('reservation-calendar');
+  await expect(calendar.getByText('Memuat jadwal…')).toBeVisible();
+  await calendar.getByRole('button',{name:'Bulan berikutnya'}).click();
+  await expect(calendar.getByTestId('calendar-agenda-day')).toContainText(new Date(next+'T12:00:00').toLocaleDateString('id-ID',{month:'long'}));
+  await expect(calendar.getByTestId('calendar-new')).toBeEnabled();
+ } finally { release(); }
+});
 
 test('calendar creates a future reservation on a phone, keeps today free, and reschedules and cancels it',async({page,request})=>{
  const owner=await register(page,request),table=await dining(request,owner);
@@ -346,6 +450,42 @@ test('restaurant invariants: one session, protected open bills, bounded ingredie
   expect.soft((await request.put(runtime.base+'/api/debt/'+kind+'/'+debt.id,{headers:session.headers,data:{paid_amount:2000,status:'Paid'}})).status(),kind+' overpayment').toBe(422);
  }
 });
+test('a mixed order separates coffee for the bar and meals for the kitchen using saved product stations',async({page,request})=>{
+ const owner=await register(page,request);
+ await page.goto('/dapuros/app/products');
+ await page.getByTestId('new-product-btn').click();
+ await page.getByTestId('pf-name').fill('Es Kopi Manual');
+ await page.getByTestId('pf-price').fill('12000');
+ await page.getByTestId('pf-stock').fill('10');
+ await page.getByTestId('product-ticket-station').selectOption('Bar');
+ await page.getByTestId('pf-save').click();
+ await expect(page.getByText('Es Kopi Manual',{exact:true})).toBeVisible();
+ const [coffee]=await api(request,owner,'get','/products');
+ expect(coffee.ticket_station).toBe('Bar');
+ await page.getByTestId('edit-product-'+coffee.id).click();
+ await expect(page.getByTestId('product-ticket-station')).toHaveValue('Bar');
+ await page.getByTestId('pf-cancel').click();
+ const meal=await product(request,owner,{name:'Nasi Untuk Dapur',sku:'E2E-MEAL',ticket_station:'Kitchen'});
+ const automatic=await product(request,owner,{name:'Espresso',sku:'E2E-ESPRESSO',category:'Kopi'});
+ const table=await dining(request,owner);
+ const opened=await api(request,owner,'post',`/tables/${table.id}/session`);
+ await api(request,owner,'post','/orders',{session_id:opened.id,payment_method:'cash',
+  items:[coffee,meal,automatic].map(p=>({product_id:p.id,name:p.name,price:p.price,quantity:1,subtotal:p.price}))});
+ const tickets=await api(request,owner,'get','/kds');
+ expect(tickets).toHaveLength(2);
+ expect(tickets.find(t=>t.station==='Bar').items.map(x=>x.name)).toEqual([coffee.name,automatic.name]);
+ expect(tickets.find(t=>t.station==='Kitchen').items.map(x=>x.name)).toEqual([meal.name]);
+ await page.goto('/dapuros/app/kds');
+ await page.getByTestId('station-filter-bar').click();
+ const barTicket=page.getByTestId('kds-ticket-'+tickets.find(t=>t.station==='Bar').id);
+ const kitchenTicket=page.getByTestId('kds-ticket-'+tickets.find(t=>t.station==='Kitchen').id);
+ await expect(barTicket).toContainText(coffee.name);
+ await expect(kitchenTicket).toHaveCount(0);
+ await page.getByTestId('station-filter-kitchen').click();
+ await expect(kitchenTicket).toContainText(meal.name);
+ await expect(barTicket).toHaveCount(0);
+});
+
 test('public QR guest order reaches the actual kitchen and table bill without operator credentials',async({context,page,request})=>{
  const session=await register(page,request),p=await product(request,session),table=await dining(request,session);
  await api(request,session,'post',`/tables/${table.id}/session`);

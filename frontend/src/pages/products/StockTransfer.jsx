@@ -1,3 +1,4 @@
+import IngredientUnitSelect from "@/components/IngredientUnitSelect";
 import useTablePage from '@/hooks/useTablePage';
 import TablePage from '@/components/TablePage';
 import { readCollection } from '@/api/records';
@@ -17,6 +18,8 @@ export default function StockTransfer() {
 
   const [productId, setProductId] = useState("");
   const [qty, setQty] = useState("");
+  const [quantityUnit, setQuantityUnit] = useState("");
+  const selectedIngredient = products.find(item => item.key === productId && item.kind === "ingredient");
   const [fromBranch, setFromBranch] = useState("main");
   const [toBranch, setToBranch] = useState("");
 
@@ -40,7 +43,7 @@ export default function StockTransfer() {
     const payload = {
       from_branch: fromBranch,
       to_branch: toBranch,
-      items: [{ product_id: prod.id, kind: prod.kind, name: prod.name, qty: Number(qty) }],
+      items: [{ product_id: prod.id, kind: prod.kind, name: prod.name, qty: Number(qty), quantity_unit: quantityUnit || undefined }],
       status: "Shipped",
     };
     const fingerprint = JSON.stringify(payload);
@@ -106,7 +109,7 @@ export default function StockTransfer() {
             <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Pilih Produk</label>
             <select
               value={productId}
-              onChange={(e) => setProductId(e.target.value)}
+              onChange={event => { setProductId(event.target.value); setQuantityUnit(""); setQty(""); }}
               className="border border-[hsl(var(--border))] rounded-md px-4 py-2 bg-white text-[hsl(var(--foreground))] outline-none text-sm"
             >
               <option value="">-- Pilih Produk --</option>
@@ -116,6 +119,7 @@ export default function StockTransfer() {
             </select>
           </div>
 
+          <IngredientUnitSelect base={selectedIngredient?.unit} value={quantityUnit} onChange={setQuantityUnit} />
           <div className="flex flex-col space-y-1">
             <label className="text-xs font-semibold text-[hsl(var(--muted))] uppercase">Jumlah Transfer</label>
             <input
@@ -155,7 +159,7 @@ export default function StockTransfer() {
                     <td className="py-3">
                       {t.items?.map((it, idx) => (
                         <div key={idx} className="text-xs">
-                          {it.name} <span className="font-semibold text-[hsl(var(--primary))]">({it.qty} Qty)</span>
+                          {it.name} <span className="font-semibold text-[hsl(var(--primary))]">({it.qty} {it.quantity_unit || "Qty"})</span>
                         </div>
                       ))}
                     </td>
