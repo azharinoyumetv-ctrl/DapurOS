@@ -5,9 +5,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+import httpx
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -22,6 +24,7 @@ import routes_products as products
 import routes_floors as floors
 import routes_ingredients as ingredients
 import routes_records as records
+import routes_webhooks as webhooks
 
 USER = {"id": "fixture-owner", "store_id": "fixture-store", "email": "fixture@example.invalid", "role": "Owner", "plan": "business", "current_module": "dapuros"}
 
@@ -39,10 +42,10 @@ async def shop(monkeypatch):
         {"id": "coffee", "store_id": USER["store_id"], "name": "Kopi", "price": 5000, "stock": 20, "category": "Minuman"},
     ])
     await db.ingredients.insert_one({"id": "rice", "store_id": USER["store_id"], "name": "Beras", "stock": 100})
-    for module in (database, orders, offline, tables, products, floors, ingredients, records):
+    for module in (database, orders, offline, tables, products, floors, ingredients, records, webhooks):
         monkeypatch.setattr(module, "get_db", lambda: db)
     app = FastAPI()
-    for module in (orders, offline, tables, products, floors, ingredients, records):
+    for module in (orders, offline, tables, products, floors, ingredients, records, webhooks):
         app.include_router(module.router)
     app.dependency_overrides[auth.get_current_user] = lambda: USER.copy()
     try:
@@ -56,6 +59,161 @@ async def shop(monkeypatch):
 
 def sale(**extra):
     return {"items": [{"product_id": "meal", "name": "Resep", "price": 10000, "quantity": 2, "subtotal": 20000, "note": "Tanpa pedas"}], "payment_method": "cash", "cash_received": 30000, **extra}
+
+
+@pytest.mark.asyncio
+async def test_recipe_last_portion_cannot_be_sold_twice(shop):
+    db, http = shop
+    await db.products.update_one({"id": "meal"}, {"$set": {"recipe": [{"ingredient_id": "rice", "quantity": 0.1}]}})
+    await db.ingredients.update_one({"id": "rice"}, {"$set": {"stock": 0.09999999999999998}})
+    payload = sale(items=[{"product_id": "meal", "name": "Resep", "price": 10000, "quantity": 1, "subtotal": 10000}])
+    responses = await asyncio.gather(
+        http.post("/api/orders", json=payload, headers={"Idempotency-Key": "last-portion-left"}),
+        http.post("/api/orders", json=payload, headers={"Idempotency-Key": "last-portion-right"}),
+    )
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    assert (await db.ingredients.find_one({"id": "rice"}))["stock"] == 0
+    assert await db.orders.count_documents({}) == await db.kds_tickets.count_documents({}) == 1
+    saved = next(response.json() for response in responses if response.is_success)
+    for _ in range(2):
+        assert (await http.post(f"/api/orders/{saved['id']}/void")).is_success
+    assert (await db.ingredients.find_one({"id": "rice"}))["stock"] == 0.1
+
+
+@pytest.mark.asyncio
+async def test_split_complimentary_recipe_item_moves_quantity_and_void_restores_once(shop):
+    db, http = shop
+    await db.products.update_one({"id": "meal"}, {"$set": {"price": 0}})
+    await db.tables.insert_one({"id": "table", "store_id": USER["store_id"], "label": "Meja 1", "status": "Seated"})
+    await db.order_sessions.insert_one({"id": "session", "store_id": USER["store_id"], "table_id": "table", "status": "Active"})
+    response = await http.post("/api/orders", json=sale(session_id="session", items=[
+        {"product_id": "meal", "name": "Resep", "price": 0, "quantity": 2, "subtotal": 0},
+    ]))
+    assert response.is_success, response.text
+    order = response.json()
+    split = await http.post("/api/tables/table/split-bill", json={"type": "item", "items": [{"product_id": "meal", "quantity": 1}]})
+    assert split.is_success, split.text
+    part = split.json()["split_order"]
+    source = await db.orders.find_one({"id": order["id"]})
+    assert source["items"][0]["quantity"] == part["items"][0]["quantity"] == 1
+    assert source["total"] == part["total"] == 0
+    assert (await http.post(f"/api/orders/{part['id']}/void")).is_success
+    assert (await db.ingredients.find_one({"id": "rice"}))["stock"] == 85
+    assert (await http.post(f"/api/orders/{order['id']}/void")).is_success
+    assert (await db.ingredients.find_one({"id": "rice"}))["stock"] == 100
+
+
+@pytest.mark.asyncio
+async def test_equal_split_preserves_cents_without_negative_parts(shop):
+    db, http = shop
+    await db.order_sessions.insert_one({"id": "session", "store_id": USER["store_id"], "table_id": "table", "status": "Active"})
+    await db.orders.insert_one({"id": "order", "store_id": USER["store_id"], "session_id": "session",
+                                "payment_status": "pending", "total": 0.02})
+    split = await http.post("/api/tables/table/split-bill", json={"type": "equal", "ways": 4})
+    assert split.is_success, split.text
+    assert split.json()["amounts"] == [0.01, 0.01, 0, 0]
+
+
+async def setup_xendit(db):
+    await db.integrations.insert_one({'store_id': USER['store_id'],
+        'xendit': {'is_active': True, 'secret_key': 'isolated', 'webhook_token': 'isolated-callback'}})
+    await db.payments_config.insert_one({'store_id': USER['store_id'], 'va': {'is_active': True, 'provider': 'Xendit'}})
+
+
+def callback(reference, total, completed=False):
+    return {'event': 'payment_session.completed' if completed else 'payment_session.expired', 'data': {
+        'reference_id': reference, 'payment_session_id': 'isolated-session', 'session_type': 'PAY',
+        'currency': 'IDR', 'amount': total, 'status': 'COMPLETED' if completed else 'EXPIRED',
+    }}
+
+
+@pytest.mark.asyncio
+async def test_table_gateway_serializes_checkout_and_changes_and_unlocks_on_verified_expiry(shop, monkeypatch):
+    db, http = shop
+    await setup_xendit(db)
+    await db.tables.insert_one({'id': 'table', 'store_id': USER['store_id'], 'label': 'Meja 1', 'status': 'Seated'})
+    await db.order_sessions.insert_one({'id': 'session', 'store_id': USER['store_id'], 'table_id': 'table', 'status': 'Active'})
+    submitted = await http.post('/api/orders', json=sale(session_id='session', cash_received=None))
+    assert submitted.status_code == 200, submitted.text
+    order = submitted.json()
+    create = AsyncMock(return_value={'gateway_checkout_url': 'https://checkout.example.invalid/pay', 'gateway_session_id': 'isolated-session'})
+    monkeypatch.setattr(orders, 'create_merchant_checkout', create)
+    path = '/api/tables/table/gateway-payment'
+    body = {'payment_method': 'va', 'expected_session_id': 'session', 'expected_total': 23100}
+    assert (await http.post(path, json={**body, 'expected_total': 22000})).status_code == 409
+    assert (await http.post(path, json={**body, 'expected_session_id': 'old'})).status_code == 409
+    left, right = await asyncio.gather(http.post(path, json=body), http.post(path, json=body))
+    assert left.status_code == right.status_code == 200, (left.text, right.text)
+    first = left.json()
+    assert first['id'] == right.json()['id']
+    assert create.await_count == 1
+    assert (await http.post('/api/orders', json=sale(session_id='session', cash_received=None))).status_code == 409
+    assert (await http.post('/api/tables/table/split-bill', json={'type': 'item', 'items': [{'product_id':'meal','quantity':1}]})).status_code == 409
+    assert (await http.post(f"/api/orders/{order['id']}/void")).status_code == 409
+    assert (await db.ingredients.find_one({'id': 'rice'}))['stock'] == 70
+    auth_headers = {'x-callback-token': 'isolated-callback'}
+    assert (await http.post('/api/webhooks/xendit', json=callback(first['reference'], 23100))).status_code == 401
+    assert (await http.post('/api/webhooks/xendit', headers=auth_headers, json=callback(first['reference'], 23100))).is_success
+    assert (await http.get(f"{path}/{first['id']}")).json()['payment_status'] == 'failed'
+    assert (await db.order_sessions.find_one({'id': 'session'}))['status'] == 'Active'
+    next_attempt = (await http.post(path, json=body)).json()
+    assert next_attempt['id'] != first['id']
+    assert (await http.post('/api/webhooks/xendit', headers=auth_headers, json=callback(first['reference'], 23100, True))).is_success
+    assert (await db.orders.find_one({'id': order['id']}))['payment_status'] == 'pending'
+    assert (await http.post('/api/webhooks/xendit', headers=auth_headers, json=callback(next_attempt['reference'], 23100, True))).is_success
+    assert (await db.orders.find_one({'id': order['id']}))['payment_status'] == 'paid'
+    assert (await db.tables.find_one({'id': 'table'}))['status'] == 'Vacant'
+    assert await db.kds_tickets.count_documents({}) == 1
+
+
+@pytest.mark.asyncio
+async def test_takeaway_expiry_restores_recipe_inventory_and_cancels_kitchen_once(shop, monkeypatch):
+    db, http = shop
+    await setup_xendit(db)
+    monkeypatch.setattr(orders, 'create_merchant_checkout',
+        AsyncMock(return_value={'gateway_checkout_url': 'https://checkout.example.invalid/pay', 'gateway_session_id': 'isolated-session'}))
+    response = await http.post('/api/orders', json=sale(payment_method='va', cash_received=None))
+    assert response.status_code == 200, response.text
+    charge = response.json()
+    assert (await db.ingredients.find_one({'id': 'rice'}))['stock'] == 70
+    assert await db.kds_tickets.count_documents({}) == 1
+    for _ in range(2):
+        response = await http.post('/api/webhooks/xendit', headers={'x-callback-token': 'isolated-callback'},
+                                   json=callback(charge['gateway_reference'], 20000))
+        assert response.is_success
+    assert (await db.orders.find_one({'id': charge['id']}))['payment_status'] == 'failed'
+    assert (await db.ingredients.find_one({'id': 'rice'}))['stock'] == 100
+    assert (await db.products.find_one({'id': 'meal'}))['stock'] == 0
+    assert await db.kds_tickets.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_manual_table_status_uses_merchant_server_and_rejects_wrong_amount(shop, monkeypatch):
+    db, http = shop
+    await setup_xendit(db)
+    await db.tables.insert_one({'id': 'table', 'store_id': USER['store_id'], 'label': 'Meja 1', 'status': 'Seated'})
+    await db.order_sessions.insert_one({'id': 'session', 'store_id': USER['store_id'], 'table_id': 'table', 'status': 'Active'})
+    assert (await http.post('/api/orders', json=sale(session_id='session', cash_received=None))).is_success
+    monkeypatch.setattr(orders, 'create_merchant_checkout',
+        AsyncMock(return_value={'gateway_checkout_url': 'https://checkout.example.invalid/pay', 'gateway_session_id': 'isolated-session'}))
+    charge = (await http.post('/api/tables/table/gateway-payment',
+        json={'payment_method': 'va', 'expected_session_id': 'session', 'expected_total': 23100})).json()
+    amount = 22000
+    requests = []
+    def reply(request):
+        requests.append(request)
+        assert str(request.url) == 'https://api.xendit.co/sessions/isolated-session'
+        return httpx.Response(200, json={'payment_session_id': 'isolated-session', 'reference_id': charge['reference'],
+            'session_type': 'PAY', 'currency': 'IDR', 'amount': amount, 'status': 'COMPLETED'})
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: AsyncClient(transport=httpx.MockTransport(reply), **kwargs))
+    refresh = f"/api/tables/table/gateway-payment/{charge['id']}/refresh"
+    assert (await http.post(refresh, json={'payment_status': 'paid'})).status_code == 409
+    assert (await http.post(refresh)).json()['payment_status'] == 'pending'
+    assert len(requests) == 1
+    await db.checkout_attempts.update_one({'_id': charge['id']}, {'$unset': {'last_checked_at': ''}})
+    amount = 23100
+    assert (await http.post(refresh)).json()['payment_status'] == 'paid'
+    assert (await db.tables.find_one({'id': 'table'}))['status'] == 'Vacant'
 
 
 @pytest.mark.asyncio

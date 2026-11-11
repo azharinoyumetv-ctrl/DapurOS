@@ -15,11 +15,34 @@ def money(value):
     return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-async def active_session(db, user, table_id, session, expected=None):
+async def lock_bill(db, active, session, *, allow_payment=False):
+    if active.get("gateway_payment_id") and not allow_payment:
+        raise HTTPException(409, "Pembayaran gateway sedang berlangsung. Periksa status sebelum mengubah tagihan.")
+    # All bill mutations write the same session so a concurrent checkout cannot
+    # miss a new order or accept a bill while it is being split or voided.
+    await db.order_sessions.update_one({"_id": active["_id"]}, {"$inc": {"bill_revision": 1}}, session=session)
+
+
+async def active_session(db, user, table_id, session, expected=None, *, allow_payment=False):
     row = await db.order_sessions.find_one({"table_id": table_id, "store_id": user["store_id"], "status": "Active"}, session=session)
     if not row or expected and expected != row["id"]:
         raise HTTPException(409, "Sesi meja berubah. Muat ulang tagihan sebelum menerima pembayaran.")
+    await lock_bill(db, row, session, allow_payment=allow_payment)
     return row
+
+
+async def bill_rows(db, store_id, session_id, session):
+    scope = {"store_id": store_id, "payment_status": "pending"}
+    rows = await db.orders.find({**scope, "session_id": session_id}, session=session).to_list(None)
+    if await db.orders.find_one({**scope, "source_session_id": session_id}, session=session):
+        raise HTTPException(409, "Selesaikan bagian tagihan terpisah sebelum menutup meja.")
+    return rows, sum((money(row["total"]) for row in rows), Decimal(0))
+
+
+async def close_paid_table(db, active, session):
+    now = utcnow().isoformat()
+    await db.order_sessions.update_one({"_id": active["_id"]}, {"$set": {"status": "Paid", "closed_at": now}}, session=session)
+    await db.tables.update_one({"id": active["table_id"], "store_id": active["store_id"]}, {"$set": {"status": "Vacant", "updated_at": now}}, session=session)
 
 
 async def settle_rows(db, user, rows, method, session, *, checked=False, amount=None):
@@ -52,18 +75,13 @@ async def settle_rows(db, user, rows, method, session, *, checked=False, amount=
 async def settle_table(db, user, table_id, method, *, expected=None, cash=None, checked=False, amount=None, expected_total=None):
     async def commit(session):
         active = await active_session(db, user, table_id, session, expected)
-        rows = await db.orders.find({"session_id": active["id"], "store_id": user["store_id"], "payment_status": "pending"}, session=session).to_list(None)
-        # Split bills are separate obligations; closing the table must not hide unpaid parts.
-        if await db.orders.find_one({"source_session_id": active["id"], "store_id": user["store_id"], "payment_status": "pending"}, session=session):
-            raise HTTPException(409, "Selesaikan bagian tagihan terpisah sebelum menutup meja.")
-        total = sum((money(row["total"]) for row in rows), Decimal(0))
+        rows, total = await bill_rows(db, user["store_id"], active["id"], session)
         if expected_total is not None and (not money(expected_total).is_finite() or money(expected_total)!=total):
             raise HTTPException(409,'Tagihan bertambah atau berubah. Muat ulang sebelum menerima pembayaran.')
         if cash is not None and (not money(cash).is_finite() or money(cash) < total):
             raise HTTPException(400, "Pembayaran tunai kurang.")
         await settle_rows(db, user, rows, method, session, checked=checked, amount=amount)
-        await db.order_sessions.update_one({"id": active["id"], "store_id": user["store_id"]}, {"$set": {"status": "Paid", "closed_at": utcnow().isoformat()}}, session=session)
-        await db.tables.update_one({"id": table_id, "store_id": user["store_id"]}, {"$set": {"status": "Vacant", "updated_at": utcnow().isoformat()}}, session=session)
+        await close_paid_table(db, active, session)
         return {"ok": True, "session_id": active["id"], "total": float(total)}
     return await run_transaction(db, commit)
 
@@ -94,15 +112,20 @@ async def split_table(db, user, table_id, request, key=None):
                 if previous["request_hash"] != digest or previous["cashier_id"] != user["id"]:
                     raise HTTPException(409, "Referensi pembagian tagihan sudah digunakan.")
                 row = await db.orders.find_one({"id": previous["order_id"], "store_id": user["store_id"]}, {"_id": 0}, session=session)
+                if not row or row.get("source_session_id") != active["id"]:
+                    raise HTTPException(409, "Referensi pembagian tagihan berasal dari sesi meja lain.")
                 return {"type": "item", "split_order": row}
         rows = await db.orders.find({"session_id": active["id"], "store_id": user["store_id"], "payment_status": "pending"}, session=session).to_list(None)
         if request["type"] == "equal":
-            ways = request.get("ways") or 2
+            ways = request.get("ways")
+            if ways is None:
+                ways = 2
             if isinstance(ways, bool) or not isinstance(ways, int) or not 2 <= ways <= 50:
                 raise HTTPException(422, "Jumlah pembagian harus 2 sampai 50.")
             total = sum((money(row["total"]) for row in rows), Decimal(0))
-            each = money(total / ways)
-            return {"type": "equal", "ways": ways, "amount_per_person": float(each), "amounts": [float(each)] * (ways - 1) + [float(total - each * (ways - 1))]}
+            cents, remainder = divmod(int(total * 100), ways)
+            amounts = [(cents + (index < remainder)) / 100 for index in range(ways)]
+            return {"type": "equal", "ways": ways, "amount_per_person": float(money(total / ways)), "amounts": amounts}
         requested = {}
         for item in request.get("items") or []:
             quantity = item.get("quantity")
@@ -118,6 +141,7 @@ async def split_table(db, user, table_id, request, key=None):
         split_lines, totals = [], {field: Decimal(0) for field in ("subtotal", "discount", "service_charge", "tax_amount", "tax_pb1", "total")}
         for row in rows:
             taken_subtotal = Decimal(0)
+            taken_quantity = 0
             for line in row["items"]:
                 quantity = min(requested.get(line["product_id"], 0), line["quantity"])
                 if not quantity:
@@ -132,10 +156,12 @@ async def split_table(db, user, table_id, request, key=None):
                 line["quantity"] -= quantity
                 line["subtotal"] = float(money(line["price"]) * line["quantity"])
                 requested[line["product_id"]] -= quantity
+                taken_quantity += quantity
                 taken_subtotal += money(taken["subtotal"])
-            if not taken_subtotal:
+            if not taken_quantity:
                 continue
-            portion = taken_subtotal / money(row["subtotal"])
+            original_subtotal = money(row["subtotal"])
+            portion = taken_subtotal / original_subtotal if original_subtotal else Decimal(0)
             for field in totals:
                 allocation = taken_subtotal if field == "subtotal" else money(money(row.get(field, 0)) * portion)
                 totals[field] += allocation

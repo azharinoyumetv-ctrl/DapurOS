@@ -35,6 +35,8 @@ async def charge_order_via_edc(order_id: str, user: dict = Depends(get_current_u
     order = await db.orders.find_one({"id": order_id, "store_id": user["store_id"]})
     if not order:
         raise HTTPException(status_code=404, detail="Order tidak ditemukan")
+    if order.get("session_id") or order.get("source_session_id") or order.get("payment_method") != "edc":
+        raise HTTPException(409, "Metode pembayaran transaksi ini tidak dapat dipindahkan ke EDC.")
     if order.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Order ini sudah lunas")
 

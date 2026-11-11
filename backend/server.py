@@ -198,6 +198,8 @@ async def _ensure_indexes():
         ("users", [("email", 1)]),
         ("orders", [("store_id", 1), ("created_at", -1)]),
         ("products", [("store_id", 1)]),
+        ("table_bookings", [("store_id", 1), ("start_at", 1), ("end_at", 1)]),
+        ("table_bookings", [("store_id", 1), ("table_id", 1), ("status", 1), ("end_at", 1)]),
     ):
         try:
             await db[coll].create_index(keys)
@@ -206,6 +208,9 @@ async def _ensure_indexes():
     for coll, key, options in (
         ('tables','qr_token_hash',{'sparse':True}),
         ('checkout_attempts','guest_expires_at',{'expireAfterSeconds':0}),
+        ('checkout_attempts','gateway_reference',{'sparse':True}),
+        ('checkout_attempts','xendit_reference_id',{'sparse':True}),
+        ('checkout_attempts','doku_id',{'sparse':True}),
         ('capacity_guards','guest_rate_expires_at',{'expireAfterSeconds':0}),
     ):
         try:

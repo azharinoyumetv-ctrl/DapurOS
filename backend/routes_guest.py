@@ -20,6 +20,7 @@ from paging import encode_cursor, decode_cursor
 from permissions import require_permission
 from plan_limits import require_plan, plan_rank
 from routes_orders import create_order
+from recipe_stock import recipe_portions, stock_decimal
 
 router=APIRouter(prefix='/api/public/qr',tags=['guest-ordering'])
 staff_router=APIRouter(prefix='/api/tables',tags=['table-qr'],dependencies=[Depends(require_permission('pos.use'))])
@@ -81,16 +82,8 @@ async def public_context(token):
         raise HTTPException(403,'Menu meja sedang tidak aktif. Silakan hubungi staf.')
     return db,table,store,account,digest
 
-async def available(db,store_id,product,session=None,ingredients=None):
-    if product.get('active') is False:return False
-    recipe=product.get('recipe') or []
-    if not recipe:return product.get('stock',0)>0
-    for item in recipe:
-        qty=item.get('quantity',item.get('qty',0))
-        if not isinstance(qty,(int,float)) or not math.isfinite(qty) or qty<=0:return False
-        ingredient=ingredients.get(item['ingredient_id']) if ingredients is not None else await db.ingredients.find_one({'store_id':store_id,'id':item['ingredient_id']},session=session)
-        if not ingredient or ingredient.get('stock',0)<qty:return False
-    return True
+def available(product, recipe_counts, quantity=1):
+    return recipe_counts.get(product['id'], stock_decimal(product.get('stock'))) >= quantity
 
 @router.get('/{token}')
 async def menu(token: str,cursor: str|None=None,q: str=Query('',max_length=80)):
@@ -100,15 +93,14 @@ async def menu(token: str,cursor: str|None=None,q: str=Query('',max_length=80)):
     query=dict(scope)
     if cursor:query['id']={'$gt':decode_cursor(cursor,['id'])['id']}
     rows=await db.products.find(query,{'_id':0}).sort('id',1).limit(MENU_PAGE_SIZE+1).to_list(MENU_PAGE_SIZE+1)
-    ingredient_ids={item['ingredient_id'] for product in rows[:MENU_PAGE_SIZE] for item in product.get('recipe') or []}
-    ingredients={item['id']:item for item in await db.ingredients.find({'store_id':store['id'],'id':{'$in':list(ingredient_ids)}},{'_id':0,'id':1,'stock':1}).to_list(None)}
+    recipe_counts = await recipe_portions(db, store['id'], rows[:MENU_PAGE_SIZE])
     items=[]
     for product in rows[:MENU_PAGE_SIZE]:
         price=product.get('price')
         if not isinstance(price,(int,float)) or not math.isfinite(price) or price<0:continue
         items.append({'id':product['id'],'name':product['name'],'price':price,'category':product.get('category') or 'Menu',
                       'description':product.get('description') or '', 'image_url':product.get('image_url'),
-                      'available':await available(db,store['id'],product,ingredients=ingredients)})
+                      'available':available(product, recipe_counts)})
     settings=await db.settings.find_one({'store_id':store['id']}) or {}
     active=await db.order_sessions.count_documents({'store_id':store['id'],'table_id':table['id'],'status':'Active'})
     return {'restaurant':(settings.get('general') or {}).get('store_name') or store.get('name') or 'Restoran',
@@ -158,7 +150,9 @@ async def submit(token: str,payload: GuestOrder,idempotency_key: str=Header(alia
                 product=await db.products.find_one({**product_scope(store['id'],id=item.product_id),'active':{'$ne':False}},session=session)
                 if not product:raise HTTPException(409,'Menu berubah atau tidak tersedia. Perbarui menu.')
                 if Decimal(str(product['price']))!=Decimal(str(item.expected_price)):raise HTTPException(409,'Harga menu berubah. Perbarui menu sebelum mengirim.')
-                if not await available(db,store['id'],product,session):raise HTTPException(409,'Menu habis. Pilih menu lain atau hubungi staf.')
+                recipe_counts = await recipe_portions(db, store['id'], [product], session)
+                if not available(product, recipe_counts, item.quantity):
+                    raise HTTPException(409, 'Jumlah pesanan melebihi stok menu. Kurangi jumlah atau pilih menu lain.')
                 items.append({'product_id':product['id'],'name':product['name'],'price':product['price'],'quantity':item.quantity,
                               'subtotal':float(Decimal(str(product['price']))*item.quantity),'note':item.note})
             canonical={'items':items,'payment_method':'cash','session_id':sessions[0]['id'],'dining_option':'Dine-In'}

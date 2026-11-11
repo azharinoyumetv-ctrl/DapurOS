@@ -14,6 +14,7 @@ from models import ProductCreate, ProductUpdate, BulkImportResult
 from auth import get_current_user
 import transactions
 from product_store import save_product
+from recipe_stock import recipe_portions
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -38,8 +39,25 @@ async def catalogue_page(user: dict = Depends(get_current_user), cursor: Optiona
     rows = await db.products.find(query, {'_id': 0}).sort('id', 1).limit(limit + 1).to_list(length=limit + 1)
     more = len(rows) > limit
     items = rows[:limit]
+    availability = await recipe_portions(db, user['store_id'], items)
+    for item in items:
+        if item['id'] in availability:
+            item['available_portions'] = availability[item['id']]
     return {'items': items, 'total': await db.products.count_documents(scope),
             'next_cursor': encode_cursor({'id': items[-1]['id']}) if more else None}
+
+
+@router.get('/recipe-availability', dependencies=[Depends(require_permission('products.read'))])
+async def recipe_availability(ids: List[str] = Query(..., min_length=1, max_length=100),
+                              user: dict = Depends(get_current_user)):
+    if any(not identifier or len(identifier) > 200 for identifier in ids):
+        raise HTTPException(422, 'Referensi menu tidak valid.')
+    db = get_db()
+    rows = await db.products.find(
+        product_scope(user['store_id'], id={'$in': ids}, active={'$ne': False}),
+        {'_id': 0, 'id': 1, 'recipe': 1},
+    ).to_list(None)
+    return await recipe_portions(db, user['store_id'], rows)
 
 
 @router.get('/lookup', dependencies=[Depends(require_permission('products.read'))])

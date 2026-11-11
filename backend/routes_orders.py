@@ -29,6 +29,7 @@ from sale_effects import customer_for_sale, apply_loyalty
 from paging import encode_cursor, decode_cursor
 from payment_options import require_payment_method, payment_options
 from merchant_checkout import create_merchant_checkout
+from restaurant_billing import lock_bill
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -84,7 +85,8 @@ def _calc(order):
 
 def gateway_failure(error, detail):
     definite = isinstance(error, (PaymentNotConfiguredError, DokuNotConfiguredError)) or (
-        isinstance(error, httpx.HTTPStatusError) and 400 <= error.response.status_code < 500)
+        isinstance(error, httpx.HTTPStatusError) and 400 <= error.response.status_code < 500
+        and error.response.status_code not in (408, 409, 429))
     return HTTPException(400 if definite else 409, detail=detail,
                          headers={} if definite else {'X-Payment-Uncertain': '1'})
 
@@ -131,6 +133,7 @@ async def initialize_gateway(payload, user, db, doc):
                 channel_code=payload.ewallet_channel,
                 customer_phone=payload.customer_phone,
                 customer_email=payload.customer_email,
+                **({'success_url': doc['return_url'], 'failure_url': doc['return_url']} if doc.get('return_url') else {}),
             )
         except Exception as e:
             raise gateway_failure(e, f"E-Wallet belum dikonfigurasi atau gagal memulai pembayaran ({e}). Atur Xendit di Pengaturan > Integrasi.")
@@ -142,7 +145,7 @@ async def initialize_gateway(payload, user, db, doc):
         doc["xendit_raw"] = res
     elif payload.payment_method == "doku":
         doku_cfg = (integ or {}).get("doku") or {}
-        return_url = f'https://dagangos.com/dapuros/app/sales?order={order_id}'
+        return_url = doc.get('return_url') or f'https://dagangos.com/dapuros/app/sales?order={order_id}'
         try:
             res = await create_doku_checkout(
                 cfg=doku_cfg,
@@ -532,6 +535,11 @@ async def void_order(order_id: str, user: dict = Depends(require_admin)):
             return {'ok': True, 'already_voided': True}
         if order.get('payment_status') == 'refunded':
             raise HTTPException(409, 'Transaksi sudah dikembalikan; periksa catatan pengembalian.')
+        session_id = order.get('session_id') or order.get('source_session_id')
+        if session_id and order.get('payment_status') == 'pending':
+            active = await db.order_sessions.find_one({'id': session_id, 'store_id': user['store_id'], 'status': 'Active'}, session=session)
+            if active:
+                await lock_bill(db, active, session)
         at = utcnow().isoformat()
         await db.orders.update_one({'id': order_id, 'store_id': user['store_id'], 'payment_status': order['payment_status']},
              {'$set': {'payment_status': 'voided', 'updated_at': at, 'voided_at': at, 'voided_by': user['id'], 'inventory_applied': False, 'inventory_void_ledger_version': 1}}, session=session)

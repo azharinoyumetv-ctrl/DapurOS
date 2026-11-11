@@ -1,4 +1,5 @@
 from payment_state import provider_transition
+from table_payments import find_payment, transition_table_payment, KIND
 """Xendit webhook handler.
 
 Endpoint: POST /api/webhooks/xendit
@@ -26,6 +27,17 @@ from auth import get_current_user
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
 logger = logging.getLogger("geraina.webhooks")
+
+
+async def find_charge(db, scope, projection=None):
+    return await db.orders.find_one(scope, projection) or await find_payment(db, scope)
+
+
+async def settle_charge(db, order, status, details):
+    if order.get('kind') == KIND:
+        await transition_table_payment(db, order, status, details)
+    else:
+        await provider_transition(db, {'id': order['id'], 'store_id': order['store_id']}, status, details)
 
 # Note: WhatsApp inbound signature verification is per-tenant (whatsapp.app_secret in each
 # store's integrations doc), NOT a single global secret -- see _verify_meta_signature below.
@@ -66,7 +78,7 @@ async def _process(payload: dict, store_id: str):
         return
 
     if payload.get('event') in ('payment_session.completed', 'payment_session.expired'):
-        order = await db.orders.find_one({'gateway_reference': ref, 'payment_provider': 'xendit', 'store_id': store_id})
+        order = await find_charge(db, {'gateway_reference': ref, 'payment_provider': 'xendit', 'store_id': store_id})
         if not order or nested.get('session_type') != 'PAY' or nested.get('currency') != 'IDR':
             return
         if order.get('gateway_session_id') and nested.get('payment_session_id') != order['gateway_session_id']:
@@ -80,7 +92,7 @@ async def _process(payload: dict, store_id: str):
         completed = payload['event'] == 'payment_session.completed'
         if nested.get('status') != ('COMPLETED' if completed else 'EXPIRED'):
             return
-        await provider_transition(db, {'id': order['id'], 'store_id': store_id}, 'paid' if completed else 'failed', {'xendit_webhook_payload': payload})
+        await settle_charge(db, order, 'paid' if completed else 'failed', {'xendit_webhook_payload': payload})
         return
 
     # Look up the order first (instead of blind update_one), scoped by the tenant this webhook
@@ -88,7 +100,7 @@ async def _process(payload: dict, store_id: str):
     # before ever flipping to "paid", so a tampered or replayed webhook can't mark an order
     # paid for less than it's actually worth. Ported from DapurOS's routes_webhooks.py, which
     # had this hardening and this file didn't.
-    order = await db.orders.find_one(
+    order = await find_charge(db,
         {"xendit_reference_id": ref, "store_id": store_id}, {"_id": 0, "id": 1, "store_id": 1, "total": 1, "order_no": 1, "xendit_id": 1, "payment_status": 1}
     )
     if not order:
@@ -97,6 +109,9 @@ async def _process(payload: dict, store_id: str):
 
     new_status = _map_status(payload if "status" in payload else (nested or payload))
     data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    if order.get('kind') == KIND and new_status == 'failed' and payload.get('event') == 'payment.failure':
+        # One failed attempt does not prove a reusable payment request has ended.
+        return
     request_id = data.get("payment_request_id")
     if request_id and order.get("xendit_id") and request_id != order["xendit_id"]:
         return
@@ -124,12 +139,11 @@ async def _process(payload: dict, store_id: str):
         except (InvalidOperation, TypeError, ValueError, KeyError):
             return
 
-    await provider_transition(db, {'id': order['id'], 'store_id': store_id}, new_status,
-                              {'xendit_webhook_payload': payload})
+    await settle_charge(db, order, new_status, {'xendit_webhook_payload': payload})
 
 
 @router.post("/xendit")
-async def xendit_webhook(req: Request, background: BackgroundTasks):
+async def xendit_webhook(req: Request):
     """Single shared URL for every tenant, same shape as the DOKU/WhatsApp handlers below:
     the inbound x-callback-token tells us which store's own Xendit account this call
     belongs to (each store pastes ITS OWN token into Pengaturan > Integrasi and configures
@@ -143,7 +157,8 @@ async def xendit_webhook(req: Request, background: BackgroundTasks):
     if not tenant or not (tenant.get("xendit") or {}).get("is_active"):
         raise HTTPException(status_code=401, detail="Invalid callback token")
     payload = await req.json()
-    background.add_task(_process, payload, tenant["store_id"])
+    # Acknowledge only after settlement commits so a transient write failure can be retried.
+    await _process(payload, tenant["store_id"])
     return {"received": True}
 
 
@@ -156,7 +171,7 @@ async def midtrans_webhook(req: Request):
         raise HTTPException(400, 'Notifikasi tidak valid.')
     reference = str(payload.get('order_id') or '')
     db = get_db()
-    order = await db.orders.find_one({'gateway_reference': reference, 'payment_provider': 'midtrans'})
+    order = await find_charge(db, {'gateway_reference': reference, 'payment_provider': 'midtrans'})
     if not order:
         raise HTTPException(404, 'Transaksi tidak ditemukan.')
     integration = await db.integrations.find_one({'store_id': order['store_id']}) or {}
@@ -184,7 +199,7 @@ async def midtrans_webhook(req: Request):
     status = verified.get('transaction_status')
     mapped = ('paid' if status == 'settlement' or (status == 'capture' and verified.get('fraud_status') == 'accept') else
               'failed' if status in ('deny', 'expire', 'cancel', 'failure') else 'refunded' if status == 'refund' else 'pending')
-    await provider_transition(db, {'id': order['id'], 'store_id': order['store_id']}, mapped, {'midtrans_webhook_payload': verified})
+    await settle_charge(db, order, mapped, {'midtrans_webhook_payload': verified})
     return {'received': True}
 
 
@@ -363,27 +378,32 @@ async def _process_doku(raw_body: bytes, headers: dict):
         return
     scope = {'store_id': tenant.get('store_id'), '$or': [
         {'order_no': invoice_number, 'payment_method': 'doku'},
+        {'doku_id': invoice_number, 'payment_method': 'doku'},
         {'gateway_reference': invoice_number, 'payment_provider': 'doku'}]}
-    if new_status == 'paid':
-        order = await db.orders.find_one(scope)
+    order = await find_charge(db, scope)
+    if not order:
+        return
+    if order.get('kind') == KIND and new_status == 'pending':
+        doku_status = str((payload.get('transaction') or {}).get('status') or '').upper()
+        new_status = {'EXPIRED': 'failed', 'REFUNDED': 'refunded'}.get(doku_status, 'pending')
+    if new_status == 'paid' or order.get('kind') == KIND:
         try:
             received = Decimal(str((payload.get('order') or {}).get('amount')))
             if not order or not received.is_finite() or received <= 0 or received != Decimal(str(order['total'])):
                 return
         except (InvalidOperation, TypeError, ValueError):
             return
-    await provider_transition(db, scope,
-                              new_status, {'doku_webhook_payload': payload})
+    await settle_charge(db, order, new_status, {'doku_webhook_payload': payload})
 
 
 @router.post("/doku")
-async def doku_webhook(req: Request, background: BackgroundTasks):
+async def doku_webhook(req: Request):
     """DOKU always expects a 200 with a specific ack body -- verification failures are
     logged internally (via _process_doku silently discarding), not surfaced as HTTP
     errors, since DOKU will otherwise retry-storm an endpoint that 4xx/5xxs it."""
     raw = await req.body()
     headers = {k.lower(): v for k, v in req.headers.items()}
-    background.add_task(_process_doku, raw, headers)
+    await _process_doku(raw, headers)
     return {"received": True}
 
 

@@ -607,6 +607,7 @@ class Table(TableBase):
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)
     reservation: Optional[dict] = None
+    scheduled_due: bool = False
 
 
 class OrderSessionCreate(BaseModel):

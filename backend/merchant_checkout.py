@@ -59,9 +59,9 @@ async def create_merchant_checkout(provider, cfg, order, channels):
     definition = GATEWAYS.get(provider)
     if not definition or cfg.get('is_active') is not True or not all(str(cfg.get(k) or '').strip() for k in definition['credentials']) or not channels:
         raise PaymentNotConfiguredError('Lengkapi integrasi gateway dan pilih kanal pembayaran toko.')
-    reference = order['id']  # Globally unique, also used to route Midtrans notifications.
+    reference = order.get('gateway_reference') or order['id']  # Globally unique.
     amount = int(order['total'])
-    return_url = f'https://dagangos.com/dapuros/app/sales?order={reference}'
+    return_url = order.get('return_url') or f'https://dagangos.com/dapuros/app/sales?order={reference}'
     if provider == 'doku':
         result = await create_doku_checkout(cfg={**cfg, 'payment_method_types': channels}, order_id=reference,
             amount=amount, callback_url=return_url, callback_url_result=return_url,

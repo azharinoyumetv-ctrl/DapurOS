@@ -1,9 +1,9 @@
 from product_scope import product_scope, inventory_scope
 """Restaurant inventory and kitchen effects within the caller's sale transaction."""
 import uuid
-from decimal import Decimal
 from fastapi import HTTPException
 from database import utcnow
+from recipe_stock import recipe_requirements, stock_decimal, stock_remaining
 
 
 async def deduct(db, user, line, session, *, offline=False):
@@ -13,19 +13,25 @@ async def deduct(db, user, line, session, *, offline=False):
         raise HTTPException(409, "Menu tidak tersedia. Transaksi perangkat tetap disimpan untuk diperiksa.")
     recipe = product.get("recipe") or []
     deductions = []
-    for item in recipe:
-        quantity = Decimal(str(item.get("quantity", item.get("qty", 0)))) * line["quantity"]
-        if not quantity.is_finite() or quantity <= 0:
-            raise HTTPException(409, "Resep menu tidak valid. Periksa bahan baku.")
-        ingredient_scope = {"id": item.get("ingredient_id"), "store_id": user["store_id"]}
+    try:
+        requirements = recipe_requirements(recipe)
+    except (TypeError, ValueError):
+        raise HTTPException(409, "Resep menu tidak valid. Periksa bahan baku.") from None
+    for identifier, per_portion in requirements.items():
+        quantity = per_portion * line["quantity"]
+        ingredient_scope = {"id": identifier, "store_id": user["store_id"]}
         ingredient=await db.ingredients.find_one(ingredient_scope, session=session)
         if not ingredient:
             raise HTTPException(409, "Bahan resep tidak tersedia. Periksa menu sebelum melanjutkan.")
-        check = ingredient_scope if offline else {**ingredient_scope, "stock": {"$gte": float(quantity)}}
-        changed = await db.ingredients.update_one(check, {"$inc": {"stock": -float(quantity)}}, session=session)
-        if not changed.modified_count:
+        balance = stock_decimal(ingredient.get("stock"))
+        remaining = stock_remaining(balance, quantity)
+        if not offline and remaining < 0:
             raise HTTPException(409, "Stok bahan baku tidak cukup.")
-        deductions.append({"ingredient_id": item["ingredient_id"], "quantity": float(quantity), "name":ingredient.get('name'),"unit":ingredient.get('unit')})
+        updated_stock = float(remaining)
+        if updated_stock == float(balance):
+            raise HTTPException(409, "Takaran resep terlalu kecil untuk dicatat. Periksa satuan bahan baku.")
+        await db.ingredients.update_one(ingredient_scope, {"$set": {"stock": updated_stock}}, session=session)
+        deductions.append({"ingredient_id": identifier, "quantity": float(quantity), "name": ingredient.get("name"), "unit": ingredient.get("unit")})
     if not recipe:
         check = scope if offline else {**scope, "stock": {"$gte": line["quantity"]}}
         result = await db.products.update_one(check, {"$inc": {"stock": -line["quantity"]}}, session=session)
@@ -44,19 +50,24 @@ async def restore(db, store_id, line, session):
                       for r in (product or {}).get("recipe", [])]
     if deductions:
         for item in deductions:
-            await db.ingredients.update_one({"id": item["ingredient_id"], "store_id": store_id},
-                                            {"$inc": {"stock": item["quantity"]}}, session=session)
+            scope = {"id": item["ingredient_id"], "store_id": store_id}
+            ingredient = await db.ingredients.find_one(scope, session=session)
+            if ingredient:
+                restored = stock_decimal(ingredient.get("stock")) + stock_decimal(item["quantity"])
+                await db.ingredients.update_one(scope, {"$set": {"stock": float(restored)}}, session=session)
     else:
         await db.products.update_one(product_scope(store_id,id=line["product_id"]),
                                      {"$inc": {"stock": line["quantity"]}}, session=session)
 
 
 async def kitchen(db, user, order, session, session_id=None):
+    from restaurant_billing import lock_bill
     table_label = "Takeaway"
     if session_id:
         active = await db.order_sessions.find_one({"id": session_id, "store_id": user["store_id"], "status": "Active"}, session=session)
         if not active:
             raise HTTPException(409, "Sesi meja sudah berubah. Buka kembali meja sebelum mengirim pesanan.")
+        await lock_bill(db, active, session)
         table = await db.tables.find_one({"id": active["table_id"], "store_id": user["store_id"]}, session=session)
         if not table:
             raise HTTPException(409, "Meja tidak tersedia.")

@@ -19,6 +19,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -49,6 +50,19 @@ def _signature_string(client_id: str, request_id: str, timestamp: str, request_t
 def _sign(client_id: str, request_id: str, timestamp: str, request_target: str, digest: str, shared_key: str) -> str:
     mac = hmac.new(shared_key.encode(), _signature_string(client_id, request_id, timestamp, request_target, digest).encode(), hashlib.sha256).digest()
     return "HMACSHA256=" + base64.b64encode(mac).decode()
+
+
+async def get_checkout_status(cfg, reference):
+    path = '/orders/v1/status/' + quote(reference, safe='')
+    request_id = str(uuid.uuid4())
+    timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    message = _signature_string(cfg['client_id'], request_id, timestamp, path, '').removesuffix('\nDigest:')
+    signature = 'HMACSHA256=' + base64.b64encode(hmac.new(cfg['shared_key'].encode(), message.encode(), hashlib.sha256).digest()).decode()
+    async with httpx.AsyncClient(base_url=_base_url(cfg.get('environment')), timeout=10) as client:
+        response = await client.get(path, headers={'Client-Id': cfg['client_id'], 'Request-Id': request_id,
+            'Request-Timestamp': timestamp, 'Signature': signature})
+        response.raise_for_status()
+        return response.json()
 
 
 def _method_types(preferred_channel: str) -> List[str]:

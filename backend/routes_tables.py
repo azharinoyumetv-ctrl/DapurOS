@@ -1,17 +1,22 @@
 """Tables, Sessions, and Split Billing routes for DapurOS."""
 import uuid
+from datetime import date
 from typing import List, Optional, Literal
-from fastapi import APIRouter, Depends, HTTPException, Body, Header
+from fastapi import APIRouter, Depends, HTTPException, Body, Header, Query
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 
 from database import get_db, utcnow
 from models import Table, TableCreate, TableUpdate, OrderSession, Order, TableReservationCreate
 from plan_limits import require_plan
 import table_reservations
+import reservation_calendar
 from auth import get_current_user
 from routes_orders import _calc
 from restaurant_billing import settle_table, split_table, settle_split
 from restaurant_billing import close_empty
+from table_payments import find_payment, public_payment, start_table_payment
+from table_payment_status import refresh_table_payment
 from decimal import Decimal
 from permissions import require_permission
 import transactions
@@ -50,7 +55,63 @@ async def list_tables(floor_id: Optional[str] = None, user: dict = Depends(get_c
         flt["floor_id"] = floor_id
         
     cursor = db.tables.find(flt, {"_id": 0}).sort("label", 1)
-    return await cursor.to_list(length=200)
+    tables = await cursor.to_list(length=200)
+    if tables:
+        now = utcnow().isoformat()
+        due = await db.table_bookings.distinct("table_id", {
+            "store_id": user["store_id"], "table_id": {"$in": [table["id"] for table in tables]},
+            "status": "booked", "start_at": {"$lte": now}, "end_at": {"$gt": now},
+        })
+        for table in tables:
+            table["scheduled_due"] = table["id"] in due
+    return tables
+
+
+@router.get("/schedule")
+async def reservation_agenda(day: Optional[date] = None, user: dict = Depends(get_current_user)):
+    return await reservation_calendar.agenda(get_db(), user["store_id"], day)
+
+
+@router.get("/schedule/availability")
+async def scheduled_table_availability(local_start: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$"),
+                                       duration_minutes: int = Query(ge=15, le=480), party_size: int = Query(ge=1, le=1000),
+                                       exclude: Optional[uuid.UUID] = None, user: dict = Depends(get_current_user)):
+    try:
+        value = reservation_calendar.parse_local_start(local_start)
+    except ValueError:
+        raise HTTPException(422, "Tanggal reservasi tidak valid.") from None
+    return await reservation_calendar.slot_tables(get_db(), user["store_id"], value, duration_minutes, party_size, exclude)
+
+
+@router.post("/schedule")
+async def create_scheduled_reservation(payload: reservation_calendar.BookingInput, user: dict = Depends(require_plan("business"))):
+    db = get_db()
+    try:
+        result = await transactions.run_transaction(db, lambda session: reservation_calendar.save(db, user, payload, session))
+    except DuplicateKeyError:
+        result = await transactions.run_transaction(db, lambda session: reservation_calendar.save(db, user, payload, session))
+    await notify_clients(user["store_id"])
+    return result
+
+
+@router.put("/schedule/{identifier}")
+async def edit_scheduled_reservation(identifier: uuid.UUID, payload: reservation_calendar.BookingEdit,
+                                     user: dict = Depends(require_plan("business"))):
+    db = get_db()
+    result = await transactions.run_transaction(db, lambda session: reservation_calendar.save(db, user, payload, session, str(identifier)))
+    await notify_clients(user["store_id"])
+    return result
+
+
+@router.post("/schedule/{identifier}/close")
+async def close_scheduled_reservation(identifier: uuid.UUID, expected_version: int = Body(..., embed=True, ge=1),
+                                      status: Literal["cancelled", "no_show"] = Body(..., embed=True),
+                                      user: dict = Depends(get_current_user)):
+    db = get_db()
+    result = await transactions.run_transaction(db, lambda session: reservation_calendar.close_booking(
+        db, user, str(identifier), expected_version, status, session))
+    await notify_clients(user["store_id"])
+    return result
 
 
 @router.post("", response_model=Table, dependencies=[Depends(require_permission('products.write'))])
@@ -87,7 +148,9 @@ async def update_table(table_id: str, payload: TableUpdate, user: dict = Depends
         if not existing:raise HTTPException(404,'Meja tidak ditemukan.')
         if update.get('status')=='Reserved':raise HTTPException(422,'Gunakan tindakan Reservasi untuk menyimpan nama pelanggan.')
         if existing.get('reservation'):await ensure_idle(db,user['store_id'],[table_id],session)
-        if update.get('status')=='Vacant':await ensure_idle(db,user['store_id'],[table_id],session)
+        if update.get('status')=='Vacant':await ensure_idle(db,user['store_id'],[table_id],session,allow_calendar=True)
+        if "capacity" in update and await reservation_calendar.upcoming(db, user["store_id"], table_id, session, minimum_party=update["capacity"]):
+            raise HTTPException(409, "Kapasitas baru terlalu kecil untuk reservasi terjadwal.")
         if update.get('floor_id') and not await db.floors.find_one({'id':update['floor_id'],'store_id':user['store_id']},session=session):raise HTTPException(422,'Lantai tidak ditemukan di restoran ini.')
         return await db.tables.find_one_and_update(scope,{'$set':update},return_document=True,projection={'_id':0},session=session)
     res=await transactions.run_transaction(db,save)
@@ -110,7 +173,11 @@ async def delete_table(table_id: str, user: dict = Depends(get_current_user)):
 # ---------- Dining Sessions ----------
 
 @router.post("/{table_id}/session", response_model=OrderSession)
-async def open_session(table_id: str, expected_reservation_id:Optional[str]=Body(None,embed=True,max_length=200), user: dict = Depends(get_current_user)):
+async def open_session(table_id: str, expected_reservation_id:Optional[str]=Body(None,embed=True,max_length=200),
+                       scheduled_reservation_id: Optional[uuid.UUID] = Body(None, embed=True),
+                       expected_version: Optional[int] = Body(None, embed=True, ge=1), user: dict = Depends(get_current_user)):
+    if scheduled_reservation_id and (not expected_version or expected_reservation_id):
+        raise HTTPException(422, "Pilih satu reservasi beserta versinya.")
     db = get_db()
     async def open_table(session):
         scope={'id':table_id,'store_id':user['store_id']}
@@ -122,11 +189,17 @@ async def open_session(table_id: str, expected_reservation_id:Optional[str]=Body
         active=await db.order_sessions.find({'table_id':table_id,'store_id':user['store_id'],'status':'Active'},session=session).limit(2).to_list(2)
         if len(active)>1:raise HTTPException(409,'Meja memiliki sesi ganda. Minta Owner memeriksa tagihan sebelum melanjutkan.')
         if active:
+            if scheduled_reservation_id and (active[0].get('reservation') or {}).get('id') != str(scheduled_reservation_id):
+                raise HTTPException(409, "Meja sudah memiliki sesi aktif.")
             if expected_reservation_id and (active[0].get('reservation') or {}).get('id')!=expected_reservation_id:raise HTTPException(409,'Sesi meja sudah berubah. Muat ulang meja.')
             return _strip_id(active[0])
         reservation=table.get('reservation')
-        if (reservation and (reservation.get('id')!=expected_reservation_id or table.get('status')!='Reserved')) or (expected_reservation_id and not reservation):
+        if scheduled_reservation_id:
+            reservation = await reservation_calendar.seat(db, user, table, str(scheduled_reservation_id), expected_version, session)
+        elif (reservation and (reservation.get('id')!=expected_reservation_id or table.get('status')!='Reserved')) or (expected_reservation_id and not reservation):
             raise HTTPException(409,'Meja memiliki reservasi atau reservasi sudah berubah. Pilih Tempatkan Tamu dari reservasi terbaru.')
+        elif not reservation and await reservation_calendar.current_booking(db, user["store_id"], table_id, session):
+            raise HTTPException(409, "Jadwal reservasi meja sedang berlangsung. Tempatkan tamu dari Kalender Reservasi.")
         doc={'id':str(uuid.uuid4()),'table_id':table_id,'store_id':user['store_id'],'opened_at':utcnow().isoformat(),'closed_at':None,'status':'Active'}
         if reservation:doc['reservation']=reservation
         await db.order_sessions.insert_one(dict(doc),session=session)
@@ -179,6 +252,7 @@ async def get_active_session_bill(table_id: str, user: dict = Depends(get_curren
     tax_pb1=float(sum((Decimal(str(o.get('tax_amount',o.get('tax_pb1',0)))) for o in orders),Decimal(0)))
     grand_total=float(sum((Decimal(str(o['total'])) for o in orders),Decimal(0)))
     
+    payment = await find_payment(db, {"_id": session["gateway_payment_id"], "store_id": user["store_id"]}) if session.get("gateway_payment_id") else None
     return {
         "session": _strip_id(session),
         "orders": orders,
@@ -188,8 +262,33 @@ async def get_active_session_bill(table_id: str, user: dict = Depends(get_curren
         "discount": discount,
         "service_charge": service_charge,
         "tax_pb1": tax_pb1,
-        "grand_total": grand_total
+        "grand_total": grand_total,
+        "gateway_payment": public_payment(payment) if payment else None,
     }
+
+
+@router.post('/{table_id}/gateway-payment')
+async def start_gateway_payment(table_id: str, payment_method: str = Body(..., embed=True),
+        expected_session_id: str = Body(..., embed=True), expected_total: float = Body(..., embed=True, ge=0, allow_inf_nan=False),
+        ewallet_channel: Optional[str] = Body(None, embed=True), user: dict = Depends(get_current_user)):
+    return await start_table_payment(get_db(), user, table_id, payment_method, expected_session_id, expected_total, ewallet_channel)
+
+
+@router.get('/{table_id}/gateway-payment/{payment_id}')
+async def gateway_payment_status(table_id: str, payment_id: str, user: dict = Depends(get_current_user)):
+    payment = await find_payment(get_db(), {'_id': payment_id, 'table_id': table_id, 'store_id': user['store_id']})
+    if not payment:
+        raise HTTPException(404, 'Pembayaran meja tidak ditemukan.')
+    return public_payment(payment)
+
+
+@router.post('/{table_id}/gateway-payment/{payment_id}/refresh')
+async def check_gateway_payment(table_id: str, payment_id: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    payment = await find_payment(db, {'_id': payment_id, 'table_id': table_id, 'store_id': user['store_id']})
+    if not payment:
+        raise HTTPException(404, 'Pembayaran meja tidak ditemukan.')
+    return public_payment(await refresh_table_payment(db, payment))
 
 
 @router.post('/{table_id}/checkout')

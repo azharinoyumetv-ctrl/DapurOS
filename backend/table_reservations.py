@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from database import utcnow
 from table_safety import ensure_idle
+from reservation_calendar import current_booking
 
 
 def public_table(table):
@@ -28,6 +29,8 @@ async def save(db,user,table_id,payload,session):
     elif payload.expected_reservation_id:
         raise HTTPException(409,'Reservasi sudah berubah atau tamu sudah ditempatkan. Muat ulang meja.')
     if not current and table.get('status','Vacant')!='Vacant':raise HTTPException(409,'Meja sedang digunakan dan belum dapat direservasi.')
+    if not current and await current_booking(db, user['store_id'], table_id, session):
+        raise HTTPException(409, 'Jadwal reservasi meja sedang berlangsung. Buka Kalender Reservasi.')
     await ensure_idle(db,user['store_id'],[table_id],session,allow_reservations=True)
     if payload.party_size>table.get('capacity',0):raise HTTPException(422,'Jumlah tamu melebihi kapasitas meja.')
     now=utcnow().isoformat()
