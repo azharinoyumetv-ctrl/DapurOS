@@ -8,6 +8,7 @@ import { offlineAvailable, scopeFor, cached, cache, recordCashSale, synchronize,
 import { canonicalRole, canManageProducts } from "@/auth/permissions";
 import BankQrisPayment from "@/payments/BankQrisPayment";
 import TableReservationDialog from '@/components/TableReservationDialog';
+import CashReceiptConfirmation from '@/payments/CashReceiptConfirmation';
 import TableGatewayPayment from '@/payments/TableGatewayPayment';
 import ReservationCalendar from '@/components/ReservationCalendar';
 import TicketStationSelect from '@/components/TicketStationSelect';
@@ -22,6 +23,11 @@ import {
   CreditCard, ChevronRight, Layers, ArrowLeft, RefreshCw as LoopIcon, Wifi, WifiOff, Edit, Edit3,
   Landmark, CalendarDays
 } from "lucide-react";
+
+const TABLE_GATEWAY_METHODS = [
+  ["ewallet", "E-Wallet"], ["va", "Virtual Account"], ["credit_card", "Kartu Kredit"], ["doku", "Checkout gateway"],
+];
+const TABLE_DIGITAL_METHODS = [["qris_bank", "QRIS bank"], ...TABLE_GATEWAY_METHODS];
 
 // HISTORY: these used to carry the old "ID_" prefix (ID_OVO, ID_DANA, ...) left over from
 // Xendit's deprecated /ewallets/charges API. The backend's xendit_client.py was migrated to
@@ -223,10 +229,10 @@ export default function POS() {
 
   // Manual confirmation after approval on the merchant terminal
   const [cardConfirmOpen, setCardConfirmOpen] = useState(false);
-  const [splitCardConfirmOpen, setSplitCardConfirmOpen] = useState(false);
 
   // Settle (bayar & tutup meja dine-in)
   const [settleOpen, setSettleOpen] = useState(false);
+  const [settleCashOpen, setSettleCashOpen] = useState(false);
   const [tablePayment, setTablePayment] = useState(null);
   const [tableWallet, setTableWallet] = useState("");
   const returnChecked = useRef(false);
@@ -724,13 +730,7 @@ export default function POS() {
 
   // EDC card payments are confirmed MANUALLY by the cashier after the card clears
   // on the merchant's own physical EDC terminal. No auto-approval / countdown.
-  const confirmEdcPayment = () => {
-    if (splitCardConfirmOpen) {
-      processSplitEdc();
-    } else {
-      processCheckout(true); // Settle as manually-confirmed card payment
-    }
-  };
+  const confirmEdcPayment = () => processCheckout(true);
 
   // Open active session
   const handleOpenTableSession = async (table) => {
@@ -741,7 +741,14 @@ export default function POS() {
   };
 
   // Bayar & tutup meja: settle semua order sesi jadi lunas, lalu kosongkan meja.
-  const settleDineIn = async (method) => {
+  const openTablePayment = () => {
+    setTablePayment(activeSession?.gateway_payment || null);
+    setTableWallet("");
+    setSettleCashOpen(false);
+    setSettleOpen(true);
+  };
+
+  const settleDineIn = async (method, cashAmount) => {
     if (!selectedTable || !activeSession?.session?.id || checkoutLock.current) return;
     checkoutLock.current = true;
     setSubmitting(true);
@@ -752,7 +759,7 @@ export default function POS() {
         onTablePaymentStatus(data);
         return;
       }
-      await api.post(`/tables/${selectedTable.id}/checkout`, { ...payload, checked_in_bank: method === "qris_bank" && bankConfirmed, received_amount: method === "qris_bank" ? activeSession.grand_total : undefined });
+      await api.post(`/tables/${selectedTable.id}/checkout`, { ...payload, cash_received: method === "cash" ? cashAmount : undefined, checked_in_bank: method === "qris_bank" && bankConfirmed, received_amount: method === "qris_bank" ? activeSession.grand_total : undefined });
       setSettleOpen(false);
       setSelectedTable(null);
       setActiveSession(null);
@@ -850,46 +857,31 @@ export default function POS() {
     }
   };
 
-  const handlePaySplitOrder = async (payMethod) => {
-    if (!splitOrderResult) return;
-
-    if (payMethod === "edc") {
-      setSplitCardConfirmOpen(true);
-      setCardConfirmOpen(true);
-      return;
-    }
-
-    processSplitPayment(payMethod);
-  };
-
-  const processSplitEdc = async () => {
-    processSplitPayment("card");
-  };
-
-  const processSplitPayment = async (payMethod) => {
-    if (payMethod !== "cash") {toast.error("Pilih tunai untuk bagian tagihan ini."); return;}
+  const processSplitPayment = async cashAmount => {
+    if (!selectedTable || !splitOrderResult || !online || checkoutLock.current) return;
+    checkoutLock.current = true;
     setSubmitting(true);
     try {
-      // Mark split order as paid
-      const r = await api.post(`/tables/${selectedTable.id}/split-orders/${splitOrderResult.id}/settle`, {payment_method: "cash"});
+      const r = await api.post(`/tables/${selectedTable.id}/split-orders/${splitOrderResult.id}/settle`, {
+        payment_method: "cash", cash_received: cashAmount, expected_total: splitOrderResult.total,
+      });
       setReceipt(r.data);
       setSplitOrderResult(null);
-      setSplitCardConfirmOpen(false);
-      setCardConfirmOpen(false);
 
-      // If table session is now empty, reset table to vacant
       const bill = await api.get(`/tables/${selectedTable.id}/session`);
-      if (bill.data.items.length === 0 && !bill.data.split_orders?.length) {
-        await api.post(`/tables/${selectedTable.id}/checkout`, { payment_method: payMethod,expected_session_id:bill.data.session.id,expected_total:bill.data.grand_total });
+      if (bill.data.items.length === 0 && !bill.data.split_orders?.length && bill.data.grand_total === 0) {
+        await api.post(`/tables/${selectedTable.id}/checkout`, { payment_method: "cash",cash_received:0,expected_session_id:bill.data.session.id,expected_total:0 });
         setSelectedTable(null);
         setActiveSession(null);
         setViewMode("floor");
         loadTables();
       }else setActiveSession(bill.data);
     } catch (e) {
-      toast.error("Gagal memproses pembayaran.");
+      toast.error(typeof e?.response?.data?.detail === "string" ? e.response.data.detail : "Status pembayaran belum dapat diperiksa. Muat ulang tagihan.");
+      await loadActiveTableSession(selectedTable.id);
     } finally {
       setSubmitting(false);
+      checkoutLock.current = false;
     }
   };
 
@@ -1105,7 +1097,7 @@ export default function POS() {
                         {activeSession?.items?.length > 0 || activeSession?.gateway_payment ? (
                           <button
                             disabled={!!activeSession.split_orders?.length}
-                            onClick={() => { setTablePayment(activeSession.gateway_payment || null); setTableWallet(""); setSettleOpen(true); }}
+                            onClick={openTablePayment}
                             className="btn-primary py-2.5 text-xs font-bold"
                             data-testid="settle-open-btn"
                           >
@@ -1455,7 +1447,7 @@ export default function POS() {
               {submitting ? "Memproses..." : "Konfirmasi Pembayaran Diterima"}
             </button>
             <button
-              onClick={() => { setCardConfirmOpen(false); setSplitCardConfirmOpen(false); }}
+              onClick={() => setCardConfirmOpen(false)}
               className="btn-outline border-slate-700 text-slate-300 w-full text-xs py-2"
             >
               Batal
@@ -1474,12 +1466,24 @@ export default function POS() {
             </div>
             {tablePayment || activeSession?.gateway_payment ? <TableGatewayPayment tableId={selectedTable.id}
               key={(tablePayment || activeSession.gateway_payment).id} payment={tablePayment || activeSession.gateway_payment} onStatus={onTablePaymentStatus} onClose={closeTablePayment} /> : <>
-            <p className="text-xs text-[hsl(var(--muted))]">Pilih metode pembayaran. Konfirmasi tunai atau QRIS bank hanya setelah dana diterima.</p>
+            <p className="text-xs text-[hsl(var(--muted))]">Pilih metode pembayaran. Meja ditutup setelah pembayaran dicatat.</p>
+            {!online ? <p role="status" className="text-sm">Sambungkan perangkat ke internet untuk membayar tagihan meja.</p> :
+              payments.error ? <div role="alert" className="space-y-2 text-sm"><p>{payments.error}</p><button type="button" className="btn-outline" onClick={payments.retry}>Coba lagi</button></div> :
+              !payments.options ? <p role="status" className="text-sm">Memuat metode pembayaran…</p> : <>
+              {!TABLE_DIGITAL_METHODS.some(([method]) => payments.options.methods[method]?.enabled) && (
+                <p className="text-sm">Belum ada metode pembayaran digital aktif. {canonicalRole(user?.role) === "Owner"
+                  ? <a className="underline" href="/dapuros/app/payments/qris">Atur metode di Pembayaran</a>
+                  : "Hubungi Owner untuk mengaktifkan metode pembayaran."}</p>
+              )}
+              {TABLE_DIGITAL_METHODS.filter(([method]) => payments.options.methods[method]?.displayed && !payments.options.methods[method]?.enabled).map(([method, label]) => (
+                <p key={method} className="text-sm"><strong>{label}</strong> · {payments.options.methods[method].reason}</p>
+              ))}
+            </>}
             <div className="grid grid-cols-2 gap-2">
-              {[{m:"ewallet",l:"E-Wallet"},{m:"va",l:"Virtual Account"},{m:"credit_card",l:"Kartu Kredit"},{m:"doku",l:"Checkout gateway"}]
-                .filter(({m}) => payments.options?.methods?.[m]?.enabled).map(({m,l}) => (
-                  <button key={m} type="button" className="btn-primary text-sm py-3" data-testid={`settle-${m}`} disabled={submitting || !online} onClick={() => settleDineIn(m)}>{l}</button>
-                ))}
+              {TABLE_GATEWAY_METHODS.filter(([method]) => payments.options?.methods?.[method]?.enabled).map(([method, label]) => (
+                <button key={method} type="button" className="btn-primary text-sm py-3" data-testid={`settle-${method}`}
+                  disabled={submitting || !online} onClick={() => settleDineIn(method)}>{label}</button>
+              ))}
             </div>
             {!!payments.options?.ewallet_channels?.length && <label className="block text-xs">Kanal E-Wallet
               <select className="block w-full border rounded p-2 mt-1" aria-label="Kanal E-Wallet" value={tableWallet || payments.options.ewallet_channels[0].code}
@@ -1487,12 +1491,15 @@ export default function POS() {
             </label>}
             {payments.options?.methods?.qris_bank?.enabled && bankConfig?.qr_payload && <div className="text-center"><QRCodeSVG value={bankConfig.qr_payload} size={180} className="mx-auto"/><p>{bankConfig.merchant_name} · {bankConfig.bank_name}</p><label className="flex gap-2 text-xs"><input type="checkbox" checked={bankConfirmed} onChange={e => setBankConfirmed(e.target.checked)}/>Saya sudah memeriksa penerimaan {fmtIDR(activeSession.grand_total)} di aplikasi bank merchant.</label></div>}
             <div className="grid grid-cols-2 gap-2">
-              {[{ m: "cash", l: "Tunai diterima" }, { m: "qris_bank", l: "Konfirmasi QRIS bank" }].filter(({m}) => payments.options?.methods?.[m]?.enabled).map(({ m, l }) => (
-                <button key={m} type="button" disabled={submitting || !online || (m === "qris_bank" && !bankConfirmed)} onClick={() => settleDineIn(m)}
-                        className="py-3 rounded-xl border border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary))] text-sm font-bold disabled:opacity-60"
-                        data-testid={`settle-${m}`}>{l}</button>
-              ))}
+              {payments.options?.methods?.cash?.enabled && <button type="button" className="btn-outline py-3"
+                disabled={submitting || !online} onClick={() => setSettleCashOpen(open => !open)} aria-expanded={settleCashOpen} data-testid="settle-cash">Tunai</button>}
+              {payments.options?.methods?.qris_bank?.enabled && <button type="button" className="btn-outline py-3"
+                disabled={submitting || !online || !bankConfirmed || !bankConfig?.qr_payload}
+                onClick={() => settleDineIn("qris_bank")} data-testid="settle-qris_bank">Konfirmasi QRIS bank</button>}
             </div>
+            {settleCashOpen && activeSession?.session?.id && <CashReceiptConfirmation key={`${activeSession.session.id}:${activeSession.grand_total}`}
+              total={activeSession.grand_total} disabled={submitting || !online || !payments.options?.methods?.cash?.enabled}
+              onConfirm={cashAmount => settleDineIn("cash", cashAmount)} testId="settle-cash" />}
             <button type="button" onClick={closeTablePayment} className="btn-ghost w-full text-xs py-2">Batal</button>
             </>}
           </div>
@@ -1543,8 +1550,11 @@ export default function POS() {
 
                 {splitEqualResult && (
                   <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-amber-900 space-y-2">
-                    <p className="font-semibold">Pembagian {splitEqualResult.ways} orang:</p>
+                    <p className="font-semibold">Perhitungan untuk {splitEqualResult.ways} orang</p>
+                    <p>Belum ada pembayaran yang dicatat. Bayar tagihan meja setelah tamu siap.</p>
                     {splitEqualResult.amounts?.map((amount,i)=><p key={i} className="flex justify-between"><span>Tamu {i+1}</span><strong>{new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:2}).format(amount)}</strong></p>)}
+                    <button type="button" className="btn-outline mt-2" disabled={!!activeSession.split_orders?.length}
+                      onClick={() => { setSplitOpen(false); openTablePayment(); }}>Ke pembayaran meja</button>
                   </div>
                 )}
               </div>
@@ -1592,7 +1602,7 @@ export default function POS() {
       {/* Split Order Checkout Screen (Shows after splitting items) */}
       {splitOrderResult && (
         <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4">
-          <div className="card-surface bg-white w-full max-w-md p-6 space-y-4 text-left" data-testid="split-payment-modal">
+          <div className="card-surface bg-white w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 space-y-4 text-left" role="dialog" aria-label="Bayar tagihan terpisah" data-testid="split-payment-modal">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
                 <span className="label-tiny">Tagihan Terpisah</span>
@@ -1620,14 +1630,9 @@ export default function POS() {
               </div>
             </div>
 
-            <div>
-              <label className="label-tiny mb-1 block">Pilih Pembayaran Split</label>
-              <div className="grid grid-cols-3 gap-1">
-                <button disabled={!payments.options?.methods?.cash?.enabled || submitting} onClick={() => handlePaySplitOrder("cash")} className="btn-outline py-2 text-[10px] font-bold">Tunai</button>
-
-
-              </div>
-            </div>
+            {payments.options?.methods?.cash?.enabled ? <CashReceiptConfirmation key={splitOrderResult.id}
+              total={splitOrderResult.total} disabled={submitting || !online} onConfirm={processSplitPayment} testId="split-cash" /> :
+              <p className="text-sm">Pembayaran per item memakai tunai. Pastikan metode Tunai aktif di Pembayaran.</p>}
 
             <button onClick={() => setSplitOrderResult(null)} className="btn-ghost text-slate-500 w-full text-xs">Batal & Settle Nanti</button>
           </div>

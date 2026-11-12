@@ -7,7 +7,7 @@ const runtime = JSON.parse(fs.readFileSync(path.join(__dirname, '../../tmp/full-
 assert(runtime.base.startsWith('http://127.0.0.1:') && runtime.dbName.startsWith('dapuros_e2e_'));
 const serial = 'emulator-5570', app = 'com.dagangos.dapuros';
 const adbExe = 'C:/Users/azhar/AppData/Local/Android/Sdk/platform-tools/adb.exe';
-const apk = path.resolve(process.argv[2] || path.join(__dirname, '../releases/DapurOS-POS-1.0.10.apk'));
+const apk = path.resolve(process.argv[2] || path.join(__dirname, '../releases/DapurOS-POS-1.0.11.apk'));
 const output = path.join(__dirname, '../app/build/reports', 'table-payment-native-' + path.basename(apk, '.apk'));
 fs.mkdirSync(output, {recursive:true});
 
@@ -134,6 +134,28 @@ let device, safeEmulator=false;
   await dishCard.getByText('Bahan habis',{exact:true}).waitFor();
   const orders = await api('/api/orders', undefined, auth);
   assert.equal(orders.filter(order=>order.items.some(item=>item.product_id===dish.id)).length,3);
+  const cashTable = await api('/api/tables', {floor_id:floor.id,label:'Meja Konfirmasi Tunai',capacity:4}, auth);
+  const cashSession = await api(`/api/tables/${cashTable.id}/session`, {}, auth);
+  const cashOrder = await api('/api/orders', {session_id:cashSession.id,payment_method:'cash',
+    items:[{product_id:'product-0000',name:'Legacy product',price:1000,quantity:2,subtotal:2000}]}, auth);
+  const readCashOrder = () => api('/api/orders/'+cashOrder.id, undefined, auth);
+  await page.goto('https://dagangos.com/dapuros/app/pos',{waitUntil:'domcontentloaded'});
+  await page.getByTestId('table-card-'+cashTable.id).click();
+  await page.getByTestId('settle-open-btn').click();
+  await page.getByTestId('settle-cash').click();
+  const cashAmount = page.getByTestId('settle-cash-received');
+  const confirmCash = page.getByTestId('settle-cash-confirm');
+  assert.equal(await cashAmount.inputValue(), '');
+  assert(await confirmCash.isDisabled());
+  await cashAmount.fill('2000');
+  assert(await confirmCash.isDisabled());
+  assert.equal((await readCashOrder()).payment_status, 'pending');
+  await cashAmount.fill('2500');
+  await confirmCash.click();
+  await page.getByTestId('settle-modal').waitFor({state:'hidden'});
+  assert.equal((await readCashOrder()).payment_status, 'paid');
+  assert.equal((await api('/api/tables',undefined,auth)).find(row=>row.id===cashTable.id).status,'Vacant');
+
   await page.goto('https://dagangos.com/dapuros/app/pos',{waitUntil:'domcontentloaded'});
   await page.getByText(table.label,{exact:true}).click();
   await page.getByTestId('settle-open-btn').click();
@@ -158,7 +180,7 @@ let device, safeEmulator=false;
   assert.equal(tables.find(t=>t.id===table.id).status,'Vacant');
   const result={status:'passed',apkSha256:sha256,checks:['signed-app-installed','native-external-payment-handoff',
     'merchant-confirmation-closes-table','three-native-cash-sales-deduct-fractional-recipe','sold-out-recipe-stays-visible',
-    'future-reservation-created-in-android-with-live-session-intact','pos-product-editor-routes-coffee-to-bar','android-stock-entry-converts-kg-to-grams'],productionCharges:0};
+    'future-reservation-created-in-android-with-live-session-intact','pos-product-editor-routes-coffee-to-bar','android-stock-entry-converts-kg-to-grams','dine-in-cash-requires-entered-and-confirmed-amount'],productionCharges:0};
   fs.writeFileSync(path.join(output,'verification.json'), JSON.stringify(result,null,2)+'\n');
   console.log(JSON.stringify(result));
 })().catch(error=>{console.error(error.stack);process.exitCode=1;}).finally(async()=>{

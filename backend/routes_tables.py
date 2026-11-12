@@ -292,7 +292,7 @@ async def check_gateway_payment(table_id: str, payment_id: str, user: dict = Dep
 
 
 @router.post('/{table_id}/checkout')
-async def settle_session(table_id: str, payment_method: str = Body(..., embed=True), cash_received: Optional[float] = Body(None, embed=True), expected_session_id: Optional[str] = Body(None, embed=True), checked_in_bank: bool = Body(False, embed=True), received_amount: Optional[float] = Body(None, embed=True), expected_total: Optional[float] = Body(None,embed=True,ge=0,allow_inf_nan=False), user: dict = Depends(get_current_user)):
+async def settle_session(table_id: str, payment_method: str = Body(..., embed=True), cash_received: Optional[float] = Body(None, embed=True, ge=0, le=1_000_000_000_000_000, allow_inf_nan=False), expected_session_id: Optional[str] = Body(None, embed=True), checked_in_bank: bool = Body(False, embed=True), received_amount: Optional[float] = Body(None, embed=True), expected_total: Optional[float] = Body(None,embed=True,ge=0,allow_inf_nan=False), user: dict = Depends(get_current_user)):
     result = await settle_table(get_db(), user, table_id, payment_method, expected=expected_session_id, cash=cash_received, checked=checked_in_bank, amount=received_amount,expected_total=expected_total)
     await notify_clients(user['store_id'])
     return result
@@ -313,5 +313,10 @@ async def split_bill(table_id: str, req: SplitRequest, user: dict = Depends(get_
 
 
 @router.post('/{table_id}/split-orders/{order_id}/settle')
-async def settle_split_order(table_id: str, order_id: str, payment_method: str = Body(..., embed=True), user: dict = Depends(get_current_user)):
-    return await settle_split(get_db(), user, table_id, order_id, payment_method)
+async def settle_split_order(table_id: str, order_id: str, payment_method: str = Body(..., embed=True),
+                             cash_received: Optional[float] = Body(None, embed=True, ge=0, le=1_000_000_000_000_000, allow_inf_nan=False),
+                             expected_total: Optional[float] = Body(None, embed=True, ge=0, le=1_000_000_000_000_000, allow_inf_nan=False),
+                             user: dict = Depends(get_current_user)):
+    result = await settle_split(get_db(), user, table_id, order_id, payment_method, cash=cash_received, expected_total=expected_total)
+    await notify_clients(user["store_id"])
+    return result

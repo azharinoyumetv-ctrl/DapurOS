@@ -72,14 +72,22 @@ async def settle_rows(db, user, rows, method, session, *, checked=False, amount=
     return total
 
 
+def require_cash_received(total, cash):
+    if cash is None:
+        raise HTTPException(400, "Masukkan jumlah uang tunai yang diterima.")
+    value = Decimal(str(cash))
+    if not value.is_finite() or value < 0 or value > Decimal("1000000000000000") or value < total or value != money(value):
+        raise HTTPException(400, "Jumlah tunai tidak valid atau kurang dari total tagihan.")
+
+
 async def settle_table(db, user, table_id, method, *, expected=None, cash=None, checked=False, amount=None, expected_total=None):
     async def commit(session):
         active = await active_session(db, user, table_id, session, expected)
         rows, total = await bill_rows(db, user["store_id"], active["id"], session)
         if expected_total is not None and (not money(expected_total).is_finite() or money(expected_total)!=total):
             raise HTTPException(409,'Tagihan bertambah atau berubah. Muat ulang sebelum menerima pembayaran.')
-        if cash is not None and (not money(cash).is_finite() or money(cash) < total):
-            raise HTTPException(400, "Pembayaran tunai kurang.")
+        if method == "cash":
+            require_cash_received(total, cash)
         await settle_rows(db, user, rows, method, session, checked=checked, amount=amount)
         await close_paid_table(db, active, session)
         return {"ok": True, "session_id": active["id"], "total": float(total)}
@@ -180,7 +188,7 @@ async def split_table(db, user, table_id, request, key=None):
     return await run_transaction(db, commit)
 
 
-async def settle_split(db, user, table_id, order_id, method):
+async def settle_split(db, user, table_id, order_id, method, *, cash=None, expected_total=None):
     async def commit(session):
         active = await active_session(db, user, table_id, session)
         row = await db.orders.find_one({"id": order_id, "store_id": user["store_id"], "source_session_id": active["id"]}, session=session)
@@ -192,6 +200,10 @@ async def settle_split(db, user, table_id, order_id, method):
             raise HTTPException(409, "Status bagian tagihan sudah berubah.")
         if method != "cash":
             raise HTTPException(400, "Bagian tagihan ini diselesaikan tunai. Pembayaran elektronik dilakukan dari tagihan meja utuh.")
+        total = money(row["total"])
+        if expected_total is not None and money(expected_total) != total:
+            raise HTTPException(409, "Bagian tagihan berubah. Muat ulang sebelum menerima pembayaran.")
+        require_cash_received(total, cash)
         await settle_rows(db, user, [row], method, session)
         return {key: value for key, value in row.items() if key != "_id"}
     return await run_transaction(db, commit)

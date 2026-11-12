@@ -503,12 +503,16 @@ class TestFloorsAndTables:
         assert split_order["items"][0]["quantity"] == 1
         
         # Settle split order
-        r = authed.post(f"{API}/orders/{split_order['id']}/mark-paid")
+        r = authed.post(f"{API}/tables/{table_id}/split-orders/{split_order['id']}/settle", json={
+            "payment_method": "cash", "cash_received": split_order["total"],
+        })
         assert r.status_code == 200
         
         # Settle remainder of session
         bill = authed.get(f"{API}/tables/{table_id}/session").json()
-        r = authed.post(f"{API}/tables/{table_id}/checkout", json={"payment_method": "cash"})
+        r = authed.post(f"{API}/tables/{table_id}/checkout", json={
+            "payment_method": "cash", "cash_received": bill["grand_total"],
+        })
         assert r.status_code == 200
 
     def test_kds_routing_and_status(self, authed):
@@ -561,4 +565,7 @@ class TestFloorsAndTables:
         assert not any(t["id"] == ticket["id"] for t in r.json())
         
         # Cleanup table checkout
-        authed.post(f"{API}/tables/{table['id']}/checkout", json={"payment_method": "cash"})
+        bill = authed.get(f"{API}/tables/{table['id']}/session").json()
+        authed.post(f"{API}/tables/{table['id']}/checkout", json={
+            "payment_method": "cash", "cash_received": bill["grand_total"],
+        })

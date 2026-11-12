@@ -303,10 +303,14 @@ async def test_split_replay_conserves_bill_and_recipe_snapshots(shop):
     assert remaining["tax_pb1"] + split["tax_pb1"] == 2100
     assert split["items"][0]["ingredient_deductions"][0]["quantity"] == 15
     assert (await http.post("/api/tables/table/checkout", json={"payment_method": "cash"})).status_code == 409
+    settle_part = f"/api/tables/table/split-orders/{split['id']}/settle"
+    for body in ({"payment_method": "cash"}, {"payment_method": "cash", "cash_received": 10000}):
+        assert (await http.post(settle_part, json=body)).status_code == 400
+    assert (await db.orders.find_one({"id": split["id"]}))["payment_status"] == "pending"
     for _ in range(2):
-        paid = await http.post(f"/api/tables/table/split-orders/{split['id']}/settle", json={"payment_method": "cash"})
+        paid = await http.post(settle_part, json={"payment_method": "cash", "cash_received": 12000, "expected_total": 11550})
         assert paid.status_code == 200, paid.text
-    assert (await http.post("/api/tables/table/checkout", json={"payment_method": "cash", "expected_session_id": "session"})).status_code == 200
+    assert (await http.post("/api/tables/table/checkout", json={"payment_method": "cash", "cash_received": 12000, "expected_session_id": "session"})).status_code == 200
     assert (await db.ingredients.find_one({"id": "rice"}))["stock"] == 70
 
 

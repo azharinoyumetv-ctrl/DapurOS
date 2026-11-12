@@ -613,6 +613,44 @@ test('real checkout, immutable historical cost, paid reporting, void and stock r
  expect((await api(request,session,'get','/orders/stats')).today_sales).toBe(0);
  expect(await api(request,session,'get','/kds')).toHaveLength(0);
 });
+test('cash-only dine-in never closes a table without entered and confirmed cash',async({page,request})=>{
+ const owner=await register(page,request,{plan:'trial'}),p=await product(request,owner,{price:25000}),table=await dining(request,owner);
+ const opened=await api(request,owner,'post',`/tables/${table.id}/session`);
+ const order=await api(request,owner,'post','/orders',{session_id:opened.id,payment_method:'cash',
+  items:[{product_id:p.id,name:p.name,price:p.price,quantity:2,subtotal:50000}]});
+ const checkout=amount=>request.post(runtime.base+`/api/tables/${table.id}/checkout`,{headers:owner.headers,
+  data:{payment_method:'cash',expected_session_id:opened.id,expected_total:57750,...(amount===undefined?{}:{cash_received:amount})}});
+ expect((await checkout()).status()).toBe(400);
+ expect((await checkout(57000)).status()).toBe(400);
+ const readOrder=()=>api(request,owner,'get',`/orders/${order.id}`);
+ expect((await readOrder()).payment_status).toBe('pending');
+ await page.setViewportSize({width:1280,height:800});
+ await page.goto('/dapuros/app/pos');
+ await page.getByText(table.label,{exact:true}).click();
+ await page.getByRole('button',{name:'Split Bill (Bagi Tagihan)',exact:true}).click();
+ const split=page.getByTestId('split-modal');
+ await split.getByRole('button',{name:'Hitung Pembagian',exact:true}).click();
+ await expect(split).toContainText('28.875');
+ await expect(split).toContainText('Belum ada pembayaran yang dicatat');
+ expect((await readOrder()).payment_status).toBe('pending');
+ await split.getByRole('button',{name:'Ke pembayaran meja',exact:true}).click();
+ const modal=page.getByTestId('settle-modal');
+ await expect(modal).toContainText('Belum ada metode pembayaran digital aktif');
+ await page.getByTestId('settle-cash').click();
+ const amount=page.getByTestId('settle-cash-received'),confirm=page.getByTestId('settle-cash-confirm');
+ await expect(amount).toHaveValue('');
+ await expect(confirm).toBeDisabled();
+ await amount.fill('57000');
+ await expect(confirm).toBeDisabled();
+ expect((await readOrder()).payment_status).toBe('pending');
+ await amount.fill('60000');
+ await expect(modal).toContainText('2.250');
+ await confirm.click();
+ await expect(modal).toHaveCount(0);
+ expect((await readOrder()).payment_status).toBe('paid');
+ expect((await api(request,owner,'get','/tables')).find(row=>row.id===table.id).status).toBe('Vacant');
+});
+
 test('staff can split a real table bill by item and settle both portions without losing quantity',async({page,request})=>{
  const owner=await register(page,request),p=await product(request,owner),table=await dining(request,owner);
  const opened=await api(request,owner,'post',`/tables/${table.id}/session`);
@@ -624,10 +662,18 @@ test('staff can split a real table bill by item and settle both portions without
  await expect(page.getByTestId('split-payment-modal')).toBeVisible();await page.getByRole('button',{name:'Batal & Settle Nanti',exact:true}).click();
  const part=(await api(request,owner,'get','/orders')).find(order=>order.source_session_id===opened.id);
  await page.reload();await page.getByText(table.label,{exact:true}).click();await page.getByTestId('split-unpaid-'+part.id).click();
- await page.getByTestId('split-payment-modal').getByRole('button',{name:'Tunai',exact:true}).click();
+ const splitConfirm=page.getByTestId('split-cash-confirm');
+ await expect(splitConfirm).toBeDisabled();
+ await page.getByTestId('split-cash-received').fill('10000');
+ await expect(splitConfirm).toBeDisabled();
+ expect((await api(request,owner,'get','/orders')).find(order=>order.id===part.id).payment_status).toBe('pending');
+ await page.getByTestId('split-cash-received').fill('12000');
+ await splitConfirm.click();
  await expect(page.getByTestId('receipt-order-no')).toBeVisible();
  await page.getByTestId('receipt-close').click();
  await page.getByTestId('settle-open-btn').click();await page.getByTestId('settle-cash').click();
+ await page.getByTestId('settle-cash-received').fill('12000');
+ await page.getByTestId('settle-cash-confirm').click();
  await expect(page.getByTestId('settle-modal')).toHaveCount(0);
  expect((await api(request,owner,'get','/orders')).filter(x=>x.payment_status==='paid').reduce((sum,x)=>sum+x.total,0)).toBe(23100);
  expect((await api(request,owner,'get','/tables')).find(x=>x.id===table.id).status).toBe('Vacant');
