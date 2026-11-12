@@ -18,7 +18,7 @@ def public_payment(row):
         'id', 'total', 'payment_status', 'payment_initialization', 'payment_provider',
         'payment_method', 'gateway_checkout_url', 'doku_checkout_url',
         'xendit_checkout_url', 'xendit_qr_string', 'ewallet_channel',
-    ) if key in row}}
+    ) if key in row}, **({'receipt_session_id': row['session_id']} if row['payment_status'] == 'paid' and row.get('has_receipt') else {})}
 
 
 async def find_payment(db, scope, session=None):
@@ -109,6 +109,9 @@ async def transition_table_payment(db, payment, status, details):
                         'table_gateway_id': row['id'], 'payment_status': 'paid'}, session=session).to_list(None):
                     await db.orders.update_one({'_id': order['_id']}, {'$set': {'payment_status': 'refunded', 'updated_at': at}}, session=session)
                     await apply_loyalty(db, order, session, reverse=True)
+                if row.get('has_receipt'):
+                    await db.order_sessions.update_one({'id': row['session_id'], 'store_id': row['store_id']},
+                        {'$set': {'receipt.payment_status': 'refunded'}}, session=session)
                 await db.checkout_attempts.update_one(scope, {'$set': {'payment_status': 'refunded', 'updated_at': at}}, session=session)
             elif previous in ('failed', 'voided') and status == 'paid':
                 await db.checkout_attempts.update_one(scope, {'$set': {'late_payment_at': at}}, session=session)
@@ -117,6 +120,7 @@ async def transition_table_payment(db, payment, status, details):
             'table_id': row['table_id'], 'gateway_payment_id': row['id'], 'status': 'Active'}, session=session)
         if not active:
             return False
+        receipt = None
         if status == 'paid':
             orders, total = await bill_rows(db, row['store_id'], active['id'], session)
             if sorted(order['id'] for order in orders) != row['order_ids'] or total != money(row['total']):
@@ -129,14 +133,15 @@ async def transition_table_payment(db, payment, status, details):
             for order in orders:
                 await db.orders.update_one({'_id': order['_id']}, {'$set': updates}, session=session)
                 await apply_loyalty(db, {**order, **updates}, session)
-            await close_paid_table(db, active, session)
+            receipt = await close_paid_table(db, active, session, orders, row['payment_method'], total,
+                                             provider=row['payment_provider'], channel=row.get('ewallet_channel'))
         elif status in ('failed', 'voided'):
             await db.order_sessions.update_one({'_id': active['_id']}, {'$unset': {'gateway_payment_id': ''}}, session=session)
         else:
             return False
         # Do not store full gateway payloads, which may contain customer details.
         await db.checkout_attempts.update_one(scope, {'$set': {'payment_status': status, 'payment_initialization': 'ready',
-            'state': 'settled' if status == 'paid' else 'failed',
+            'state': 'settled' if status == 'paid' else 'failed', 'has_receipt': receipt is not None,
             'updated_at': at, **({'declined_at_setup': True} if details.get('declined_at_setup') else {})}}, session=session)
         return True
 

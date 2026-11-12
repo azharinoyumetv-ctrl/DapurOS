@@ -39,10 +39,43 @@ async def bill_rows(db, store_id, session_id, session):
     return rows, sum((money(row["total"]) for row in rows), Decimal(0))
 
 
-async def close_paid_table(db, active, session):
+async def get_table_receipt(db, store_id, session_id, table_id=None):
+    scope = {"id": session_id, "store_id": store_id, "status": "Paid"}
+    if table_id is not None:
+        scope["table_id"] = table_id
+    row = await db.order_sessions.find_one(scope, {"_id": 0, "receipt": 1})
+    if not row or not row.get("receipt"):
+        raise HTTPException(404, "Struk meja belum tersedia.")
+    return row["receipt"]
+
+
+async def close_paid_table(db, active, session, rows, method, total, *, cash=None, provider=None, channel=None):
     now = utcnow().isoformat()
-    await db.order_sessions.update_one({"_id": active["_id"]}, {"$set": {"status": "Paid", "closed_at": now}}, session=session)
+    updates = {"status": "Paid", "closed_at": now}
+    receipt = None
+    if any(row.get("items") for row in rows):
+        table = await db.tables.find_one({"id": active["table_id"], "store_id": active["store_id"]},
+                                         {"label": 1}, session=session) or {}
+        receipt = {
+            "id": "table-" + active["id"], "order_no": "MEJA-" + active["id"].replace("-", "")[:16].upper(),
+            "table_label": table.get("label"), "dining_option": "Dine-In",
+            "items": [{key: item[key] for key in ("product_id", "name", "quantity", "price", "subtotal")}
+                      for row in sorted(rows, key=lambda row: row.get("created_at", "")) for item in row.get("items", [])],
+            "payment_status": "paid", "payment_method": method, "payment_provider": provider, "ewallet_channel": channel,
+            "total": float(total), "tax_percent": 10, "created_at": now,
+            **{field: float(sum((money(row.get(field, 0)) for row in rows), Decimal(0)))
+               for field in ("subtotal", "discount", "service_charge", "tax_amount")},
+        }
+        if method == "cash":
+            receipt.update(cash_received=float(money(cash)), change=float(money(cash) - total))
+        if method == "qris_bank":
+            receipt["payment_confirmation"] = {"type": "manual_bank", "confirmed_at": now}
+        updates["receipt"] = receipt
+        await db.orders.update_many({"store_id": active["store_id"], "id": {"$in": [row["id"] for row in rows]}},
+                                    {"$set": {"table_receipt_id": receipt["id"]}}, session=session)
+    await db.order_sessions.update_one({"_id": active["_id"]}, {"$set": updates}, session=session)
     await db.tables.update_one({"id": active["table_id"], "store_id": active["store_id"]}, {"$set": {"status": "Vacant", "updated_at": now}}, session=session)
+    return receipt
 
 
 async def settle_rows(db, user, rows, method, session, *, checked=False, amount=None):
@@ -89,8 +122,8 @@ async def settle_table(db, user, table_id, method, *, expected=None, cash=None, 
         if method == "cash":
             require_cash_received(total, cash)
         await settle_rows(db, user, rows, method, session, checked=checked, amount=amount)
-        await close_paid_table(db, active, session)
-        return {"ok": True, "session_id": active["id"], "total": float(total)}
+        receipt = await close_paid_table(db, active, session, rows, method, total, cash=cash)
+        return {"ok": True, "session_id": active["id"], "total": float(total), "receipt": receipt}
     return await run_transaction(db, commit)
 
 
@@ -205,5 +238,7 @@ async def settle_split(db, user, table_id, order_id, method, *, cash=None, expec
             raise HTTPException(409, "Bagian tagihan berubah. Muat ulang sebelum menerima pembayaran.")
         require_cash_received(total, cash)
         await settle_rows(db, user, [row], method, session)
-        return {key: value for key, value in row.items() if key != "_id"}
+        tender = {"cash_received": float(money(cash)), "change": float(money(cash) - total)}
+        await db.orders.update_one({"_id": row["_id"]}, {"$set": tender}, session=session)
+        return {**{key: value for key, value in row.items() if key != "_id"}, **tender}
     return await run_transaction(db, commit)

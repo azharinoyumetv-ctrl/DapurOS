@@ -11,7 +11,7 @@ data class ReceiptLine(val name: String, val quantity: Int, val price: Double, v
 data class ThermalReceipt(val store: String, val reference: String, val date: String, val items: List<ReceiptLine>,
     val subtotal: Double, val discount: Double, val tax: Double, val total: Double, val cash: Double, val change: Double,
     val pending: Boolean, val footer: String = "Terima kasih", val paymentMethod: String = "cash",
-    val paymentStatus: String = "paid", val manualBankConfirmed: Boolean = false, val serviceCharge: Double = 0.0)
+    val paymentStatus: String = "paid", val manualBankConfirmed: Boolean = false, val serviceCharge: Double = 0.0, val tableLabel: String = "")
 
 object ReceiptEncoder {
     private fun clean(value: String) = value.replace(Regex("[\\p{Cntrl}]"), " ").trim()
@@ -30,6 +30,7 @@ object ReceiptEncoder {
         fun amount(label: String, value: Double) { val right = rupiah(value); line(label.take((columns - right.length - 1).coerceAtLeast(0)).padEnd((columns - right.length).coerceAtLeast(0)) + right) }
         command(27, 64); command(27, 116, 0); command(27, 97, 1); command(27, 69, 1)
         wrapped(receipt.store); command(27, 69, 0); wrapped(receipt.reference); wrapped(receipt.date)
+        if (receipt.tableLabel.isNotBlank()) wrapped(receipt.tableLabel)
         if (receipt.pending) wrapped("MENUNGGU SINKRONISASI")
         command(27, 97, 0); line("-".repeat(columns))
         receipt.items.forEach { item -> require(item.quantity in 1..100000); wrapped(item.name); wrapped("${item.quantity} x ${rupiah(item.price)}"); amount("", item.subtotal) }
@@ -40,6 +41,7 @@ object ReceiptEncoder {
         command(27, 69, 1); amount("TOTAL", receipt.total); command(27, 69, 0)
         if (receipt.paymentMethod == "cash") {
             amount("Tunai", receipt.cash); amount("Kembalian", receipt.change)
+            if (receipt.paymentStatus != "paid") wrapped("STATUS: ${receipt.paymentStatus.uppercase(Locale.ROOT)}")
         } else {
             val method = when (receipt.paymentMethod) { "qris_bank" -> "QRIS bank"; "qris" -> "QRIS"; "ewallet" -> "E-Wallet"; "va" -> "Virtual Account"; "credit_card" -> "Kartu Kredit"; "edc" -> "Kartu EDC"; "doku" -> "DOKU"; else -> "Non-tunai" }
             wrapped("Pembayaran: $method")

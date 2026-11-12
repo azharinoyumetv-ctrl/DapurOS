@@ -1,0 +1,2 @@
+e4be0cefd85f009ebaa562299a9d9da6282bf44458c2a9ef314614a8ce0b6eb0  DapurOS-POS-1.0.12.aab
+845fdc03f4859b394b6cb4e0ebe4a56e2d5d603e41e022fddbaa217e0b1f735c  DapurOS-POS-1.0.12.apk

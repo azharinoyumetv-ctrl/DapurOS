@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import api, { fmtIDR } from "@/api/client";
 
-export default function TableGatewayPayment({ tableId, payment, onStatus, onClose }) {
+export default function TableGatewayPayment({ tableId, payment, onStatus, onReceipt, onClose }) {
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
   const stopped = useRef(false);
@@ -54,6 +54,7 @@ export default function TableGatewayPayment({ tableId, payment, onStatus, onClos
     </> : <p role="status" data-testid="table-gateway-status">
       {status === "paid" ? "Pembayaran diterima. Meja sudah ditutup." : status === "refunded" ? "Pembayaran sudah dikembalikan." : "Pembayaran gagal atau kedaluwarsa. Tagihan masih terbuka."}
     </p>}
+    {status === "paid" && payment.receipt_session_id && <button type="button" className="btn-outline w-full" onClick={onReceipt}>Lihat struk</button>}
     {error && <p role="alert" className="text-sm">{error}</p>}
     <button type="button" className="btn-ghost w-full" onClick={onClose}>{status === "pending" ? "Tutup sementara" : "Kembali ke meja"}</button>
   </section>;

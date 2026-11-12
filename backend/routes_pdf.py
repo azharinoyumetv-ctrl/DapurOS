@@ -1,5 +1,7 @@
 """Server-side PDF generation: thermal receipt (80mm) + A4 invoice."""
 import io
+from xml.sax.saxutils import escape
+from restaurant_billing import get_table_receipt, money
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -29,14 +31,17 @@ LINE = colors.HexColor("#E0DBD2")
 
 def _fmt_idr(n: float) -> str:
     try:
-        return f"Rp {int(round(n)):,}".replace(",", ".")
+        return "Rp " + format(money(n), ",.2f").rstrip("0").rstrip(".").translate(str.maketrans(",.", ".,"))
     except Exception:
         return f"Rp {n}"
 
 
 async def _load_order(order_id: str, user: dict) -> dict:
     db = get_db()
-    order = await db.orders.find_one({"id": order_id, "store_id": user["store_id"]}, {"_id": 0})
+    if order_id.startswith("table-"):
+        order = await get_table_receipt(db, user["store_id"], order_id.removeprefix("table-"))
+    else:
+        order = await db.orders.find_one({"id": order_id, "store_id": user["store_id"]}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order tidak ditemukan")
     store = await db.stores.find_one({"id": user["store_id"]}, {"_id": 0}) or {}
@@ -74,6 +79,9 @@ def _thermal_pdf(order: dict, store: dict) -> bytes:
     c.setFont("Helvetica", 8)
     c.drawString(4 * mm, y, f"No: {order.get('order_no', '-')}")
     y -= 3.5 * mm
+    if order.get("table_label"):
+        c.drawString(4 * mm, y, str(order["table_label"])[:36])
+        y -= 3.5 * mm
     created = order.get("created_at", "")[:19].replace("T", " ")
     c.drawString(4 * mm, y, f"Tgl: {created}")
     y -= 3.5 * mm
@@ -199,7 +207,7 @@ def _invoice_pdf(order: dict, store: dict) -> bytes:
     created = order.get("created_at", "")[:10]
     meta = Table(
         [[
-            [Paragraph("DITAGIHKAN KEPADA", p_label), Paragraph(order.get("customer_name") or "Walk-in Customer", p_body),
+            [Paragraph("DITAGIHKAN KEPADA", p_label), Paragraph(escape(order.get("customer_name") or order.get("table_label") or "Walk-in Customer"), p_body),
              Paragraph(order.get("customer_email") or "", p_meta),
              Paragraph(order.get("customer_phone") or "", p_meta)],
             [Paragraph("TANGGAL", p_label), Paragraph(created, p_body),
@@ -276,6 +284,8 @@ def _invoice_pdf(order: dict, store: dict) -> bytes:
         pm += f" via {order['ewallet_channel']}"
     story.append(Paragraph("Metode Pembayaran", p_label))
     story.append(Paragraph(pm, p_body))
+    if order.get("cash_received") is not None:
+        story.append(Paragraph(f"Tunai {_fmt_idr(order['cash_received'])} · Kembalian {_fmt_idr(order.get('change') or 0)}", p_body))
     story.append(Spacer(1, 12 * mm))
     story.append(Paragraph("Terima kasih telah berbelanja. Invoice ini dihasilkan otomatis oleh DapurOS.", p_meta))
 

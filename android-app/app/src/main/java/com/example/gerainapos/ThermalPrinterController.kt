@@ -111,7 +111,8 @@ class ThermalPrinterController(private val activity: ComponentActivity, private 
                 order.optDouble("cash_received", order.getDouble("total")), order.optDouble("change", 0.0), order.optString("sync_status") == "pending",
                 order.optJSONObject("receipt_settings")?.optString("footer_text", "Terima kasih") ?: "Terima kasih",
                 paymentMethod = order.optString("payment_method", "cash"), paymentStatus = order.optString("payment_status", "pending"),
-                manualBankConfirmed = order.optJSONObject("payment_confirmation")?.optString("type") == "manual_bank", serviceCharge = order.optDouble("service_charge", 0.0))
+                manualBankConfirmed = order.optJSONObject("payment_confirmation")?.optString("type") == "manual_bank", serviceCharge = order.optDouble("service_charge", 0.0),
+                tableLabel = if (order.isNull("table_label")) "" else order.optString("table_label"))
         }.getOrElse { notice("Data struk tidak valid."); return }
         send(parsed)
     }

@@ -7,7 +7,7 @@ const runtime = JSON.parse(fs.readFileSync(path.join(__dirname, '../../tmp/full-
 assert(runtime.base.startsWith('http://127.0.0.1:') && runtime.dbName.startsWith('dapuros_e2e_'));
 const serial = 'emulator-5570', app = 'com.dagangos.dapuros';
 const adbExe = 'C:/Users/azhar/AppData/Local/Android/Sdk/platform-tools/adb.exe';
-const apk = path.resolve(process.argv[2] || path.join(__dirname, '../releases/DapurOS-POS-1.0.11.apk'));
+const apk = path.resolve(process.argv[2] || path.join(__dirname, '../releases/DapurOS-POS-1.0.12.apk'));
 const output = path.join(__dirname, '../app/build/reports', 'table-payment-native-' + path.basename(apk, '.apk'));
 fs.mkdirSync(output, {recursive:true});
 
@@ -153,6 +153,14 @@ let device, safeEmulator=false;
   await cashAmount.fill('2500');
   await confirmCash.click();
   await page.getByTestId('settle-modal').waitFor({state:'hidden'});
+  await page.getByTestId('receipt-dialog').waitFor();
+  assert.match(await page.getByTestId('receipt-total').textContent(), /2[.]310/);
+  assert.match(await page.getByTestId('receipt-cash-received').textContent(), /2[.]500/);
+  assert.match(await page.getByTestId('receipt-change').textContent(), /190/);
+  for (const id of ['receipt-bluetooth-print','receipt-pdf-thermal-btn','receipt-pdf-invoice-btn']) {
+    assert(await page.getByTestId(id).isVisible());
+  }
+  await page.getByTestId('receipt-done-btn').click();
   assert.equal((await readCashOrder()).payment_status, 'paid');
   assert.equal((await api('/api/tables',undefined,auth)).find(row=>row.id===cashTable.id).status,'Vacant');
 
@@ -174,13 +182,13 @@ let device, safeEmulator=false;
     {'x-callback-token':'fixture-'+store});
   // The WebView's external navigation is intercepted by Android; Playwright's
   // navigation waiter may still wait for a document that will never load here.
-  await until(()=>page.evaluate(()=>document.querySelector('[data-testid="table-gateway-status"]')?.textContent
-    .includes('Pembayaran diterima. Meja sudah ditutup.')), 'The app did not show verified settlement after returning.');
+  await until(()=>page.evaluate(()=>document.querySelector('[data-testid="receipt-status"]')?.textContent
+    .includes('Lunas')), 'The app did not open a receipt after the provider confirmed payment.');
   const tables=await api('/api/tables',undefined,auth);
   assert.equal(tables.find(t=>t.id===table.id).status,'Vacant');
   const result={status:'passed',apkSha256:sha256,checks:['signed-app-installed','native-external-payment-handoff',
     'merchant-confirmation-closes-table','three-native-cash-sales-deduct-fractional-recipe','sold-out-recipe-stays-visible',
-    'future-reservation-created-in-android-with-live-session-intact','pos-product-editor-routes-coffee-to-bar','android-stock-entry-converts-kg-to-grams','dine-in-cash-requires-entered-and-confirmed-amount'],productionCharges:0};
+    'future-reservation-created-in-android-with-live-session-intact','pos-product-editor-routes-coffee-to-bar','android-stock-entry-converts-kg-to-grams','dine-in-cash-requires-entered-and-confirmed-amount','cash-and-gateway-open-table-receipt'],productionCharges:0};
   fs.writeFileSync(path.join(output,'verification.json'), JSON.stringify(result,null,2)+'\n');
   console.log(JSON.stringify(result));
 })().catch(error=>{console.error(error.stack);process.exitCode=1;}).finally(async()=>{

@@ -14,7 +14,7 @@ import reservation_calendar
 from auth import get_current_user
 from routes_orders import _calc
 from restaurant_billing import settle_table, split_table, settle_split
-from restaurant_billing import close_empty
+from restaurant_billing import close_empty, get_table_receipt
 from table_payments import find_payment, public_payment, start_table_payment
 from table_payment_status import refresh_table_payment
 from decimal import Decimal
@@ -289,6 +289,11 @@ async def check_gateway_payment(table_id: str, payment_id: str, user: dict = Dep
     if not payment:
         raise HTTPException(404, 'Pembayaran meja tidak ditemukan.')
     return public_payment(await refresh_table_payment(db, payment))
+
+
+@router.get('/{table_id}/receipts/{session_id}')
+async def table_receipt(table_id: str, session_id: str, user: dict = Depends(get_current_user)):
+    return await get_table_receipt(get_db(), user["store_id"], session_id, table_id)
 
 
 @router.post('/{table_id}/checkout')

@@ -160,7 +160,14 @@ async def test_table_gateway_serializes_checkout_and_changes_and_unlocks_on_veri
     assert next_attempt['id'] != first['id']
     assert (await http.post('/api/webhooks/xendit', headers=auth_headers, json=callback(first['reference'], 23100, True))).is_success
     assert (await db.orders.find_one({'id': order['id']}))['payment_status'] == 'pending'
+    receipt_path = '/api/tables/table/receipts/session'
+    assert (await http.get(receipt_path)).status_code == 404
     assert (await http.post('/api/webhooks/xendit', headers=auth_headers, json=callback(next_attempt['reference'], 23100, True))).is_success
+    assert (await http.get(f"{path}/{next_attempt['id']}")).json()['receipt_session_id'] == 'session'
+    receipt = (await http.get(receipt_path)).json()
+    assert (receipt['payment_method'], receipt['total'], receipt['payment_status']) == ('va', 23100, 'paid')
+    assert 'cash_received' not in receipt
+    assert (await http.get('/api/tables/other-table/receipts/session')).status_code == 404
     assert (await db.orders.find_one({'id': order['id']}))['payment_status'] == 'paid'
     assert (await db.tables.find_one({'id': 'table'}))['status'] == 'Vacant'
     assert await db.kds_tickets.count_documents({}) == 1

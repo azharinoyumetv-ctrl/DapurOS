@@ -42,6 +42,9 @@ const EWALLET_CHANNELS = [
   { code: "LINKAJA", label: "LinkAja" },
 ];
 
+const receiptCurrency = new Intl.NumberFormat("id-ID", {maximumFractionDigits: 2});
+const fmtReceiptMoney = value => "Rp " + receiptCurrency.format(Number(value) || 0);
+
 export function ReceiptDialog({ order, onClose, onUpdated }) {
   const [poll, setPoll] = useState(order);
   useEffect(() => { setPoll(order); }, [order]);
@@ -76,6 +79,7 @@ export function ReceiptDialog({ order, onClose, onUpdated }) {
         </div>
 
         <div className="text-center mb-4">
+          {o.table_label && <p className="text-sm mb-2" data-testid="receipt-table-label">{o.table_label}</p>}
           {o.customer_name&&<p className="text-sm mb-2" data-testid="receipt-customer-name">Tamu: {o.customer_name}</p>}
           {o.sync_status === "pending" && <p className="text-xs text-[#754419] mb-2" data-testid="receipt-pending-sync">Pembayaran tunai dicatat di perangkat. Menunggu sinkronisasi; jangan hapus data aplikasi.</p>}
           {o.payment_initialization === "initializing" && <p role="status" className="text-sm my-3">Pembayaran sedang disiapkan. Tunggu status transaksi ini; jangan membuat pembayaran baru.</p>}
@@ -90,7 +94,7 @@ export function ReceiptDialog({ order, onClose, onUpdated }) {
               <CheckCircle2 size={12} /> Lunas
             </span>
           ) : (
-            <span className="pill pill-warning" data-testid="receipt-status">{o.payment_status === "pending" ? "Menunggu pembayaran…" : o.payment_status}</span>
+            <span className="pill pill-warning" data-testid="receipt-status">{({pending:"Menunggu pembayaran…", refunded:"Dikembalikan", adjusted:"Tagihan disesuaikan"})[o.payment_status] || o.payment_status}</span>
           )}
         </div>
 
@@ -140,25 +144,25 @@ export function ReceiptDialog({ order, onClose, onUpdated }) {
             <div key={`${it.product_id}-${i}`} className="py-2 flex justify-between" data-testid={`receipt-item-${i}`}>
               <div>
                 <p className="font-medium">{it.name}</p>
-                <p className="text-xs text-[hsl(var(--muted))]">{it.quantity} × {fmtIDR(it.price)}</p>
+                <p className="text-xs text-[hsl(var(--muted))]">{it.quantity} × {fmtReceiptMoney(it.price)}</p>
               </div>
-              <p className="font-display font-bold num-display">{fmtIDR(it.subtotal)}</p>
+              <p className="font-display font-bold num-display">{fmtReceiptMoney(it.subtotal)}</p>
             </div>
           ))}
         </div>
 
         <div className="space-y-1 text-sm pt-3 border-t border-[hsl(var(--border))]">
-          <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Subtotal</span><span className="num-display">{fmtIDR(o.subtotal)}</span></div>
-          {o.discount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Diskon</span><span className="num-display">-{fmtIDR(o.discount)}</span></div>}
-          {o.service_charge > 0 && <div className="flex justify-between"><span>Layanan (5%)</span><span>{fmtIDR(o.service_charge)}</span></div>}
-          {o.tax_amount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">{o.service_charge > 0 ? "PB1 (10%)" : `PPN ${o.tax_percent}%`}</span><span className="num-display">{fmtIDR(o.tax_amount)}</span></div>}
+          <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Subtotal</span><span className="num-display">{fmtReceiptMoney(o.subtotal)}</span></div>
+          {o.discount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">Diskon</span><span className="num-display">-{fmtReceiptMoney(o.discount)}</span></div>}
+          {o.service_charge > 0 && <div className="flex justify-between"><span>Layanan (5%)</span><span>{fmtReceiptMoney(o.service_charge)}</span></div>}
+          {o.tax_amount > 0 && <div className="flex justify-between"><span className="text-[hsl(var(--muted))]">{o.service_charge > 0 ? "PB1 (10%)" : `PPN ${o.tax_percent}%`}</span><span className="num-display">{fmtReceiptMoney(o.tax_amount)}</span></div>}
           <div className="flex justify-between font-display text-lg font-bold text-[hsl(var(--primary))] mt-2">
-            <span>TOTAL</span><span className="num-display" data-testid="receipt-total">{fmtIDR(o.total)}</span>
+            <span>TOTAL</span><span className="num-display" data-testid="receipt-total">{fmtReceiptMoney(o.total)}</span>
           </div>
           {o.payment_method === "cash" && o.cash_received != null && (
             <>
-              <div className="flex justify-between text-xs text-[hsl(var(--muted))]"><span>Tunai</span><span className="num-display">{fmtIDR(o.cash_received)}</span></div>
-              <div className="flex justify-between text-xs text-[hsl(var(--muted))]"><span>Kembalian</span><span className="num-display">{fmtIDR(o.change || 0)}</span></div>
+              <div className="flex justify-between text-xs text-[hsl(var(--muted))]"><span>Tunai</span><span className="num-display" data-testid="receipt-cash-received">{fmtReceiptMoney(o.cash_received)}</span></div>
+              <div className="flex justify-between text-xs text-[hsl(var(--muted))]"><span>Kembalian</span><span className="num-display" data-testid="receipt-change">{fmtReceiptMoney(o.change || 0)}</span></div>
             </>
           )}
         </div>
@@ -234,6 +238,7 @@ export default function POS() {
   const [settleOpen, setSettleOpen] = useState(false);
   const [settleCashOpen, setSettleCashOpen] = useState(false);
   const [tablePayment, setTablePayment] = useState(null);
+  const [receiptAttempt, setReceiptAttempt] = useState(0);
   const [tableWallet, setTableWallet] = useState("");
   const returnChecked = useRef(false);
 
@@ -469,6 +474,18 @@ export default function POS() {
       if (data.payment_status !== "paid" && !['Vacant', 'Reserved'].includes(table.status)) loadActiveTableSession(table.id);
     }).catch(() => toast.error("Status pembayaran belum dapat dimuat. Pilih meja untuk memeriksa tagihan."));
   }, [tables]);
+  useEffect(() => {
+    const sessionId = tablePayment?.receipt_session_id;
+    const tableId = selectedTable?.id;
+    if (!settleOpen || tablePayment?.payment_status !== "paid" || !sessionId || !tableId) return;
+    const controller = new AbortController();
+    api.get(`/tables/${tableId}/receipts/${sessionId}`, {signal: controller.signal, timeout: 10000}).then(({data}) => {
+      if (!controller.signal.aborted) showPaidTableReceipt(data);
+    }).catch(() => {
+      if (!controller.signal.aborted) toast.error("Pembayaran tercatat. Pilih Lihat struk untuk mencoba lagi.");
+    });
+    return () => controller.abort();
+  }, [settleOpen, tablePayment?.payment_status, tablePayment?.receipt_session_id, selectedTable?.id, receiptAttempt]);
   useEffect(() => setBankConfirmed(false), [activeSession?.session?.id, activeSession?.grand_total, settleOpen]);
 
   useEffect(() => {
@@ -748,6 +765,17 @@ export default function POS() {
     setSettleOpen(true);
   };
 
+  const showPaidTableReceipt = paidReceipt => {
+    tableReadSequence.current++;
+    setSettleOpen(false);
+    setTablePayment(null);
+    setSelectedTable(null);
+    setActiveSession(null);
+    setViewMode("floor");
+    if (paidReceipt) setReceipt(paidReceipt);
+    loadTables();
+  };
+
   const settleDineIn = async (method, cashAmount) => {
     if (!selectedTable || !activeSession?.session?.id || checkoutLock.current) return;
     checkoutLock.current = true;
@@ -759,13 +787,16 @@ export default function POS() {
         onTablePaymentStatus(data);
         return;
       }
-      await api.post(`/tables/${selectedTable.id}/checkout`, { ...payload, cash_received: method === "cash" ? cashAmount : undefined, checked_in_bank: method === "qris_bank" && bankConfirmed, received_amount: method === "qris_bank" ? activeSession.grand_total : undefined });
-      setSettleOpen(false);
-      setSelectedTable(null);
-      setActiveSession(null);
-      setViewMode("floor");
-      await loadTables();
+      const {data} = await api.post(`/tables/${selectedTable.id}/checkout`, { ...payload, cash_received: method === "cash" ? cashAmount : undefined, checked_in_bank: method === "qris_bank" && bankConfirmed, received_amount: method === "qris_bank" ? activeSession.grand_total : undefined });
+      showPaidTableReceipt(data.receipt);
     } catch (e) {
+      if (["cash", "qris_bank"].includes(method) && (!e.response || e.response.status === 409)) {
+        const saved = await api.get(`/tables/${selectedTable.id}/receipts/${activeSession.session.id}`, {timeout: 10000}).catch(() => null);
+        if (saved?.data?.id) {
+          showPaidTableReceipt(saved.data);
+          return;
+        }
+      }
       toast.error(typeof e?.response?.data?.detail === "string" ? e.response.data.detail : "Status belum dapat diperiksa. Muat ulang tagihan sebelum mencoba lagi.");
       await loadActiveTableSession(selectedTable.id);
     } finally {
@@ -1465,7 +1496,8 @@ export default function POS() {
               <span className="text-[11px] text-[hsl(var(--muted))]">Meja {selectedTable.label} · Total {fmtIDR(tablePayment?.total ?? activeSession?.grand_total ?? 0)}</span>
             </div>
             {tablePayment || activeSession?.gateway_payment ? <TableGatewayPayment tableId={selectedTable.id}
-              key={(tablePayment || activeSession.gateway_payment).id} payment={tablePayment || activeSession.gateway_payment} onStatus={onTablePaymentStatus} onClose={closeTablePayment} /> : <>
+              key={(tablePayment || activeSession.gateway_payment).id} payment={tablePayment || activeSession.gateway_payment} onStatus={onTablePaymentStatus}
+              onReceipt={() => setReceiptAttempt(value => value + 1)} onClose={closeTablePayment} /> : <>
             <p className="text-xs text-[hsl(var(--muted))]">Pilih metode pembayaran. Meja ditutup setelah pembayaran dicatat.</p>
             {!online ? <p role="status" className="text-sm">Sambungkan perangkat ke internet untuk membayar tagihan meja.</p> :
               payments.error ? <div role="alert" className="space-y-2 text-sm"><p>{payments.error}</p><button type="button" className="btn-outline" onClick={payments.retry}>Coba lagi</button></div> :

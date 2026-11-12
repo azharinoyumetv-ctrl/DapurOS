@@ -91,11 +91,11 @@ export default function Sales() {
                   </span>
                 </td>
                 <td className="px-5 py-3 text-right">
-                  <button onClick={() => downloadPdf(`/pdf/receipt/${o.id}`, `receipt-${o.order_no}.pdf`)}
+                  <button onClick={() => downloadPdf(`/pdf/receipt/${o.table_receipt_id || o.id}`, `receipt-${o.order_no}.pdf`)}
                           className="btn-ghost p-1.5" title="Struk thermal" data-testid={`sales-receipt-${o.id}`}>
                     <Printer size={15} />
                   </button>
-                  <button onClick={() => downloadPdf(`/pdf/invoice/${o.id}`, `invoice-${o.order_no}.pdf`)}
+                  <button onClick={() => downloadPdf(`/pdf/invoice/${o.table_receipt_id || o.id}`, `invoice-${o.order_no}.pdf`)}
                           className="btn-ghost p-1.5" title="Invoice A4" data-testid={`sales-invoice-${o.id}`}>
                     <FileDown size={15} />
                   </button>

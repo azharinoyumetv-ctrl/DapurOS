@@ -616,13 +616,16 @@ test('real checkout, immutable historical cost, paid reporting, void and stock r
 test('cash-only dine-in never closes a table without entered and confirmed cash',async({page,request})=>{
  const owner=await register(page,request,{plan:'trial'}),p=await product(request,owner,{price:25000}),table=await dining(request,owner);
  const opened=await api(request,owner,'post',`/tables/${table.id}/session`);
- const order=await api(request,owner,'post','/orders',{session_id:opened.id,payment_method:'cash',
-  items:[{product_id:p.id,name:p.name,price:p.price,quantity:2,subtotal:50000}]});
+ const orders=[];
+ for(let i=0;i<2;i++)orders.push(await api(request,owner,'post','/orders',{session_id:opened.id,payment_method:'cash',
+  items:[{product_id:p.id,name:p.name,price:p.price,quantity:1,subtotal:25000}]}));
  const checkout=amount=>request.post(runtime.base+`/api/tables/${table.id}/checkout`,{headers:owner.headers,
   data:{payment_method:'cash',expected_session_id:opened.id,expected_total:57750,...(amount===undefined?{}:{cash_received:amount})}});
  expect((await checkout()).status()).toBe(400);
  expect((await checkout(57000)).status()).toBe(400);
- const readOrder=()=>api(request,owner,'get',`/orders/${order.id}`);
+ const readOrder=()=>api(request,owner,'get',`/orders/${orders[0].id}`);
+ const receiptPath=`/tables/${table.id}/receipts/${opened.id}`;
+ expect((await request.get(runtime.base+'/api'+receiptPath,{headers:owner.headers})).status()).toBe(404);
  expect((await readOrder()).payment_status).toBe('pending');
  await page.setViewportSize({width:1280,height:800});
  await page.goto('/dapuros/app/pos');
@@ -645,10 +648,39 @@ test('cash-only dine-in never closes a table without entered and confirmed cash'
  expect((await readOrder()).payment_status).toBe('pending');
  await amount.fill('60000');
  await expect(modal).toContainText('2.250');
+ const checkoutUrl=`/api/tables/${table.id}/checkout`;
+ await page.route(url=>url.pathname===checkoutUrl,async route=>{
+  const response=await request.post(runtime.base+checkoutUrl,{headers:owner.headers,data:route.request().postDataJSON()});
+  expect(response.ok()).toBe(true);
+  await route.abort();
+ },{times:1});
  await confirm.click();
  await expect(modal).toHaveCount(0);
+ await expect(page.getByTestId('receipt-total')).toContainText('57.750');
+ await expect(page.getByTestId('receipt-status')).toContainText('Lunas');
+ await expect(page.getByTestId('receipt-table-label')).toHaveText(table.label);
+ await expect(page.getByTestId('receipt-cash-received')).toContainText('60.000');
+ await expect(page.getByTestId('receipt-change')).toContainText('2.250');
+ await expect(page.getByTestId('receipt-dialog').getByText(p.name,{exact:true})).toHaveCount(2);
+ const receipt=await api(request,owner,'get',receiptPath);
+ expect(receipt).toMatchObject({table_label:table.label,subtotal:50000,service_charge:2500,tax_amount:5250,total:57750,cash_received:60000,change:2250});
+ for(const button of ['receipt-pdf-thermal-btn','receipt-pdf-invoice-btn']){
+  const download=page.waitForEvent('download');
+  await page.getByTestId(button).click();
+  const file=await download;
+  expect(fs.readFileSync(await file.path()).subarray(0,5).toString()).toBe('%PDF-');
+ }
+ const paidOrders=await api(request,owner,'get','/orders');
+ expect(paidOrders).toHaveLength(2);
+ expect(paidOrders.every(row=>row.table_receipt_id===receipt.id&&row.payment_status==='paid')).toBe(true);
  expect((await readOrder()).payment_status).toBe('paid');
  expect((await api(request,owner,'get','/tables')).find(row=>row.id===table.id).status).toBe('Vacant');
+ await page.getByTestId('receipt-done-btn').click();
+ await page.goto('/dapuros/app/sales');
+ const reprint=page.waitForEvent('download');
+ await page.getByTestId('sales-receipt-'+paidOrders[0].id).click();
+ const file=await reprint;
+ expect(fs.readFileSync(await file.path()).subarray(0,5).toString()).toBe('%PDF-');
 });
 
 test('staff can split a real table bill by item and settle both portions without losing quantity',async({page,request})=>{
@@ -704,13 +736,14 @@ test('dine-in and takeaway open the gateway; only a verified exact payment close
  await page.reload();await page.getByText(table.label,{exact:true}).click();await page.getByRole('button',{name:'Lanjutkan pembayaran',exact:true}).click();
  await expect(page.getByTestId('table-gateway-open')).toHaveAttribute('href',payment.gateway_checkout_url);
  expect((await send(23100)).ok()).toBeTruthy();await expect.poll(async()=>(await readOrder()).payment_status).toBe('paid');
- await page.getByTestId('table-gateway-refresh').click();
- await expect(page.getByTestId('table-gateway-status')).toContainText('Pembayaran diterima');
+ if (await page.getByTestId('table-gateway-refresh').isVisible()) await page.getByTestId('table-gateway-refresh').click();
+ await expect(page.getByTestId('receipt-status')).toContainText('Lunas');
+ await expect(page.getByTestId('receipt-total')).toContainText('23.100');
  expect((await api(request,owner,'get','/tables')).find(x=>x.id===table.id).status).toBe('Vacant');
  expect(await api(request,owner,'get','/orders')).toHaveLength(1);
  expect(await api(request,owner,'get','/kds')).toHaveLength(1);
  expect((await api(request,owner,'get','/products'))[0].stock).toBe(18);
- await page.getByRole('button',{name:'Kembali ke meja',exact:true}).click();
+ await page.getByTestId('receipt-done-btn').click();
  await page.getByText('Langsung Takeaway').click();await page.getByTestId(`pos-product-${p.id}`).click();
  await page.getByTestId('pm-va').click();await page.getByTestId('checkout-btn').click();
  const [takeawayGateway]=await Promise.all([context.waitForEvent('page'),page.getByTestId('gateway-open-link').click()]);

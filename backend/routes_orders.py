@@ -543,6 +543,9 @@ async def void_order(order_id: str, user: dict = Depends(require_admin)):
         at = utcnow().isoformat()
         await db.orders.update_one({'id': order_id, 'store_id': user['store_id'], 'payment_status': order['payment_status']},
              {'$set': {'payment_status': 'voided', 'updated_at': at, 'voided_at': at, 'voided_by': user['id'], 'inventory_applied': False, 'inventory_void_ledger_version': 1}}, session=session)
+        if order.get('table_receipt_id'):
+            await db.order_sessions.update_one({'id': session_id, 'store_id': user['store_id'], 'receipt.payment_status': 'paid'},
+                {'$set': {'receipt.payment_status': 'adjusted'}}, session=session)
         for line in order.get('items', []) if order.get('inventory_applied') is not False else []:
             await restore(db, user['store_id'], line, session)
             await sale_events(db,session,order_id=order_id,store_id=user['store_id'],line=line,reference=order['order_no'],kind='void',actor=user['id'],at=at)
