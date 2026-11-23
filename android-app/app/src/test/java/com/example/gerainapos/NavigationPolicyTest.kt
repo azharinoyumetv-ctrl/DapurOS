@@ -5,6 +5,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class NavigationPolicyTest {
+    @Test fun affiliateLinksOpenOnlyThisProductsRegistration() {
+        val path = "/dapuros/affiliate-signup/PROMOTE01"
+        assertEquals("https://dagangos.com/dapuros/register?affiliate=PROMOTE01",
+            NavigationPolicy.affiliateRegistrationUrl("https://dagangos.com$path"))
+        for (url in listOf("http://dagangos.com$path", "https://dagangos.com.evil.test$path",
+            "https://dagangos.com:8443$path", "https://user@dagangos.com$path",
+            "https://dagangos.com$path?returnTo=https://other.test", "https://dagangos.com$path/extra",
+            "https://dagangos.com/geraina/affiliate-signup/PROMOTE01")) {
+            assertEquals(url, null, NavigationPolicy.affiliateRegistrationUrl(url))
+        }
+    }
+
     @Test fun productionRoutesStayInside() {
         for (path in listOf("/dapuros/login", "/dapuros/register", "/dapuros/app/pos", "/dapuros/app/payments/qris")) {
             assertEquals(path, INTERNAL, NavigationPolicy.classify("https://dagangos.com$path"))
