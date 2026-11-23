@@ -11,7 +11,7 @@ class BundledFrontend(private val assets: AssetManager) {
         val path = uri.path ?: return null
         if (path.contains("..") || path.contains('\\')) return null
         val asset = when {
-            path == "/dapuros/login" || path == "/dapuros/register" || path.startsWith("/dapuros/app/") || path == "/dapuros/app" -> "frontend/index.html"
+            path == "/dapuros/login" || path == "/dapuros/register" || path == "/dapuros/activate" || path.startsWith("/dapuros/app/") || path == "/dapuros/app" -> "frontend/index.html"
             path.startsWith("/dapuros/static/") -> "frontend/" + path.removePrefix("/dapuros/")
             path in setOf("/dapuros/icon-192.png", "/dapuros/icon-512.png", "/dapuros/favicon.ico") -> "frontend/" + path.removePrefix("/dapuros/")
             path in setOf("/assets/brand/dapuros-icon.png", "/assets/brand/dapuros-icon.png") -> "frontend" + path
