@@ -247,3 +247,15 @@ def test_dapuros_yearly_payment_activates_its_own_catalog_tier(account, monkeypa
     assert apply_subscription(saved, "dapuros")["plan"] == "business"
     assert apply_subscription(saved, "geraina")["plan"] == "trial"
     assert datetime.fromisoformat(result["expires_at"]) == billing.term_end(NOW, "yearly")
+
+
+def test_unrecognized_legacy_plan_does_not_extend_trial(account):
+    db, user = account
+    run(db.users.update_one({"id": OWNER}, {"$set": {"plan": "Business", "trial_ends_at": "2099-11-10T13:01:19+00:00"}}))
+    fresh = run(db.users.find_one({"id": OWNER}))
+    run(db.stores.update_one({"id": STORE}, {"$set": {"module": "dapuros"}}))
+    context = run(auth.resolve_user_context(fresh, "dapuros"))
+    view = run(routes_subscriptions.billing_view(context))
+    assert context["plan"] == view["plan"] == "unknown"
+    assert view["trial_ends_at"] is None
+    assert view["subscription"] is None
